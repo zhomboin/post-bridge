@@ -4,7 +4,7 @@
 
 本项目将 CMS 内容分发到 CSDN、知乎和小红书。需求入口为 `docs/requirements.md`，尚无源码、测试、素材目录或构建配置。先阅读需求并验证平台能力；Go、React/TypeScript、Node.js/Playwright、PostgreSQL 和 Docker Compose 均为建议选型。
 
-本指南保留在根目录；其他文档使用中文 Markdown，放入 `docs/`。`docs/README.md` 提供索引，`docs/progress.md` 记录总体进度，`docs/version.md` 记录简要变更。建立源码、测试和素材目录后同步本指南。
+本指南保留在根目录；其他文档使用中文 Markdown，放入 `docs/`。`docs/README.md` 提供索引，`docs/progress.md` 记录总体进度，`docs/version.md` 记录简要变更；`docs/admin-ui.md` 规定后台页面与交互，`docs/frontend-skills.md` 记录技能来源。建立源码、测试和素材目录后同步本指南。
 
 ## 构建、测试与开发命令
 
@@ -17,6 +17,12 @@
 所有项目文件使用 UTF-8 无 BOM。文档简明描述当前要求，直接链接实现，避免嵌入代码。初始化后，Go 使用 `gofmt`；TypeScript 建议两空格缩进、组件用 PascalCase、函数和变量用 camelCase，并固定格式化与 lint 配置。上述工具目前尚未配置。
 
 平台适配、内容转换与任务调度保持独立；禁止读取 CMS 数据库或依赖其内部表结构。
+
+## 前端设计与审阅
+
+所有前端创建、修改和审阅必须先阅读并共同遵循项目内 [Frontend Design](.agents/skills/frontend-design/SKILL.md) 与 [Emil Kowalski](.agents/skills/emil-design-eng/SKILL.md)，不能用同名全局技能替代。前者约束布局与视觉，后者约束交互、动效、性能及细节；共同按[后台规范](docs/admin-ui.md)验收。
+
+后台采用中文发布工作台，参考 shadcn/ui 官方 Dashboard 与 Sidebar。重点呈现发布记录、分平台状态及脱敏日志，兼顾移动端、键盘和减少动态效果。审阅使用“调整前／调整后／原因”表格并链接实现。用户指示和项目需求优先于技能通用建议，安装来源见[前端技能说明](docs/frontend-skills.md)。
 
 ## 测试规范
 
