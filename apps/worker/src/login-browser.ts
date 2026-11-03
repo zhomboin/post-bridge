@@ -1,6 +1,6 @@
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { safeRequestURL, type Config } from './config.js';
-import { focusNextLoginInput } from './login-focus.js';
+import { fillLoginInput, focusNextLoginInput } from './login-focus.js';
 import { loginHeight, loginWidth, type LoginBrowser, type LoginInput } from './remote-login.js';
 
 export function loginNavigationAllowed(value: string): boolean {
@@ -11,6 +11,8 @@ export function loginNavigationAllowed(value: string): boolean {
 const firstLoginPostPaths = new Set([
   '/v1/register/pc/wxapplets/createQrCode',
   '/v1/register/pc/wxapplets/checkScan',
+  '/v1/register/pc/wxapplets/checkLogin',
+  '/v1/register/pc/wxapplets/doLogin',
   '/v1/register/pc/sendVerifyCode',
   '/v1/register/pc/login/doLogin',
   '/v1/api/get/mobileAreaCode',
@@ -78,6 +80,7 @@ export async function openLoginBrowser(config: Pick<Config, 'profileDir' | 'user
     const input = async (value: LoginInput) => {
       signal.throwIfAborted();
       switch (value.type) {
+        case 'fill': await fillLoginInput(page, value.field, value.text, fixture?.origin); break;
         case 'click': await page.mouse.click(value.x, value.y); break;
         case 'text': await page.keyboard.insertText(value.text); break;
         case 'key':

@@ -107,3 +107,8 @@ describe('回环登录控制服务', () => {
     } finally { await control.close(); await manager.close(); }
   });
 });
+
+describe('明确手机号和验证码的输入校验',()=>{
+ it.each([{type:'fill',field:'phone',text:'12345678901'},{type:'fill',field:'code',text:'123456'}])('接受受限表单填写 $field',value=>{expect(validateLoginInput(value)).toEqual(value)});
+ it.each([{type:'fill',field:'other',text:'123456'},{type:'fill',field:'phone',text:'not-a-number'},{type:'fill',field:'phone',text:'1234'},{type:'fill',field:'code',text:'123'},{type:'fill',field:'code',text:'123456789'},{type:'fill',field:'phone',text:'12345\n'},{type:'fill',field:'code',text:'1234\n'}])('拒绝非法表单输入',value=>{expect(()=>validateLoginInput(value)).toThrow()});
+});

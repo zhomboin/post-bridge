@@ -25,6 +25,8 @@ const remoteJSONLimit = 16 << 10
 const remoteFrameLimit = 2 << 20
 
 var remoteLoginID = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
+var remotePhone = regexp.MustCompile(`^[0-9]{5,20}$`)
+var remoteCode = regexp.MustCompile(`^[0-9]{4,8}$`)
 
 type remoteLoginState struct {
 	ID        string `json:"id"`
@@ -184,6 +186,7 @@ func validRemoteInput(data []byte) bool {
 		X      *float64 `json:"x"`
 		Y      *float64 `json:"y"`
 		Text   *string  `json:"text"`
+		Field  *string  `json:"field"`
 		Key    *string  `json:"key"`
 		Points *[]struct {
 			X *float64 `json:"x"`
@@ -202,6 +205,17 @@ func validRemoteInput(data []byte) bool {
 	switch value.Type {
 	case "click":
 		return len(fields) == 3 && coordinate(value.X, value.Y)
+	case "fill":
+		if len(fields) != 3 || value.Field == nil || value.Text == nil {
+			return false
+		}
+		switch *value.Field {
+		case "phone":
+			return remotePhone.MatchString(*value.Text)
+		case "code":
+			return remoteCode.MatchString(*value.Text)
+		}
+		return false
 	case "text":
 		if len(fields) != 2 || value.Text == nil || utf8.RuneCountInString(*value.Text) < 1 || utf8.RuneCountInString(*value.Text) > 2000 {
 			return false

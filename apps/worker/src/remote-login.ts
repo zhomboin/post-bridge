@@ -4,7 +4,7 @@ export const loginWidth = 1280;
 export const loginHeight = 800;
 export type LoginStatus = 'idle' | 'pending' | 'active' | 'succeeded' | 'failed' | 'expired' | 'cancelled';
 export interface LoginState { id: string; status: LoginStatus; expires_at: string; width: number; height: number; error?: string }
-export type LoginInput = { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string } | { type: 'drag'; points: { x: number; y: number }[] } | { type: 'scroll'; deltaY: number };
+export type LoginInput = { type: 'fill'; field: 'phone' | 'code'; text: string } | { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string } | { type: 'drag'; points: { x: number; y: number }[] } | { type: 'scroll'; deltaY: number };
 export interface LoginBrowser { frame(): Promise<Buffer>; input(value: LoginInput): Promise<void>; connected(): Promise<'pending' | 'connected' | 'wrong'>; close(): Promise<void> }
 export class LoginError extends Error { constructor(readonly statusCode: number, message: string) { super(message); } }
 const keys = new Set(['Enter', 'Tab', 'Shift+Tab', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Escape', 'Space']);
@@ -13,6 +13,7 @@ export function validateLoginInput(value: unknown): LoginInput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new LoginError(400, '登录操作格式无效');
   const input = value as Record<string, unknown>;
   const point = (value: unknown): boolean => !!value && typeof value === 'object' && coordinate((value as Record<string, unknown>).x, loginWidth) && coordinate((value as Record<string, unknown>).y, loginHeight);
+  if (input.type === 'fill' && Object.keys(input).length === 3 && typeof input.text === 'string' && ((input.field === 'phone' && /^[0-9]{5,20}$/.test(input.text)) || (input.field === 'code' && /^[0-9]{4,8}$/.test(input.text)))) return structuredClone(input) as LoginInput;
   if ((input.type === 'click' && point(input)) || (input.type === 'text' && typeof input.text === 'string' && input.text.length > 0 && [...input.text].length <= 2000 && !/[\u0000-\u001f\u007f]/.test(input.text)) || (input.type === 'key' && typeof input.key === 'string' && keys.has(input.key)) || (input.type === 'drag' && Array.isArray(input.points) && input.points.length >= 2 && input.points.length <= 128 && input.points.every(point)) || (input.type === 'scroll' && typeof input.deltaY === 'number' && Number.isFinite(input.deltaY) && input.deltaY !== 0 && Math.abs(input.deltaY) <= 1600)) return structuredClone(input) as LoginInput;
   throw new LoginError(400, '登录操作超出允许范围');
 }
