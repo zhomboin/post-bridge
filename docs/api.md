@@ -93,3 +93,19 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 | ADMIN_DIST_DIR | 可选后台构建产物目录，由 API 提供同站点访问 |
 
 本轮提供独立本地数据库、初始化、启动、测试和停止入口。运行数据、密钥、登录状态和诊断文件不写入 Git。数据库日志保留和任务内容清理遵循有限期限，不清理正在执行或待核对任务所需的内容。
+
+## 后台远程登录
+
+远程登录在账号页发起，输入和画面仅转发到固定 IPv4 回环执行器。管理员会话和写操作 CSRF 均需验证，会话绑定具体发起者；其他管理员会话只能看到忙碌提示。所有响应禁缓存，不转发管理员 Cookie、请求来源凭据或任何任意网址。
+
+| 方法与路径 | 行为 |
+| --- | --- |
+| GET /api/account/login | 查询本人会话状态；未启用返回明确错误，他人会话不返回 ID |
+| POST /api/account/login | 空请求或空对象创建临时登录；等待当前任务释放浏览器后启动 |
+| DELETE /api/account/login/{id} | 撤销本人会话并关闭浏览器 |
+| GET /api/account/login/{id}/frame | 返回本人会话的内存 JPEG，视口固定 1280×800 |
+| POST /api/account/login/{id}/input | 受限点击、文字、白名单按键、拖动点列及滚动，不接受网址或脚本 |
+
+会话最长十分钟，活动期间六十秒无画面或输入后关闭。状态为 idle、pending、active、succeeded、failed、expired、cancelled；他人占用时返回 busy。输入大小至多 16 KiB，文字至多 2000 字、拖动 2—128 个点、坐标限制在视口内。停止与过期拒绝迟到输入。指定身份成功确认采用幂等事务，只恢复本账号因 needs_login 等待且未取消的任务；未知外站结果仍进入核对，预算不重置。
+
+公开来源 PUBLIC_ORIGIN 与内部 API_BASE_URL 分离。REMOTE_LOGIN_URL 仅支持固定回环地址；执行器通过 LOGIN_CONTROL_ADDR 启用控制服务，内部鉴权沿用私有执行器密钥。部署与配置入口见[Ubuntu 部署说明](ubuntu-deployment.md)。

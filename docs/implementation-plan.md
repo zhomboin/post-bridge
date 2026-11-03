@@ -12,15 +12,15 @@
 
 ## 架构与技术基线
 
-采用一个仓库中的三个独立单元：Go API 管理认证、内容版本、任务和数据；React/TypeScript 后台提供操作界面；Node.js/Playwright 执行器负责结构化内容转换、平台适配和浏览器操作。PostgreSQL 存储任务与业务数据，首期使用数据库任务队列，不额外引入 Redis；Docker Compose 管理部署，CMS 通过受限服务端接口接入。
+采用一个仓库中的三个独立单元：Go API 管理认证、内容版本、任务和数据；React/TypeScript 后台提供操作界面；Node.js/Playwright 执行器负责结构化内容转换、平台适配和浏览器操作。PostgreSQL 存储任务与业务数据，首期使用数据库任务队列，不额外引入 Redis；Ubuntu systemd 管理 API 与执行器常驻，数据库独立运行，CMS 通过受限服务端接口接入。
 
-前端采用 Vite，并参考 shadcn/ui 的后台布局组织组件；测试采用 Go testing、Vitest、Testing Library 和 Playwright。以上作为实施基线，B01 对官方支持范围、兼容性和许可证进行核验并固定具体版本及锁文件；不使用浮动镜像或自动追随最新版。远程验证拟采用每账号隔离的浏览器桌面与 noVNC，通过后台认证代理访问，不开放通用远程桌面。
+前端采用 Vite，并参考 shadcn/ui 的后台布局组织组件；测试采用 Go testing、Vitest、Testing Library 和 Playwright。以上作为实施基线，B01 对官方支持范围、兼容性和许可证进行核验并固定具体版本及锁文件；不使用浮动镜像或自动追随最新版。远程验证采用每账号隔离的无头浏览器，在后台通过已认证代理传输内存画面和受限输入，不开放桌面、VNC 或调试端口。
 
 正式执行器直接调用 Playwright 编程接口，以固定代码定位页面、校验状态并执行操作。Go 后台负责调度、重试与结果存储；生产运行不依赖 AI Agent、大模型服务或模型密钥。Playwright CLI 只用于开发调试和能力验证，开发阶段的 AI 辅助及前端设计技能不进入运行链路。页面发生不兼容变化时停止并报告，由开发人员修复适配器，不能让模型在线猜测点击。
 
 API 是数据库唯一业务写入入口。执行器通过独立内部身份领取任务、上报心跳和结果；领取标识过期后不能修改任务。管理员会话、CMS 来源凭据和执行器凭据分别授权。浏览器目录与临时素材不进入 Git，也不由前端公开目录提供访问。
 
-技术依据：[PostgreSQL 队列式取锁](https://www.postgresql.org/docs/current/sql-select.html)、[Playwright 登录状态](https://playwright.dev/docs/auth)、[Vite](https://vite.dev/guide/)及 [noVNC](https://novnc.com/info.html)。平台发布能力仍以目标账号和部署环境实测为准。
+技术依据：[PostgreSQL 队列式取锁](https://www.postgresql.org/docs/current/sql-select.html)、[Playwright 登录状态](https://playwright.dev/docs/auth)、[Vite](https://vite.dev/guide/)及 [systemd 服务](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)。平台发布能力仍以目标账号和部署环境实测为准。
 
 ## 文件与职责规划
 
@@ -37,7 +37,7 @@ API 是数据库唯一业务写入入口。执行器通过独立内部身份领�
 | `apps/worker/src/runtime/`、`apps/worker/src/content/`、`apps/worker/src/adapters/` | 账号浏览器、内容转换及三个平台适配 |
 | `contracts/cms.openapi.yaml`、`contracts/worker.openapi.yaml` | 可校验的来源与执行器接口定义，属于机器配置 |
 | `tests/integration/`、`tests/e2e/`、`tests/fixtures/` | 跨服务、界面流程及不含真实账号的样例 |
-| `deploy/compose.yaml`、`deploy/compose.production.yaml` | 本地和生产服务拓扑、持久化及隔离 |
+| `deploy/systemd/`、`deploy/nginx/`、`scripts/ubuntu_deploy.py` | 本地和生产服务拓扑、持久化及隔离 |
 | `package.json`、`package-lock.json`、`vitest.config.ts` | Node 工作区、中央集成测试及共享配置 |
 | `scripts/`、`.github/workflows/ci.yml` | PowerShell 入口、清理和 CI 全量验证 |
 | `docs/` | 平台能力、架构、接口、部署、运维及验收说明 |

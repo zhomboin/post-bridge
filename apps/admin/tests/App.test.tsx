@@ -298,13 +298,13 @@ describe('管理员会话与任务闭环', () => {
     expect(screen.getByRole('link', { name: '查看CSDN草稿' }).getAttribute('href')).toBe('https://mp.csdn.net/mp_blog/creation/editor/123');
   });
 
-  it('等待登录任务提示验证主机操作并允许继续', async () => {
+  it('等待登录任务提示远程验证并允许手动继续', async () => {
     window.history.replaceState({}, '', '/jobs/job-1');
     const fallback = handler;
     handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'waiting_user' }) : url.endsWith('/resume') ? response({ ...job, status: 'queued' }) : fallback(url, init);
     render(<App />);
-    await screen.findByText(/^请在验证主机/);
-    fireEvent.click(screen.getByLabelText('我已在验证主机完成登录'));
+    await screen.findByText(/^请在账号页完成远程登录验证/);
+    fireEvent.click(screen.getByLabelText('我已完成指定账号登录'));
     fireEvent.click(screen.getByRole('button', { name: '登录完成，继续任务' }));
     await waitFor(() => expect(calls.some(c => c.url.endsWith('/resume'))).toBe(true));
   });
@@ -360,4 +360,74 @@ describe('管理员会话与任务闭环', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
     expect(calls).toHaveLength(after);
   });
+});
+
+describe('后台远程登录验证', () => {
+  it('账号页可创建远程登录会话且请求防双击', async () => {
+    window.history.replaceState({}, '', '/account');
+    const fallback=handler;
+    handler=(url,init)=>url==='/api/account/login' ? response({id:init?.method==='POST'?'login-test':'',status:init?.method==='POST'?'pending':'idle',width:1280,height:800,expires_at:''}) : fallback(url,init);
+    render(<App />);
+    const start=await screen.findByRole('button',{name:'开始远程登录'});
+    await waitFor(()=>expect((start as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(start);fireEvent.click(start);
+    await screen.findByText('正在等待执行器空闲');
+    const created=calls.filter(c=>c.url==='/api/account/login'&&c.init?.method==='POST');
+    expect(created).toHaveLength(1);
+    expect(new Headers(created[0].init?.headers).get('X-CSRF-Token')).toBe('csrf-test');
+  });
+  it('远程验证关闭后停止画面轮询并撤销会话', async () => {
+    window.history.replaceState({}, '', '/account');
+    const fallback=handler;
+    vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
+    handler=(url,init)=>url==='/api/account/login' ? response({id:'login-test',status:'active',width:1280,height:800,expires_at:'2026-11-03T12:00:00Z'}) : url.endsWith('/frame') ? new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}) : url.endsWith('/login/login-test')&&init?.method==='DELETE' ? response({status:'cancelled'}) : fallback(url,init);
+    render(<App />);
+    await screen.findByRole('img',{name:'CSDN 远程登录画面'});
+    fireEvent.click(screen.getByRole('button',{name:'结束远程登录'}));
+    await screen.findByText('远程登录已结束');
+    expect(calls.some(c=>c.url==='/api/account/login/login-test'&&c.init?.method==='DELETE')).toBe(true);
+    expect(URL.revokeObjectURL).toHaveBeenCalled();
+  });
+  it('服务未配置时说明原因，不显示可用登录入口', async () => {
+    window.history.replaceState({}, '', '/account');const fallback=handler;
+    handler=(url,init)=>url==='/api/account/login'?response({code:'remote_login_disabled',message:'服务器尚未启用远程登录'},503):fallback(url,init);
+    render(<App />);await screen.findByText('服务器尚未启用远程登录');
+    expect((screen.getByRole('button',{name:'开始远程登录'}) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('远程登录输入',()=>{
+ it('短信或密码文字仅发送到输入接口并立即清空，键盘支持切换输入框',async()=>{
+  window.history.replaceState({},'', '/account');const fallback=handler;
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
+  handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?response({ok:true}):fallback(url,init);
+  render(<App/>);const image=await screen.findByRole('img',{name:'CSDN 远程登录画面'});
+  const field=screen.getByLabelText('输入到页面的文字') as HTMLInputElement;
+  fireEvent.change(field,{target:{value:'synthetic-otp'}});fireEvent.click(screen.getByRole('button',{name:'发送文字'}));
+  await waitFor(()=>expect(calls.some(c=>c.url.endsWith('/input'))).toBe(true));
+  expect(field.value).toBe('');expect(JSON.parse(String(calls.find(c=>c.url.endsWith('/input'))?.init?.body))).toEqual({type:'text',text:'synthetic-otp'});
+  await waitFor(()=>expect((screen.getByRole('button',{name:'下一输入框'}) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button',{name:'下一输入框'}));await waitFor(()=>expect(calls.filter(c=>c.url.endsWith('/input'))).toHaveLength(2));
+  expect(JSON.parse(String(calls.filter(c=>c.url.endsWith('/input'))[1].init?.body))).toEqual({type:'key',key:'Tab'});
+ });
+});
+
+describe('远程登录输入与销毁边界',()=>{
+ it('画面快速输入逐字串行发送且Tab可离开画面',async()=>{
+  window.history.replaceState({},'', '/account');const fallback=handler;let finish:(r:Response)=>void=()=>{};let count=0;
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
+  handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?(++count===1?new Promise<Response>(r=>{finish=r}):response({ok:true})):fallback(url,init);
+  render(<App/>);const image=await screen.findByRole('img',{name:'CSDN 远程登录画面'});
+  fireEvent.keyDown(image,{key:'1'});fireEvent.keyDown(image,{key:'2'});fireEvent.keyDown(image,{key:'3'});
+  await waitFor(()=>expect(count).toBe(1));finish(response({ok:true}));await waitFor(()=>expect(calls.filter(c=>c.url.endsWith('/input'))).toHaveLength(3));
+  expect(calls.filter(c=>c.url.endsWith('/input')).map(c=>JSON.parse(String(c.init?.body)).text)).toEqual(['1','2','3']);
+  expect(fireEvent.keyDown(image,{key:'Tab'})).toBe(true);
+ });
+ it('创建已提交但响应迟到时离开页面仍撤销新会话',async()=>{
+  window.history.replaceState({},'', '/account');const fallback=handler;let finish:(r:Response)=>void=()=>{};
+  handler=(url,init)=>url==='/api/account/login'?(init?.method==='POST'?new Promise<Response>(r=>{finish=r}):response({id:'',status:'idle',width:1280,height:800,expires_at:''})):url==='/api/account/login/late-id'?response({status:'cancelled'}):fallback(url,init);
+  render(<App/>);const start=await screen.findByRole('button',{name:'开始远程登录'});await waitFor(()=>expect((start as HTMLButtonElement).disabled).toBe(false));fireEvent.click(start);
+  fireEvent.click(screen.getByRole('link',{name:'草稿任务'}));finish(response({id:'late-id',status:'pending',width:1280,height:800,expires_at:''},202));
+  await waitFor(()=>expect(calls.some(c=>c.url==='/api/account/login/late-id'&&c.init?.method==='DELETE')).toBe(true));
+ });
 });

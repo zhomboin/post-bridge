@@ -1,0 +1,31 @@
+[Unit]
+Description=Post Bridge CSDN Worker
+After=network-online.target post-bridge-api.service
+Requires=post-bridge-api.service
+PartOf=post-bridge-api.service
+StartLimitIntervalSec=60
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=post-bridge-worker
+Group=post-bridge-worker
+WorkingDirectory=@INSTALL@/current
+UnsetEnvironment=DISPLAY WAYLAND_DISPLAY
+EnvironmentFile=@CONFIG@/worker.env
+ExecStart=@INSTALL@/tools/node-v22.22.1-linux-@ARCH@/bin/node @INSTALL@/current/apps/worker/dist/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=@STATE@/worker
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

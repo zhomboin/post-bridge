@@ -123,7 +123,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   }
   return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">
     {job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status) && <div className="notice warning"><strong>取消中</strong><p>正在等待后台停止本任务。可能存在的草稿仍需核对，请勿重新创建。</p></div>}
-    {job.status === 'waiting_user' && <><div className="notice warning">请在验证主机上，由管理员使用本地登录助手完成 CSDN 登录。完成后返回这里继续；本页不会提供公开远程浏览器入口。</div><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已在验证主机完成登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
+    {job.status === 'waiting_user' && <><div className="notice warning">请在账号页完成远程登录验证，确认指定账号后后台会自动恢复任务。若使用验证主机的本地登录助手，可在完成后手动继续。</div><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已完成指定账号登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
     {uncertain && <><div className={'notice ' + (job.status === 'failed' ? 'error' : 'warning')}>
       <strong>{checking ? '后台正在自动查询草稿' : job.status === 'failed' ? conflict ? '草稿核对存在冲突' : '草稿查询未完成' : '等待草稿自动核对'}</strong>
       <p>{checking ? '后台读取草稿列表并核对标题、正文和草稿状态，无需提供草稿ID。' : '保存结果仍未确认，不能据此认定平台没有草稿。账号暂不接受新的写入任务，可重新自动核对。'}</p>

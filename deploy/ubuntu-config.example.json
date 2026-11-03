@@ -1,0 +1,7 @@
+{
+  "DATABASE_URL": "postgresql://post_bridge:replace-me@127.0.0.1:5432/post_bridge?sslmode=disable",
+  "PUBLIC_ORIGIN": "https://post-bridge.example.com",
+  "ADMIN_USERNAME": "admin",
+  "CSDN_USERNAME": "replace-me",
+  "CSDN_DISPLAY_NAME": "请填写指定账号显示名"
+}

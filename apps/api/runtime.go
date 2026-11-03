@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-type RuntimeConfig struct{ DatabaseURL, Address, Origin, Username, Password, WorkerToken, CSDNUsername, CSDNDisplayName, AdminDistDir string }
+type RuntimeConfig struct{ DatabaseURL, Address, Origin, Username, Password, WorkerToken, CSDNUsername, CSDNDisplayName, AdminDistDir, RemoteLoginURL string }
 
 func privateSecret(path string) (string, error) {
 	if path == "" {
@@ -37,6 +37,10 @@ func privateSecret(path string) (string, error) {
 }
 func LoadRuntimeConfig() (RuntimeConfig, error) {
 	c := RuntimeConfig{DatabaseURL: os.Getenv("DATABASE_URL"), Address: os.Getenv("API_ADDR"), Origin: os.Getenv("API_BASE_URL"), Username: os.Getenv("ADMIN_USERNAME"), CSDNUsername: os.Getenv("CSDN_USERNAME"), CSDNDisplayName: os.Getenv("CSDN_DISPLAY_NAME"), AdminDistDir: os.Getenv("ADMIN_DIST_DIR")}
+	c.RemoteLoginURL = os.Getenv("REMOTE_LOGIN_URL")
+	if public := os.Getenv("PUBLIC_ORIGIN"); public != "" {
+		c.Origin = public
+	}
 	if c.Address == "" {
 		c.Address = "127.0.0.1:8080"
 	}
@@ -52,6 +56,9 @@ func LoadRuntimeConfig() (RuntimeConfig, error) {
 	u, err := url.Parse(c.Origin)
 	if err != nil || u.Host == "" || u.User != nil || !(u.Scheme == "http" || u.Scheme == "https") || u.RawQuery != "" || u.Fragment != "" || !(u.Path == "" || u.Path == "/") {
 		return c, fmt.Errorf("管理站点来源无效")
+	}
+	if err = validateRemoteLoginURL(c.RemoteLoginURL); err != nil {
+		return c, fmt.Errorf("远程登录控制地址无效")
 	}
 	if c.Password, err = privateSecret(os.Getenv("ADMIN_PASSWORD_FILE")); err != nil {
 		return c, err
@@ -82,11 +89,18 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 		cancel()
 		return fmt.Errorf("数据库初始化失败")
 	}
-	h, err := NewHandler(startup, Config{Store: store, AdminUsername: c.Username, AdminPassword: c.Password, WorkerToken: c.WorkerToken, Origin: c.Origin, AdminDistDir: c.AdminDistDir})
+	h, err := NewHandler(startup, Config{Store: store, AdminUsername: c.Username, AdminPassword: c.Password, WorkerToken: c.WorkerToken, Origin: c.Origin, AdminDistDir: c.AdminDistDir, RemoteLoginURL: c.RemoteLoginURL})
 	cancel()
 	if err != nil {
 		return fmt.Errorf("管理接口初始化失败")
 	}
+	remoteHandler := h.(*handler)
+	defer func() {
+		remoteHandler.closeRemoteLogin(context.Background(), "")
+		if remoteHandler.remoteLoginProxy != nil {
+			remoteHandler.remoteLoginProxy.client.CloseIdleConnections()
+		}
+	}()
 	listener, err := net.Listen("tcp", c.Address)
 	if err != nil {
 		return fmt.Errorf("无法监听 API 地址")
@@ -97,6 +111,9 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	shutdown := func() {
+		if remoteHandler.remoteLoginProxy != nil {
+			remoteHandler.remoteLoginProxy.disabled.Store(true)
+		}
 		stop, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if server.Shutdown(stop) != nil {
@@ -124,6 +141,7 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 				<-done
 				return fmt.Errorf("数据库维护失败，服务已安全停止")
 			}
+			_ = remoteHandler.maintainRemoteLogin(ctx)
 		}
 	}
 }

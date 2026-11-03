@@ -1,3 +1,4 @@
+import { remoteLoginFixture } from './login-fixture';
 import { test as base, expect, type Page, type APIRequestContext } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -36,6 +37,7 @@ export const test = base.extend<{}, { stack: Stack }>({
     const schema = 'e2e_' + randomBytes(12).toString('hex');
     const directory = mkdtempSync(resolve(tmpdir(), 'post-bridge-e2e-'));
     let child: ChildProcess | undefined;
+    let remote: Awaited<ReturnType<typeof remoteLoginFixture>> | undefined;
     let created = false;
     const db = (action: string) => {
       try {
@@ -49,6 +51,7 @@ export const test = base.extend<{}, { stack: Stack }>({
       const username = 'e2e-admin';
       const password = randomBytes(24).toString('hex');
       const workerToken = randomBytes(32).toString('hex');
+      remote = await remoteLoginFixture(directory,workerToken);
       const passwordFile = resolve(directory, 'admin.secret');
       const workerFile = resolve(directory, 'worker.secret');
       writeFileSync(passwordFile, password, { mode: 0o600 });
@@ -63,7 +66,7 @@ export const test = base.extend<{}, { stack: Stack }>({
       const dist = resolve(root, 'apps/admin/dist');
       if (!existsSync(resolve(dist, 'index.html'))) throw Error('请先构建后台，再运行端到端用例');
       child = spawn(binary, [], { cwd: root, stdio: 'ignore', env: {
-        ...process.env, DATABASE_URL: isolatedDatabase.href, API_ADDR: address, API_BASE_URL: url,
+        ...process.env, DATABASE_URL: isolatedDatabase.href, API_ADDR: address, API_BASE_URL: url, REMOTE_LOGIN_URL: remote.url,
         ADMIN_USERNAME: username, ADMIN_PASSWORD_FILE: passwordFile, WORKER_TOKEN_FILE: workerFile,
         CSDN_USERNAME: 'synthetic-csdn-account', CSDN_DISPLAY_NAME: '演示创作者', ADMIN_DIST_DIR: dist,
       } });
@@ -76,6 +79,7 @@ export const test = base.extend<{}, { stack: Stack }>({
       await use({ url, username, password, workerToken });
     } finally {
       await stop(child);
+      await remote?.close();
       try { if (created) db('drop'); }
       finally { rmSync(directory, { recursive: true, force: true }); }
     }
