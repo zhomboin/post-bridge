@@ -18,6 +18,8 @@
 
 平台适配、内容转换与任务调度保持独立；禁止读取 CMS 数据库或依赖其内部表结构。
 
+正式运行由固定后台程序和直接调用 Playwright 的执行器完成，不依赖 AI Agent、大模型服务或模型密钥。Playwright CLI 和设计技能仅用于开发验证与审阅；页面不匹配时停止，由开发人员修复适配器。
+
 ## 前端设计与审阅
 
 所有前端创建、修改和审阅必须先阅读并共同遵循项目内 [Frontend Design](.agents/skills/frontend-design/SKILL.md) 与 [Emil Kowalski](.agents/skills/emil-design-eng/SKILL.md)，不能用同名全局技能替代。前者约束布局与视觉，后者约束交互、动效、性能及细节；共同按[后台规范](docs/admin-ui.md)验收。
