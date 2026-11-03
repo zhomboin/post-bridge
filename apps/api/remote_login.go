@@ -142,7 +142,7 @@ func (p *remoteLoginProxy) state(ctx context.Context, token, method, path string
 	default:
 		return state, 0, ErrInvalid
 	}
-	if state.Error != "" {
+	if state.Error != "" && !(state.Status == "failed" && state.Error == "CSDN 登录页面未能加载，请稍后重新开始") {
 		state.Error = "远程登录未完成，请重新验证"
 	}
 	return state, status, nil
