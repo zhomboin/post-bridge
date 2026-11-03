@@ -1,7 +1,7 @@
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { safeRequestURL, type Config } from './config.js';
 import { fillLoginInput, focusNextLoginInput } from './login-focus.js';
-import { loginHeight, loginWidth, type LoginBrowser, type LoginInput } from './remote-login.js';
+import { LoginPageUnavailable, loginHeight, loginWidth, type LoginBrowser, type LoginInput } from './remote-login.js';
 
 export function loginNavigationAllowed(value: string): boolean {
   if (!safeRequestURL(value)) return false;
@@ -57,7 +57,8 @@ export async function openLoginBrowser(config: Pick<Config, 'profileDir' | 'user
     page.on('dialog', dialog => { void dialog.dismiss().catch(() => {}); });
     const accountURL = fixture ? new URL(fixture.accountPath, fixture.origin).href : 'https://mp.csdn.net/';
     const loginURL = fixture ? new URL(fixture.loginPath, fixture.origin).href : 'https://passport.csdn.net/account/login?from=https%3A%2F%2Fmp.csdn.net%2F';
-    await page.goto(accountURL, { waitUntil: 'domcontentloaded' });
+    let accountLoaded = false;
+    try { await page.goto(accountURL, { waitUntil: 'domcontentloaded' }); accountLoaded = true; } catch { signal.throwIfAborted(); }
     const identity = async (): Promise<'pending' | 'connected' | 'wrong'> => {
       if (fixture ? new URL(page.url()).pathname !== fixture.accountPath : new URL(page.url()).hostname !== 'mp.csdn.net') return 'pending';
       const names = await page.locator('a[href]').evaluateAll(nodes => nodes.flatMap(node => {
@@ -68,15 +69,52 @@ export async function openLoginBrowser(config: Pick<Config, 'profileDir' | 'user
       if (!login && names.length) return 'wrong';
       return 'pending';
     };
-    if (!fixture) {
-      const deadline = Date.now() + 5000;
-      while (new URL(page.url()).hostname === 'mp.csdn.net' && await identity() === 'pending' && !await page.getByText(/^登录$/).filter({ visible: true }).count() && Date.now() < deadline) { signal.throwIfAborted(); await page.waitForTimeout(100); }
+    const contentReady = async (): Promise<boolean> => {
+      for (const frame of page.frames()) {
+        try {
+          const url = new URL(frame.url());
+          if (fixture ? url.origin !== fixture.origin || url.pathname !== fixture.loginPath : url.origin !== 'https://passport.csdn.net') continue;
+          if (frame.parentFrame()) { const element = await frame.frameElement(); try { if (!await element.isVisible()) continue; } finally { await element.dispose(); } }
+          if (await frame.evaluate(({ origin, fixture }) => {
+            if (location.origin !== origin) return false;
+            const visible = (node: HTMLElement) => {
+              if (node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+              const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+              return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.visibility !== 'collapse';
+            };
+            return Array.from(document.querySelectorAll('input')).some(node => ['text', 'tel', 'email', 'password', 'number'].includes(node.type) && !node.matches(':disabled') && !node.readOnly && visible(node) && (fixture || /手机|验证码|密码/.test(node.placeholder))) || Array.from(document.images).some(node => visible(node) && node.complete && node.naturalWidth >= 100 && node.src.startsWith('data:image/'));
+          }, { origin: url.origin, fixture: !!fixture })) return true;
+        } catch { signal.throwIfAborted(); }
+      }
+      return false;
+    };
+    const waitForContent = async () => {
+      const deadline = Date.now() + 4000;
+      do {
+        signal.throwIfAborted();
+        if (await identity() !== 'pending' || await contentReady()) return true;
+        await page.waitForTimeout(100);
+      } while (Date.now() < deadline);
+      return false;
+    };
+    let ready = false;
+    for (let attempt = 0; attempt < 3 && !ready; attempt++) {
+      signal.throwIfAborted();
+      if (await identity() !== 'pending') { ready = true; break; }
+      try {
+        if (attempt === 0 && accountLoaded && !fixture) {
+          // 平台可能自动打开认证窗口，避免重复点击被遮挡的背景入口。
+          if (!page.frames().some(frame => { try { return new URL(frame.url()).origin === 'https://passport.csdn.net'; } catch { return false; } })) {
+            const entry = page.getByText(/^登录$/).filter({ visible: true });
+            if (await entry.count() === 1) await entry.click({ timeout: 1500 }).catch(() => {});
+          }
+        } else {
+          await page.goto(loginURL, { waitUntil: 'domcontentloaded', timeout: 5000 });
+        }
+        ready = await waitForContent();
+      } catch { signal.throwIfAborted(); }
     }
-    if (await identity() === 'pending' && (fixture || new URL(page.url()).hostname === 'mp.csdn.net')) {
-      const entry = page.getByText(/^登录$/).filter({ visible: true });
-      if (!fixture && await entry.count() === 1) await entry.click();
-      else await page.goto(loginURL, { waitUntil: 'domcontentloaded' });
-    }
+    if (!ready) throw new LoginPageUnavailable();
     const input = async (value: LoginInput) => {
       signal.throwIfAborted();
       switch (value.type) {
@@ -100,5 +138,5 @@ export async function openLoginBrowser(config: Pick<Config, 'profileDir' | 'user
       connected: identity,
       close: async () => { signal.removeEventListener('abort', abort); await close(); },
     };
-  } catch { signal.removeEventListener('abort', abort); await close().catch(() => {}); throw new Error('登录浏览器启动失败'); }
+  } catch (error) { signal.removeEventListener('abort', abort); await close().catch(() => {}); if (error instanceof LoginPageUnavailable) throw error; throw new Error('登录浏览器启动失败'); }
 }

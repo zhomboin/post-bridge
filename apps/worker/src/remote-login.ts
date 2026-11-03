@@ -6,6 +6,7 @@ export type LoginStatus = 'idle' | 'pending' | 'active' | 'succeeded' | 'failed'
 export interface LoginState { id: string; status: LoginStatus; expires_at: string; width: number; height: number; error?: string }
 export type LoginInput = { type: 'fill'; field: 'phone' | 'code'; text: string } | { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string } | { type: 'drag'; points: { x: number; y: number }[] } | { type: 'scroll'; deltaY: number };
 export interface LoginBrowser { frame(): Promise<Buffer>; input(value: LoginInput): Promise<void>; connected(): Promise<'pending' | 'connected' | 'wrong'>; close(): Promise<void> }
+export class LoginPageUnavailable extends Error { constructor() { super('CSDN 登录页面未能加载，请稍后重新开始'); } }
 export class LoginError extends Error { constructor(readonly statusCode: number, message: string) { super(message); } }
 const keys = new Set(['Enter', 'Tab', 'Shift+Tab', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Escape', 'Space']);
 const coordinate = (value: unknown, limit: number): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < limit;
@@ -87,7 +88,7 @@ export class RemoteLoginManager {
         if (matched === 'wrong') { this.finish('failed', '登录账号与配置不符'); break; }
         await pause(this.poll, controller.signal);
       }
-    } catch { this.finish('failed', '登录浏览器暂不可用，请重新发起登录'); }
+    } catch (error) { this.finish('failed', error instanceof LoginPageUnavailable ? error.message : '登录浏览器暂不可用，请重新发起登录'); }
     finally { signal.removeEventListener('abort', abort); await this.closeBrowser().catch(() => {}); await this.tail; this.browser = undefined; }
   }
   async close(): Promise<void> { this.disabled = true; this.finish('cancelled'); await this.closeBrowser().catch(() => {}); await this.running; await this.tail; }

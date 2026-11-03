@@ -717,3 +717,29 @@ func TestRemoteLoginExplicitFillPreservesAccessAndForwarding(t *testing.T) {
 		t.Fatalf("unexpected forwarded input count: %d", len(forwarded))
 	}
 }
+
+func TestRemoteLoginPageLoadErrorSanitization(t *testing.T) {
+	const loadError = "CSDN 登录页面未能加载，请稍后重新开始"
+	for _, tc := range []struct{ name, status, upstream, expected string }{
+		{"page unavailable", "failed", loadError, loadError},
+		{"untrusted suffix", "failed", loadError + " Cookie=synthetic-secret", "远程登录未完成，请重新验证"},
+		{"untrusted message", "failed", "https://private.invalid/?token=synthetic-secret", "远程登录未完成，请重新验证"},
+		{"invalid status for message", "active", loadError, "远程登录未完成，请重新验证"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(remoteLoginState{ID: "synthetic-login", Status: tc.status, ExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339), Width: 1280, Height: 800, Error: tc.upstream})
+			}))
+			defer upstream.Close()
+			proxy, err := newRemoteLoginProxy(upstream.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer proxy.client.CloseIdleConnections()
+			state, _, err := proxy.state(context.Background(), "synthetic-token", "GET", "/login", nil)
+			if err != nil || state.Error != tc.expected {
+				t.Fatalf("unexpected sanitized error: got %q, err %v", state.Error, err)
+			}
+		})
+	}
+}

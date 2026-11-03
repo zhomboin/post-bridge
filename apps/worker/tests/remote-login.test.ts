@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RemoteLoginManager, validateLoginInput } from '../src/remote-login.js';
+import { LoginPageUnavailable, RemoteLoginManager, validateLoginInput } from '../src/remote-login.js';
 import { startLoginControl } from '../src/login-control.js';
 
 function setup(options: { now?: () => number; ttlMs?: number; idleMs?: number } = {}) {
@@ -111,4 +111,16 @@ describe('回环登录控制服务', () => {
 describe('明确手机号和验证码的输入校验',()=>{
  it.each([{type:'fill',field:'phone',text:'12345678901'},{type:'fill',field:'code',text:'123456'}])('接受受限表单填写 $field',value=>{expect(validateLoginInput(value)).toEqual(value)});
  it.each([{type:'fill',field:'other',text:'123456'},{type:'fill',field:'phone',text:'not-a-number'},{type:'fill',field:'phone',text:'1234'},{type:'fill',field:'code',text:'123'},{type:'fill',field:'code',text:'123456789'},{type:'fill',field:'phone',text:'12345\n'},{type:'fill',field:'code',text:'1234\n'}])('拒绝非法表单输入',value=>{expect(()=>validateLoginInput(value)).toThrow()});
+});
+
+
+it('认证页未就绪时保持pending，有限加载失败给出明确原因，不接收输入', async () => {
+  let reject!: (error: Error) => void;
+  const manager = new RemoteLoginManager(() => new Promise((_resolve, fail) => { reject = fail; }));
+  const state = manager.create(); const running = manager.run(new AbortController().signal);
+  expect(manager.status().status).toBe('pending');
+  await expect(manager.input(state.id, { type: 'text', text: '123456' })).rejects.toThrow();
+  reject(new LoginPageUnavailable()); await running;
+  expect(manager.status()).toMatchObject({ status: 'failed', error: 'CSDN 登录页面未能加载，请稍后重新开始' });
+  await manager.close();
 });
