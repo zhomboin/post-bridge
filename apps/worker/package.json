@@ -1,0 +1,21 @@
+{
+  "name": "@post-bridge/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.22.1" },
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "start": "tsx src/main.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "playwright": "1.64.1" },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
