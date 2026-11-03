@@ -25,6 +25,84 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('管理员会话与任务闭环', () => {
+  it('取消后的运行中核对继续只读，不显示取消中或自动保存承诺', async () => {
+    window.history.replaceState({}, '', '/jobs/job-1');
+    const fallback = handler;
+    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'running', outcome: 'unknown', external_started: true, cancel_requested: true, run_mode: 'reconcile', auto_reconcile_started: true }) : fallback(url, init);
+    render(<App />);
+    await screen.findByText('后台正在自动查询草稿');
+    expect(screen.queryByText('取消中')).toBeNull();
+    expect(screen.getByText(/核对只读取结果，不再自动保存/)).toBeTruthy();
+    expect(screen.queryByText(/连续两次确认未保存/)).toBeNull();
+  });
+
+  it('无需候选ID即可重新自动核对，请求中禁止双击且人工结束默认折叠', async () => {
+    window.history.replaceState({}, '', '/jobs/job-1');
+    let finish: (value: Response) => void = () => {};
+    const fallback = handler;
+    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'failed', outcome: 'unknown', external_started: true, run_mode: 'reconcile', auto_reconcile_started: true, reconcile_count: 4 }) : url.endsWith('/reconcile') ? new Promise<Response>(resolve => { finish = resolve; }) : fallback(url, init);
+    render(<App />);
+    const button = await screen.findByRole('button', { name: '重新自动核对' });
+    expect(screen.getByText('无法匹配完整稿件').closest('details')?.open).toBe(false);
+    expect(screen.getByText(/候选草稿ID为可选项/)).toBeTruthy();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(calls.filter(c => c.url.endsWith('/reconcile'))).toHaveLength(1);
+    expect(JSON.parse(String(calls.find(c => c.url.endsWith('/reconcile'))?.init?.body))).toEqual({});
+    await act(async () => finish(response({ ...job, status: 'reconciling' })));
+  });
+
+  it.each(['reconciling', 'running'])('后台自动核对%s时展示进度和下一次时间，禁止重复核对', async status => {
+    window.history.replaceState({}, '', '/jobs/job-1');
+    const fallback = handler;
+    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status, outcome: 'unknown', external_started: true, run_mode: 'reconcile', auto_reconcile_started: true, reconcile_count: 1, absence_checks: 1, available_at: '2026-11-03T04:00:20Z' }) : fallback(url, init);
+    render(<App />);
+    await screen.findByText('后台正在自动查询草稿');
+    expect(screen.getByText(/已完成 1 \/ 4 轮/)).toBeTruthy();
+    if (status === 'reconciling') expect(screen.getByText(/下一次查询/)).toBeTruthy();
+    else expect(screen.queryByText(/下一次查询/)).toBeNull();
+    expect(screen.getByText(/连续两次确认未保存/)).toBeTruthy();
+    const button = screen.getByRole('button', { name: '正在自动核对…' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(button);
+    expect(calls.some(c => c.url.endsWith('/reconcile'))).toBe(false);
+  });
+
+  it.each([
+    ['reconcile_unavailable', '草稿查询未完成'],
+    ['draft_conflict', '草稿核对存在冲突'],
+    ['draft_mismatch', '草稿核对存在冲突'],
+    ['reconcile_exhausted', '草稿查询未完成'],
+  ])('核对终止%s时说明未知结果与账号限制，允许再次核对', async (error_code, title) => {
+    window.history.replaceState({}, '', '/jobs/job-1');
+    const fallback = handler;
+    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'failed', outcome: 'unknown', external_started: true, run_mode: 'reconcile', auto_reconcile_started: true, reconcile_count: 4, error_code }) : fallback(url, init);
+    render(<App />);
+    await screen.findByText(title);
+    expect(screen.getByText(/账号暂不接受新的写入任务/)).toBeTruthy();
+    expect(screen.queryByText('后台正在自动查询草稿')).toBeNull();
+    expect((screen.getByRole('button', { name: '重新自动核对' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole('button', { name: '重试任务' })).toBeNull();
+  });
+
+  it('可选候选ID仍校验数字且人工结束任务不再次核对', async () => {
+    window.history.replaceState({}, '', '/jobs/job-1');
+    const fallback = handler;
+    let ended = false;
+    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'failed', outcome: 'unknown', external_started: true, manual_resolved: ended }) : fallback(url, init);
+    render(<App />);
+    await screen.findByRole('button', { name: '重新自动核对' });
+    fireEvent.change(screen.getByLabelText('候选草稿ID（仅数字）'), { target: { value: 'abc' } });
+    fireEvent.click(screen.getByRole('button', { name: '重新自动核对' }));
+    await screen.findByText('候选草稿ID仅接受数字。');
+    expect(calls.some(c => c.url.endsWith('/reconcile'))).toBe(false);
+    ended = true;
+    fireEvent.click(screen.getAllByRole('button', { name: '刷新' })[0]);
+    await screen.findByText('已人工结束，草稿可能保留');
+    expect(screen.queryByRole('button', { name: '重新自动核对' })).toBeNull();
+  });
+
   it('取消完成后待核对任务即使保留取消标志仍允许只读核对', async () => {
     window.history.replaceState({}, '', '/jobs/job-1');
     const fallback = handler;
@@ -231,7 +309,7 @@ describe('管理员会话与任务闭环', () => {
     await waitFor(() => expect(calls.some(c => c.url.endsWith('/resume'))).toBe(true));
   });
 
-  it('未知结果只核对数字候选ID并确认保留草稿后人工结束，409有下一步', async () => {
+  it('未知结果支持可选数字候选ID并确认保留草稿后人工结束，409有下一步', async () => {
     window.history.replaceState({}, '', '/jobs/job-1');
     const fallback = handler;
     handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'reconciling', outcome: 'unknown', external_started: true }) : url.endsWith('/reconcile') ? response({ ...job, status: 'reconciling', outcome: 'unknown', external_started: true }) : url.endsWith('/resolve') ? response({ code: 'worker_not_idle', message: '执行器尚未确认空闲' }, 409) : fallback(url, init);
@@ -239,9 +317,11 @@ describe('管理员会话与任务闭环', () => {
     await screen.findByRole('heading', { name: '第一篇技术文章' });
     expect(screen.queryByRole('button', { name: '重试任务' })).toBeNull();
     fireEvent.change(screen.getByLabelText('候选草稿ID（仅数字）'), { target: { value: '12345' } });
-    fireEvent.click(screen.getByRole('button', { name: '仅核对既有草稿' }));
+    fireEvent.click(screen.getByRole('button', { name: '重新自动核对' }));
     await waitFor(() => expect(calls.some(c => c.url.endsWith('/reconcile'))).toBe(true));
     expect(JSON.parse(String(calls.find(c => c.url.endsWith('/reconcile'))?.init?.body))).toEqual({ remote_id: '12345' });
+    await waitFor(() => expect((screen.getByRole('button', { name: '重新自动核对' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByText('无法匹配完整稿件'));
     fireEvent.click(screen.getByLabelText('我已确认本任务浏览器停止，并保留可能存在的草稿'));
     fireEvent.change(screen.getByLabelText('人工结束原因'), { target: { value: '保留半成品供后续人工检查' } });
     fireEvent.click(screen.getByRole('button', { name: '保留草稿并结束任务' }));

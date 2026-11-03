@@ -8,6 +8,7 @@ export type Job = {
   attempts: number; retry_count: number; max_retries: number; retry_allowed: boolean;
   external_started: boolean; remote_id?: string; remote_url?: string; reconcile_candidate_id?: string;
   cancel_requested: boolean; manual_resolved?: boolean; error_code?: string; error_message?: string;
+  reconcile_count?: number; auto_reconcile_started?: boolean; absence_checks?: number; available_at?: string;
   run_mode?: string; created_at: string; updated_at: string; started_at?: string; finished_at?: string;
 };
 export type LogEntry = { id: string; job_id?: string; attempt?: number; level: string; stage?: string; message: string; created_at: string };

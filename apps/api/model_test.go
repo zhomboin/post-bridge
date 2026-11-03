@@ -36,7 +36,7 @@ func TestTransitionSafety(t *testing.T) {
 	if err := r.complete(CompleteInput{Status: "failed", Retryable: true, ErrorCode: "network_error"}, now); err != nil {
 		t.Fatal(err)
 	}
-	if r.Status != "reconciling" || r.Outcome != "unknown" || r.Ready || r.RetryAllowed {
+	if r.Status != "reconciling" || r.Outcome != "unknown" || !r.Ready || r.RetryAllowed {
 		t.Fatalf("unsafe retry: %+v", r)
 	}
 	if err := r.action("retry", ActionInput{}, now, nil); err == nil {

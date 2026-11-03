@@ -1,13 +1,14 @@
-import type { BrowserContext, Page, Response } from 'playwright';
+import type { BrowserContext, Page, Request, Response } from 'playwright';
 import { safeRequestURL, validContent } from './config.js';
 import type { Hooks, Job, JobResult, Progress } from './types.js';
 
 interface Identity { username: string; displayName?: string; timeoutMs?: number }
 interface Snapshot { id?: string; title: string; markdown: string; status: unknown }
-interface FixtureSite { origin: string; accountPath: string; editorPath: string }
+interface FixtureSite { origin: string; accountPath: string; editorPath: string; managePath?: string }
 class CheckpointFailure extends Error {}
 class AdapterFailure extends Error { constructor(readonly code: string) { super(code); } }
 const numericID = (value: unknown): string | undefined => typeof value === 'string' || typeof value === 'number' ? /^\d{1,30}$/.test(String(value)) ? String(value) : undefined : undefined;
+const normalizedMarkdown = (value: string): string => value.replace(/\r\n?/g, '\n').trim();
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 export class CSDNAdapter {
@@ -107,6 +108,8 @@ export class CSDNAdapter {
         return allowed ? route.continue() : route.abort('blockedbyclient');
       });
       await this.context.routeWebSocket('**/*', socket => socket.close());
+      // 恢复的旧标签页不能继续发起自动保存。
+      await Promise.all(this.context.pages().map(existing => existing.close()));
       page = await this.context.newPage();
       page.setDefaultTimeout(this.timeout); page.setDefaultNavigationTimeout(this.timeout);
       page.on('dialog', dialog => { void dialog.dismiss().catch(() => {}); });
@@ -118,12 +121,29 @@ export class CSDNAdapter {
       if (job.kind === 'check_account') return { status: 'succeeded' };
       if (job.run_mode === 'reconcile') {
         const id = remoteID ?? numericID(job.reconcile_candidate_id);
-        if (!id) return { status: 'reconciling', error_code: 'draft_not_found', error_message: '需要提供草稿标识进行只读核对' };
-        await progress({ stage: 'verifying', message: '正在只读核对已有草稿' });
-        await page.goto(this.editorURL(id), { waitUntil: 'domcontentloaded' });
-        const match = await this.waitSnapshot(() => snapshotState.value, job, signal);
-        if (!match || (snapshotState.value?.id && snapshotState.value.id !== id)) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '草稿内容或草稿状态未通过核对' };
-        return { status: 'succeeded', remote_id: id };
+        await progress({ stage: 'verifying', message: id ? '正在只读核对已有草稿' : '正在自动查询并核对平台草稿' });
+        if (id) {
+          snapshotState.value = undefined;
+          await page.goto(this.editorURL(id), { waitUntil: 'domcontentloaded' });
+          const snapshot = await this.readSnapshot(readSnapshot, id, signal);
+          if (!snapshot) return { status: 'reconciling', error_code: 'reconcile_unavailable', error_message: '平台草稿暂时无法读取' };
+          if (!this.matches(snapshot, job)) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '草稿内容或草稿状态未通过核对' };
+          return { status: 'succeeded', remote_id: id };
+        }
+        const candidates = await this.draftCandidates(page, job.title, signal);
+        if (!candidates.length) return { status: 'reconciling', error_code: 'draft_absent', error_message: '完整查询未找到同标题草稿，后台将再次确认' };
+        const matches: string[] = [];
+        let conflict = false;
+        for (const candidate of candidates) {
+          signal.throwIfAborted();
+          snapshotState.value = undefined;
+          await page.goto(this.editorURL(candidate), { waitUntil: 'domcontentloaded' });
+          const snapshot = await this.readSnapshot(readSnapshot, candidate, signal);
+          if (!snapshot) return { status: 'reconciling', error_code: 'reconcile_unavailable', error_message: '候选草稿暂时无法读取' };
+          if (this.matches(snapshot, job)) matches.push(candidate); else conflict = true;
+        }
+        if (matches.length !== 1 || conflict) return { status: 'reconciling', error_code: 'draft_conflict', error_message: '存在重复或不完整的同标题草稿，不能自动重写' };
+        return { status: 'succeeded', remote_id: matches[0] };
       }
       if (external || remoteID) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '任务已有外站操作，需要只读核对' };
       await progress({ stage: 'opening_editor', external_started: true, message: '即将打开平台草稿编辑器' });
@@ -171,7 +191,7 @@ export class CSDNAdapter {
     } catch (error) {
       if (error instanceof CheckpointFailure || checkpointFailure instanceof CheckpointFailure) throw new CheckpointFailure('任务检查点未确认');
       if (signal.aborted) return { status: external ? 'reconciling' : 'cancelled', ...(remoteID ? { remote_id: remoteID } : {}), error_code: 'cancelled', error_message: '浏览器操作已停止' };
-      const code = error instanceof AdapterFailure ? error.code : 'timeout';
+      const code = error instanceof AdapterFailure ? error.code : job.run_mode === 'reconcile' ? 'reconcile_unavailable' : 'timeout';
       return { status: external ? 'reconciling' : 'failed', ...(remoteID ? { remote_id: remoteID } : {}), error_code: code, error_message: external ? '平台结果尚未确认，需要只读核对' : '平台页面未通过安全检查', retryable: !external && code === 'timeout' };
     } finally {
       if (timer) clearInterval(timer);
@@ -181,10 +201,71 @@ export class CSDNAdapter {
       await page?.close().catch(() => {});
     }
   }
+  private matches(snapshot: Snapshot, job: Job): boolean {
+    return (snapshot.status === 2 || snapshot.status === '2') && snapshot.title === job.title && normalizedMarkdown(snapshot.markdown) === normalizedMarkdown(job.markdown);
+  }
+  private async readSnapshot(snapshot: () => Snapshot | undefined, id: string, signal: AbortSignal): Promise<Snapshot | undefined> {
+    const deadline = Date.now() + this.timeout;
+    while (Date.now() < deadline) {
+      signal.throwIfAborted();
+      const value = snapshot();
+      if (value?.id === id) return value;
+      await sleep(50);
+    }
+    return undefined;
+  }
+  private async draftCandidates(page: Page, title: string, signal: AbortSignal): Promise<string[]> {
+    const seen = new Set<string>();
+    const candidates: string[] = [];
+    let total: number | undefined;
+    const size = 20;
+    await page.goto(new URL(this.site.managePath ?? 'https://mp.csdn.net/mp_blog/manage/article', this.site.origin).href, { waitUntil: 'domcontentloaded' });
+    // 限制扫描成本；超过上限保留未知结果，不能按不存在处理。
+    for (let number = 1; number <= 100; number++) {
+      signal.throwIfAborted();
+      const expectedOrigin = this.fixture ? this.site.origin : 'https://bizapi.csdn.net';
+      const requestPromise = page.waitForRequest(request => {
+        const url = new URL(request.url());
+        return url.origin === expectedOrigin && url.pathname === '/blog/phoenix/console/v1/article/list' && url.searchParams.get('status') === 'draft' && (url.searchParams.get('page') ?? '1') === String(number) && request.method() === 'GET';
+      }, { timeout: this.timeout });
+      // 由官方页面触发带会话校验的读取，不复制或自行生成私有签名。
+      const [request] = await Promise.all([requestPromise, number === 1 ? page.getByText(/^草稿箱/).click() : page.getByRole('button', { name: '下一页', exact: true }).click()]);
+      const text = await this.listResponseBody(request);
+      if (text.length > 1500000) throw new AdapterFailure('reconcile_unavailable');
+      const body: unknown = JSON.parse(text);
+      const result = body as { code?: unknown; data?: { list?: unknown; total?: unknown; page?: unknown; size?: unknown } };
+      const data = result?.data;
+      if (result?.code !== 200 || !data || !Array.isArray(data.list) || !Number.isSafeInteger(data.total) || Number(data.total) < 0 || data.page !== number || data.size !== size || data.list.length > size || (total !== undefined && total !== data.total)) throw new AdapterFailure('reconcile_unavailable');
+      total = Number(data.total);
+      for (const value of data.list) {
+        const item = value as { articleId?: unknown; title?: unknown; username?: unknown; status?: unknown } | null;
+        const id = numericID(item?.articleId);
+        if (!id || seen.has(id) || typeof item?.title !== 'string' || item.username !== this.identity.username || !(item.status === 2 || item.status === '2')) throw new AdapterFailure('reconcile_unavailable');
+        seen.add(id);
+        if (item.title === title) candidates.push(id);
+      }
+      if (seen.size > total || (seen.size < total && data.list.length !== size)) throw new AdapterFailure('reconcile_unavailable');
+      if (seen.size === total) return candidates;
+    }
+    throw new AdapterFailure('reconcile_unavailable');
+  }
+  private async listResponseBody(request: Request): Promise<string> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        (async () => {
+          const response = await request.response();
+          if (!response || response.status() !== 200) throw new AdapterFailure('reconcile_unavailable');
+          return response.text();
+        })(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new AdapterFailure('reconcile_unavailable')), this.timeout); }),
+      ]);
+    } finally { if (timer) clearTimeout(timer); }
+  }
   private async waitSnapshot(snapshot: () => Snapshot | undefined, job: Job, signal: AbortSignal): Promise<boolean> {
     const deadline = Date.now() + this.timeout;
     while (Date.now() < deadline) { signal.throwIfAborted(); const value = snapshot(); // 状态2仅作为目标账号已实测的适配条件；其他或缺失值均停止核对。
-      if (value && (value.status === 2 || value.status === '2') && value.title === job.title && value.markdown.trim() === job.markdown.trim()) return true; await sleep(50); }
+      if (value && (value.status === 2 || value.status === '2') && value.title === job.title && normalizedMarkdown(value.markdown) === normalizedMarkdown(job.markdown)) return true; await sleep(50); }
     return false;
   }
 }

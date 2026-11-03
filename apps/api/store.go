@@ -186,6 +186,18 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 		active := false
 		unknown := ""
 		for _, r := range records {
+			if r.Status == "reconciling" && r.ExternalStarted && !r.ManualResolved && !r.AutoReconcileStarted {
+				r.AutoReconcileStarted = true
+				r.RunMode = "reconcile"
+				r.Ready = true
+				r.AvailableAt = now.Add(20 * time.Second)
+				if err = save(ctx, tx, r); err != nil {
+					return err
+				}
+				if err = appendLog(ctx, tx, r, "info", "已安排后台自动查询草稿", now); err != nil {
+					return err
+				}
+			}
 			if r.Status == "running" && !r.LeaseExpiresAt.After(now) {
 				r.recover(now)
 				if err = save(ctx, tx, r); err != nil {
@@ -266,7 +278,7 @@ func (s *Store) mutateLease(ctx context.Context, id, token string, fn func(pgx.T
 func (s *Store) Heartbeat(ctx context.Context, id, token string) (bool, error) {
 	cancel := false
 	err := s.mutateLease(ctx, id, token, func(tx pgx.Tx, r *record, now time.Time) error {
-		cancel = r.CancelRequested
+		cancel = r.CancelRequested && r.RunMode != "reconcile"
 		r.LeaseExpiresAt = now.Add(60 * time.Second)
 		return nil
 	})
@@ -274,8 +286,17 @@ func (s *Store) Heartbeat(ctx context.Context, id, token string) (bool, error) {
 }
 func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error {
 	return s.mutateLease(ctx, id, in.LeaseToken, func(tx pgx.Tx, r *record, now time.Time) error {
-		if r.CancelRequested {
+		if r.CancelRequested && r.RunMode != "reconcile" {
 			return ErrConflict
+		}
+		if in.RemoteID != "" {
+			var exists bool
+			if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id<>$1 AND record->>'remote_id'=$2)", id, in.RemoteID).Scan(&exists); err != nil {
+				return err
+			}
+			if exists {
+				return ErrConflict
+			}
 		}
 		if err := r.progress(in, now); err != nil {
 			return err
@@ -285,6 +306,17 @@ func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error
 }
 func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error {
 	return s.mutateLease(ctx, id, in.LeaseToken, func(tx pgx.Tx, r *record, now time.Time) error {
+		if in.RemoteID != "" {
+			var exists bool
+			if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id<>$1 AND record->>'remote_id'=$2)", id, in.RemoteID).Scan(&exists); err != nil {
+				return err
+			}
+			if exists {
+				in.Status = "reconciling"
+				in.RemoteID = ""
+				in.ErrorCode = "draft_conflict"
+			}
+		}
 		if err := r.complete(in, now); err != nil {
 			return err
 		}
