@@ -124,3 +124,23 @@ it('认证页未就绪时保持pending，有限加载失败给出明确原因，
   expect(manager.status()).toMatchObject({ status: 'failed', error: 'CSDN 登录页面未能加载，请稍后重新开始' });
   await manager.close();
 });
+
+
+it('画面或输入占满队列时身份轮询等待，不关闭仍可用的登录会话', async () => {
+  let release!: () => void; let first = true; let matched = false;
+  const manager = new RemoteLoginManager(async () => ({
+    connected: async () => matched ? 'connected' as const : 'pending' as const,
+    frame: async () => { if (first) { first = false; await new Promise<void>(resolve => { release = resolve; }); } return Buffer.from('jpeg'); },
+    input: async () => {}, close: async () => {},
+  }), { pollMs: 5 });
+  const state = manager.create(); const running = manager.run(new AbortController().signal);
+  await vi.waitFor(() => expect(manager.status().status).toBe('active'));
+  const operations = Array.from({length:4}, () => manager.frame(state.id)); const settled = Promise.allSettled(operations);
+  try {
+    await expect(manager.frame(state.id)).rejects.toMatchObject({ statusCode: 429 });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(manager.status().status).toBe('active');
+    matched = true; release(); await settled; await running;
+    expect(manager.status().status).toBe('succeeded');
+  } finally { release?.(); await settled; await manager.close(); }
+});

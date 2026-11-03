@@ -83,6 +83,7 @@ export class RemoteLoginManager {
       this.state = { ...this.state, status: 'active' }; this.seen = this.now();
       while (!controller.signal.aborted) {
         this.expire(); if (controller.signal.aborted) break;
+        if (this.queued >= 4) { await pause(this.poll, controller.signal); continue; }
         const matched = await this.operation(this.state.id, browser => browser.connected(), false);
         if (matched === 'connected') { this.finish('succeeded'); break; }
         if (matched === 'wrong') { this.finish('failed', '登录账号与配置不符'); break; }

@@ -1,5 +1,6 @@
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { safeRequestURL, type Config } from './config.js';
+import { readLoginIdentity } from './login-identity.js';
 import { fillLoginInput, focusNextLoginInput } from './login-focus.js';
 import { LoginPageUnavailable, loginHeight, loginWidth, type LoginBrowser, type LoginInput } from './remote-login.js';
 
@@ -59,16 +60,7 @@ export async function openLoginBrowser(config: Pick<Config, 'profileDir' | 'user
     const loginURL = fixture ? new URL(fixture.loginPath, fixture.origin).href : 'https://passport.csdn.net/account/login?from=https%3A%2F%2Fmp.csdn.net%2F';
     let accountLoaded = false;
     try { await page.goto(accountURL, { waitUntil: 'domcontentloaded' }); accountLoaded = true; } catch { signal.throwIfAborted(); }
-    const identity = async (): Promise<'pending' | 'connected' | 'wrong'> => {
-      if (fixture ? new URL(page.url()).pathname !== fixture.accountPath : new URL(page.url()).hostname !== 'mp.csdn.net') return 'pending';
-      const names = await page.locator('a[href]').evaluateAll(nodes => nodes.flatMap(node => {
-        try { const url = new URL((node as HTMLAnchorElement).href); return url.protocol === 'https:' && url.hostname === 'blog.csdn.net' && /^\/[A-Za-z0-9_-]+\/?$/.test(url.pathname) ? [url.pathname.replace(/^\/|\/$/g, '')] : []; } catch { return []; }
-      }));
-      const login = await page.getByText(/^登录$/).filter({ visible: true }).count() > 0;
-      if (names.includes(config.username) && !login) return 'connected';
-      if (!login && names.length) return 'wrong';
-      return 'pending';
-    };
+    const identity = () => readLoginIdentity(page, config.username, fixture);
     const contentReady = async (): Promise<boolean> => {
       for (const frame of page.frames()) {
         try {
