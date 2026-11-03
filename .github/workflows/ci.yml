@@ -1,0 +1,73 @@
+name: 全量验证
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.15-bookworm
+        env:
+          POSTGRES_USER: post_bridge_ci
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: post_bridge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U post_bridge_ci -d post_bridge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgres://post_bridge_ci:local-ci-only@127.0.0.1:5432/post_bridge_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.2'
+          cache-dependency-path: apps/api/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+          cache: npm
+      - name: 固定 npm 版本
+        run: npm install --global npm@10.9.4
+      - name: 安装固定依赖
+        run: npm ci
+      - name: 安装匹配的 Chromium
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Go 并发与真实数据库验证
+        working-directory: apps/api
+        run: go test -race ./...
+      - name: Go 静态检查
+        working-directory: apps/api
+        run: go vet ./...
+      - name: 运行入口安全用例
+        run: python3 -m unittest discover -s tests/runtime -v
+      - name: 登录助手停止用例
+        run: node --test tests/runtime/login-session.test.mjs
+      - name: 工作区用例
+        run: npm test
+      - name: 类型检查
+        run: npm run typecheck
+      - name: 端到端设施类型检查
+        run: npx --no-install tsc -p tests/e2e/tsconfig.json
+      - name: 构建
+        run: npm run build
+      - name: 后台与真实 API 端到端验证
+        run: npm run test:e2e
+      - name: 保存合成数据截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 合成后台截图
+          path: test-results/e2e/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7

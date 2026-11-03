@@ -2,46 +2,34 @@
 
 ## 项目结构与范围
 
-本项目将 CMS 内容分发到 CSDN、知乎和小红书。需求入口为 `docs/requirements.md`，尚无源码、测试、素材目录或构建配置。先阅读需求并验证平台能力；Go、React/TypeScript、Node.js/Playwright、PostgreSQL 和 Docker Compose 均为建议选型。
+本项目提供独立内容分发后台，当前实现 CSDN 文字 Markdown 草稿流程。完整范围见 [需求](docs/requirements.md)，交付状态见 [进度](docs/progress.md)；公开发布、其他平台和 CMS 对接仍待实施。
 
-本指南保留在根目录；其他文档使用中文 Markdown，放入 `docs/`。`docs/README.md` 提供索引，`docs/progress.md` 记录总体进度，`docs/version.md` 记录简要变更；`docs/admin-ui.md` 规定后台页面与交互，`docs/frontend-skills.md` 记录技能来源。建立源码、测试和素材目录后同步本指南。
+- apps/api：Go 管理接口、认证、PostgreSQL 队列及数据库初始化。
+- apps/admin/src：React/TypeScript 后台、页面和样式。
+- apps/worker/src：Node.js/Playwright 固定 CSDN 执行器。
+- tests/e2e、tests/runtime：跨服务与启动安全测试；单元测试随应用组织。
+- scripts：PowerShell 入口与 WSL 运行管理；.github/workflows：CI。
 
-## 构建、测试与开发命令
+本指南保留根目录，其他文档使用中文 Markdown，放入 docs。所有文件使用 UTF-8 无 BOM。进度和简要变更分别写入 docs/progress.md、docs/version.md；只描述当前状态，已交付任务的详细实施计划及时删除。
 
-目前没有可执行的构建、测试或启动命令。初始化工程时固定工具版本，并记录实际可用的安装、启动、构建、检查和测试命令。
+## 开发、构建与测试
 
-使用 Windows PowerShell；`Get-Content docs/requirements.md` 阅读需求，`Get-ChildItem -Force` 检查目录。命令分开执行，不使用 Bash 的 `&&` 或 `||`。结束任务时关闭本次临时启动的进程、服务和容器。
+环境固定 Linux Node.js 22.22.1、npm 10.9.4、Go 1.26.2、PostgreSQL 16 与 Playwright 1.64.1。完整入口见 [开发说明](docs/development.md)。Windows PowerShell 可执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1` 构建并启动，使用 scripts/stop.ps1 安全停止。
 
-## 编码风格与命名
+Linux 工作区的 `npm run build`、`npm run typecheck`、`npm test` 分别构建、检查类型和运行应用用例；Go 使用 go test、go vet。不要在 PowerShell 中用 Bash 的串联符，命令分开执行。任务结束关闭本次临时进程、服务和容器，保留无关服务。
 
-所有项目文件使用 UTF-8 无 BOM。文档简明描述当前要求，直接链接实现，避免嵌入代码。初始化后，Go 使用 `gofmt`；TypeScript 建议两空格缩进、组件用 PascalCase、函数和变量用 camelCase，并固定格式化与 lint 配置。上述工具目前尚未配置。
+## 编码与测试规范
 
-平台适配、内容转换与任务调度保持独立；禁止读取 CMS 数据库或依赖其内部表结构。
+Go 使用 gofmt；TypeScript 两空格缩进，组件 PascalCase，函数和变量 camelCase。当前检查工具为 TypeScript、go vet，未配置 ESLint。平台适配、调度和页面保持独立；执行器不直接连接数据库，不读取 CMS 数据库。
 
-正式运行由固定后台程序和直接调用 Playwright 的执行器完成，不依赖 AI Agent、大模型服务或模型密钥。Playwright CLI 和设计技能仅用于开发验证与审阅；页面不匹配时停止，由开发人员修复适配器。
+Go 使用 *_test.go，TypeScript 使用 *.test.ts 或 *.test.tsx。测试采用 Go testing、Vitest、Testing Library 和 Playwright，覆盖正常、边界和异常路径，尤其是幂等、账号互斥、失租、未知结果、取消及重启恢复。修改时同步相关用例；本地只跑受影响范围，GitHub CI 执行全量测试，不访问真实平台账号。
 
 ## 前端设计与审阅
 
-所有前端创建、修改和审阅必须先阅读并共同遵循项目内 [Frontend Design](.agents/skills/frontend-design/SKILL.md) 与 [Emil Kowalski](.agents/skills/emil-design-eng/SKILL.md)，不能用同名全局技能替代。前者约束布局与视觉，后者约束交互、动效、性能及细节；共同按[后台规范](docs/admin-ui.md)验收。
+所有前端实现和审阅先阅读并共同遵循项目内 [Frontend Design](.agents/skills/frontend-design/SKILL.md) 与 [Emil Kowalski](.agents/skills/emil-design-eng/SKILL.md)，不以同名全局技能替代。按 [后台规范](docs/admin-ui.md) 检查中文工作台、桌面及 390/320 窄屏、键盘、减少动态效果和日志脱敏；审阅用“调整前／调整后／原因”表格链接实现。
 
-后台采用中文发布工作台，参考 shadcn/ui 官方 Dashboard 与 Sidebar。重点呈现发布记录、分平台状态及脱敏日志，兼顾移动端、键盘和减少动态效果。审阅使用“调整前／调整后／原因”表格并链接实现。用户指示和项目需求优先于技能通用建议，安装来源见[前端技能说明](docs/frontend-skills.md)。
+## 提交、PR 与安全
 
-## 测试规范
+使用功能分支；隔离工作区位于本地 .worktrees。提交采用 docs:、feat:、fix: 等前缀及简明中文说明。PR 说明目的、影响、验证和关联需求，界面变更附合成数据截图。推送和合并前检查最新文档并完成独立代码检视；合入 main 并验证后删除临时分支和工作区。
 
-测试框架和覆盖率门槛尚未确定。初始化时统一测试布局：Go 用例采用 `*_test.go`，TypeScript 用例建议采用 `*.test.ts`。
-
-本地只运行受影响范围的必要测试，全量测试由 GitHub CI 执行。覆盖正常、边界及异常路径，重点验证重复请求、提交超时核对、重启恢复、通知乱序、权限隔离和进程清理；同步更新相关用例，删除功能时清理失效用例。
-
-开发及 CI 默认使用模拟适配器。真实账号登录、公开发文和清理外站内容必须获得明确授权。
-
-## 提交与 PR
-
-主分支为 `main`，远程为 `git@github.com:zhomboin/post-bridge.git`。每项开发创建新分支，需要隔离时使用本地 `.worktrees/`。提交采用 `docs: 初始化项目文档` 等类型前缀与简明说明。
-
-通过 PR 合入主分支，每次合并前完成代码检视。PR 说明目的、影响、关联需求和验证结果；界面变更附脱敏截图。推送和合并前检查文档是否只描述当前要求。历史通过 Git 与 `docs/version.md` 保留；确认合入后删除临时分支和工作区。
-
-## 安全与文档维护
-
-禁止提交密钥、Token、Cookie、真实浏览器会话、敏感截图和临时素材；账号使用隔离环境。发布结果不确定时先核对，禁止盲目重试发文。
-
-每项功能完成后同步相关文档，在总体进度中链接专项记录，交付后删除详细实施计划。分别记录代码完成、本地验证、平台实测和生产验收，不凭模拟测试宣称真实发布成功。
+禁止提交密钥、Cookie、浏览器配置及敏感截图。真实账号操作按明确授权执行；当前指定 CSDN 账号仅允许登录和草稿验证。外站结果未知先核对，禁止盲目重试。运行状态与账号目录置于仓库外，分别记录代码、本地、真实平台和生产验收结果。

@@ -1,1 +1,15 @@
 .worktrees/
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+output/
+.env
+.env.*
+!.env.example
+*.log
+*.pid
+*.tsbuildinfo
+__pycache__/
+.DS_Store
