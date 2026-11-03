@@ -1,0 +1,30 @@
+[Unit]
+Description=Post Bridge API
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=post-bridge-api
+Group=post-bridge-api
+WorkingDirectory=@INSTALL@/current
+UnsetEnvironment=DISPLAY WAYLAND_DISPLAY
+EnvironmentFile=@CONFIG@/api.env
+ExecStart=@INSTALL@/current/bin/post-bridge-api
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=@STATE@/api
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -15,3 +15,5 @@
 - [本地开发与运行](development.md)：环境、PowerShell 入口及草稿使用流程。
 - [CSDN 后台 API](api.md)：管理与执行器协议、权限和恢复规则。
 - [运维说明](operations.md)：进程清理、异常恢复、保留规则及方案参考。
+
+- [Ubuntu 无桌面部署](ubuntu-deployment.md)：安装、升级、systemd 常驻、HTTPS 与后台远程登录。

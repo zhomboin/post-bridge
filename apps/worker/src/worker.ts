@@ -64,7 +64,8 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
     const timer = setTimeout(finish, ms); signal.addEventListener('abort', finish, { once: true });
   });
 }
-export async function runWorker(api: WorkerAPI, profileDir: string, open: () => Promise<Session>, signal: AbortSignal, pollIntervalMs = 1500): Promise<void> {
+export interface WorkerMaintenance { pending(): boolean; run(signal: AbortSignal): Promise<void>; close(): Promise<void> }
+export async function runWorker(api: WorkerAPI, profileDir: string, open: () => Promise<Session>, signal: AbortSignal, pollIntervalMs = 1500, maintenance?: WorkerMaintenance): Promise<void> {
   const owner = await acquireProfile(profileDir);
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -87,6 +88,12 @@ export async function runWorker(api: WorkerAPI, profileDir: string, open: () => 
     await sendHeartbeat();
     while (!controller.signal.aborted) {
       if (!await profileAvailable(profileDir, owner)) throw new Error('浏览器配置尚未释放，执行器已停止');
+      if (maintenance?.pending()) {
+        idle = false; await sendHeartbeat();
+        try { await maintenance.run(controller.signal); }
+        finally { idle = true; await sendHeartbeat(); }
+        continue;
+      }
       const claim = await api.claim();
       if (!claim) { await delay(pollIntervalMs, controller.signal); continue; }
       idle = false;
@@ -98,6 +105,6 @@ export async function runWorker(api: WorkerAPI, profileDir: string, open: () => 
   } finally {
     clearInterval(timer); signal.removeEventListener('abort', abort);
     await heartbeatPromise;
-    await owner.release();
+    try { await maintenance?.close(); } finally { await owner.release(); }
   }
 }

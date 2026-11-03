@@ -46,6 +46,22 @@ class RuntimeSafetyTests(unittest.TestCase):
         self.assertNotIn('OPENAI_API_KEY', env)
         self.assertEqual(env['CSDN_USERNAME'], 'fixture')
 
+    def test_remote_login_defaults_and_process_configuration_are_separate(self):
+        runtime = self.load()
+        with tempfile.TemporaryDirectory() as directory:
+            state=Path(directory)
+            runtime.private_write(state/'runtime.json',json.dumps({'API_BASE_URL':'http://127.0.0.1:18080','PUBLIC_ORIGIN':'https://example.test'}))
+            config=runtime.configuration(state)
+            self.assertEqual(config['LOGIN_CONTROL_ADDR'],'127.0.0.1:18081')
+            self.assertEqual(config['REMOTE_LOGIN_URL'],'http://127.0.0.1:18081')
+            api=runtime.child_env(config)
+            worker=runtime.child_env(config,worker=True)
+            self.assertEqual(api['REMOTE_LOGIN_URL'],config['REMOTE_LOGIN_URL'])
+            self.assertNotIn('LOGIN_CONTROL_ADDR',api)
+            self.assertEqual(worker['LOGIN_CONTROL_ADDR'],config['LOGIN_CONTROL_ADDR'])
+            self.assertNotIn('PUBLIC_ORIGIN',worker)
+            self.assertNotIn('REMOTE_LOGIN_URL',worker)
+
     def test_database_failure_stops_only_new_cluster(self):
         runtime = self.load()
         with tempfile.TemporaryDirectory() as base:

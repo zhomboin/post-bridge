@@ -4,6 +4,8 @@
 
 ## E01：独立生产部署与访问边界
 
+Ubuntu systemd 安装器、升级与停止入口及 HTTPS 模板已实现，见[部署说明](../ubuntu-deployment.md)。本地合成生命周期通过；本节生产验收项目仍须目标服务器逐项确认。
+
 前置：B01、B03、B08，正式切换等待 C、D 通过。
 
 拟建：`deploy/compose.production.yaml`、`deploy/proxy/nginx.conf`、三个应用的 `Dockerfile`、`deploy/browser/Dockerfile`、`scripts/deploy.ps1`、`docs/deployment.md`、`docs/security.md`。

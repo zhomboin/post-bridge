@@ -28,7 +28,7 @@ export function validContent(title: string, markdown: string): boolean {
 }
 export interface Config {
   apiBaseURL: string; tokenFile: string; username: string; displayName: string; profileDir: string;
-  executablePath?: string; headless: boolean; workerId: string; pollIntervalMs: number;
+  executablePath?: string; headless: boolean; workerId: string; pollIntervalMs: number; loginControlAddr?: string;
 }
 function canonicalCandidate(path: string): string {
   let existing = resolve(path);
@@ -79,6 +79,7 @@ function profileWorkerID(profile: string): string {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const api = new URL(env.API_BASE_URL || 'http://127.0.0.1:8080');
   if (api.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]', 'api'].includes(api.hostname) || api.username || api.password || api.pathname !== '/' || api.search || api.hash) throw new Error('内部服务地址必须为受限本地HTTP地址');
+  if (env.LOGIN_CONTROL_ADDR && (!/^127\.0\.0\.1:[0-9]{1,5}$/.test(env.LOGIN_CONTROL_ADDR) || Number(env.LOGIN_CONTROL_ADDR.split(':')[1]) < 1 || Number(env.LOGIN_CONTROL_ADDR.split(':')[1]) > 65535)) throw new Error('登录控制服务必须使用IPv4回环非零端口');
   const username = env.CSDN_USERNAME || '';
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(username)) throw new Error('必须配置预期CSDN账号');
   const suppliedProfile = env.CSDN_PROFILE_DIR || '';
@@ -86,7 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const profileDir = canonicalCandidate(suppliedProfile);
   if (repositoryRoots().some(root => inside(root, profileDir))) throw new Error('浏览器配置目录必须位于仓库外的专属目录');
   if (!env.WORKER_TOKEN_FILE || !isAbsolute(env.WORKER_TOKEN_FILE)) throw new Error('必须配置私有执行器凭据文件');
-  return { apiBaseURL: api.origin, tokenFile: env.WORKER_TOKEN_FILE, username, displayName: env.CSDN_DISPLAY_NAME || '', profileDir: resolve(profileDir), executablePath: env.PLAYWRIGHT_EXECUTABLE_PATH || undefined, headless: env.WORKER_HEADLESS !== 'false', workerId: profileWorkerID(resolve(profileDir)), pollIntervalMs: 1500 };
+  return { apiBaseURL: api.origin, tokenFile: env.WORKER_TOKEN_FILE, username, displayName: env.CSDN_DISPLAY_NAME || '', profileDir: resolve(profileDir), executablePath: env.PLAYWRIGHT_EXECUTABLE_PATH || undefined, headless: env.WORKER_HEADLESS !== 'false', workerId: profileWorkerID(resolve(profileDir)), pollIntervalMs: 1500, loginControlAddr: env.LOGIN_CONTROL_ADDR || undefined };
 }
 export async function readPrivateToken(path: string): Promise<string> {
   const info = await stat(path);

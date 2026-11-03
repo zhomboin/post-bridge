@@ -21,24 +21,26 @@ import (
 )
 
 type Config struct {
-	Store         *Store
-	AdminUsername string
-	AdminPassword string
-	WorkerToken   string
-	Origin        string
-	AdminDistDir  string
+	Store          *Store
+	AdminUsername  string
+	AdminPassword  string
+	WorkerToken    string
+	Origin         string
+	AdminDistDir   string
+	RemoteLoginURL string
 }
 type handler struct {
-	store       *Store
-	username    string
-	hash        []byte
-	workerToken string
-	origin      string
-	secure      bool
-	dist        string
-	mux         *http.ServeMux
-	attempts    map[string]loginWindow
-	mu          sync.Mutex
+	store            *Store
+	username         string
+	hash             []byte
+	workerToken      string
+	origin           string
+	secure           bool
+	dist             string
+	mux              *http.ServeMux
+	remoteLoginProxy *remoteLoginProxy
+	attempts         map[string]loginWindow
+	mu               sync.Mutex
 }
 type loginWindow struct {
 	Count int
@@ -51,6 +53,10 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 	if err != nil || origin.Host == "" || !(origin.Scheme == "http" || origin.Scheme == "https") || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || !(origin.Path == "" || origin.Path == "/") || cfg.Store == nil || cfg.AdminUsername == "" || len(cfg.AdminPassword) < 12 || len(cfg.AdminPassword) > 72 || len(cfg.WorkerToken) < 32 {
 		return nil, ErrInvalid
 	}
+	remote, err := newRemoteLoginProxy(cfg.RemoteLoginURL)
+	if err != nil {
+		return nil, err
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -62,14 +68,16 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 		return nil, err
 	}
 	h := &handler{store: cfg.Store, username: cfg.AdminUsername, hash: hash, workerToken: cfg.WorkerToken, origin: strings.TrimSuffix(cfg.Origin, "/"), secure: origin.Scheme == "https", dist: cfg.AdminDistDir, mux: http.NewServeMux(), attempts: map[string]loginWindow{}}
+	h.remoteLoginProxy = remote
 	h.routes()
+	h.remoteLoginRoutes()
 	return h, nil
 }
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/internal/") {
 		w.Header().Set("Cache-Control", "no-store")
 	}
@@ -228,6 +236,7 @@ func (h *handler) routes() {
 			replyError(w, err)
 			return
 		}
+		h.closeRemoteLogin(r.Context(), s.CSRF)
 		http.SetCookie(w, &http.Cookie{Name: "post_bridge_session", Value: "", Path: "/", HttpOnly: true, Secure: h.secure, SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	}))

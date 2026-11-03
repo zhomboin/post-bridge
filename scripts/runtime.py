@@ -95,7 +95,7 @@ def base_env():
 def child_env(config, worker=False):
     env = base_env()
     keys = ('API_BASE_URL', 'WORKER_TOKEN_FILE', 'CSDN_USERNAME', 'CSDN_DISPLAY_NAME')
-    keys += ('CSDN_PROFILE_DIR', 'PLAYWRIGHT_EXECUTABLE_PATH', 'WORKER_HEADLESS') if worker else ('DATABASE_URL', 'API_ADDR', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_FILE', 'ADMIN_DIST_DIR')
+    keys += ('CSDN_PROFILE_DIR', 'PLAYWRIGHT_EXECUTABLE_PATH', 'WORKER_HEADLESS', 'LOGIN_CONTROL_ADDR') if worker else ('DATABASE_URL', 'API_ADDR', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_FILE', 'ADMIN_DIST_DIR', 'PUBLIC_ORIGIN', 'REMOTE_LOGIN_URL')
     env.update({k: str(config[k]) for k in keys if k in config})
     return env
 
@@ -123,6 +123,8 @@ def configuration(state):
         raise ValueError('运行配置必须为0600的私有文件')
     value = json.loads(path.read_text(encoding='utf-8'))
     value['ADMIN_DIST_DIR'] = str(REPO / 'apps/admin/dist')
+    value.setdefault('LOGIN_CONTROL_ADDR', '127.0.0.1:18081')
+    value.setdefault('REMOTE_LOGIN_URL', 'http://127.0.0.1:18081')
     return value
 
 def setup(state):

@@ -47,3 +47,5 @@ CREATE TABLE IF NOT EXISTS admin_decisions (
  note text NOT NULL,
  created_at timestamptz NOT NULL
 );
+
+ALTER TABLE account ADD COLUMN IF NOT EXISTS remote_login_id text NOT NULL DEFAULT '';
