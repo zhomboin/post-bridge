@@ -9,7 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-export type Stack = { url: string; username: string; password: string; workerToken: string };
+export type Stack = { url: string; username: string; password: string; workerToken: string; startWorker(): () => Promise<void> };
 const go = process.env.E2E_GO_BIN || 'go';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -30,8 +30,9 @@ async function stop(child?: ChildProcess) {
     await new Promise<void>(done => child.once('exit', () => done()));
   }
 }
-export const test = base.extend<{}, { stack: Stack }>({
-  stack: [async ({}, use) => {
+export const test = base.extend<{}, { stack: Stack; remoteLoginMethod: 'sms' | 'qr' }>({
+  remoteLoginMethod: ['sms', {scope: 'worker', option: true}],
+  stack: [async ({remoteLoginMethod}, use) => {
     const database = process.env.TEST_DATABASE_URL;
     if (!database) throw Error('端到端验证必须提供 TEST_DATABASE_URL');
     const schema = 'e2e_' + randomBytes(12).toString('hex');
@@ -51,7 +52,7 @@ export const test = base.extend<{}, { stack: Stack }>({
       const username = 'e2e-admin';
       const password = randomBytes(24).toString('hex');
       const workerToken = randomBytes(32).toString('hex');
-      remote = await remoteLoginFixture(directory,workerToken);
+      remote = await remoteLoginFixture(directory,workerToken,remoteLoginMethod);
       const passwordFile = resolve(directory, 'admin.secret');
       const workerFile = resolve(directory, 'worker.secret');
       writeFileSync(passwordFile, password, { mode: 0o600 });
@@ -76,12 +77,14 @@ export const test = base.extend<{}, { stack: Stack }>({
         if (count > 100) throw Error('隔离 API 启动超时');
         await delay(100);
       }
-      await use({ url, username, password, workerToken });
+      await use({ url, username, password, workerToken, startWorker: () => remote!.startWorker(url) });
     } finally {
-      await stop(child);
-      await remote?.close();
-      try { if (created) db('drop'); }
-      finally { rmSync(directory, { recursive: true, force: true }); }
+      try { await remote?.close(); }
+      finally {
+        await stop(child);
+        try { if (created) db('drop'); }
+        finally { rmSync(directory, { recursive: true, force: true }); }
+      }
     }
   }, { scope: 'worker', timeout: 180_000 }],
   baseURL: async ({ stack }, use) => { await use(stack.url); },
