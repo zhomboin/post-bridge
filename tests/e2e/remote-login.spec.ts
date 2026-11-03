@@ -17,4 +17,5 @@ test('无桌面远程输入与拖动验证成功后自动恢复等待草稿',asy
   await expect(page.getByText('指定账号登录成功，等待任务已恢复',{exact:true})).toBeVisible();
   const restored=await(await page.request.get('/api/jobs/'+job.id)).json();expect(restored.status).toBe('queued');expect(restored.retry_count).toBe(0);
   expect((await(await page.request.get('/api/account')).json()).status).toBe('connected');
+  expect((await page.request.post('/api/jobs/'+job.id+'/cancel',{headers,data:{}})).status()).toBe(200);
 });
