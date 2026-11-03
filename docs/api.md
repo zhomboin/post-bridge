@@ -106,6 +106,6 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 | GET /api/account/login/{id}/frame | 返回本人会话的内存 JPEG，视口固定 1280×800 |
 | POST /api/account/login/{id}/input | 受限点击、文字、白名单按键、拖动点列及滚动，不接受网址或脚本 |
 
-会话最长十分钟，活动期间六十秒无画面或输入后关闭。状态为 idle、pending、active、succeeded、failed、expired、cancelled；他人占用时返回 busy。输入大小至多 16 KiB，文字至多 2000 字、拖动 2—128 个点、坐标限制在视口内。停止与过期拒绝迟到输入。指定身份成功确认采用幂等事务，只恢复本账号因 needs_login 等待且未取消的任务；未知外站结果仍进入核对，预算不重置。
+会话最长十分钟，活动期间六十秒无画面或输入后关闭。状态为 idle、pending、active、succeeded、failed、expired、cancelled；他人占用时返回 busy。输入大小至多 16 KiB，文字至多 2000 字、拖动 2—128 个点、坐标限制在视口内。停止与过期拒绝迟到输入。远端 Tab 和 Shift+Tab 仅在固定认证来源的可用文字输入间循环，不在后台账号页背景导航。指定身份成功确认采用幂等事务，只恢复本账号因 needs_login 等待且未取消的任务；未知外站结果仍进入核对，预算不重置。
 
 公开来源 PUBLIC_ORIGIN 与内部 API_BASE_URL 分离。REMOTE_LOGIN_URL 仅支持固定回环地址；执行器通过 LOGIN_CONTROL_ADDR 启用控制服务，内部鉴权沿用私有执行器密钥。部署与配置入口见[Ubuntu 部署说明](ubuntu-deployment.md)。
