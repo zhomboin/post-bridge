@@ -48,6 +48,11 @@ test('管理员在后台新建草稿并查看固定执行器结果及脱敏日�
   expect(text).not.toContain('此正文');
   await page.getByRole('link', { name: '运行日志', exact: true }).click();
   await expect(page.getByRole('heading', { name: '运行日志', exact: true })).toBeVisible();
+  await page.getByLabel('关联任务ID', { exact: true }).fill(job.id);
+  const filtered = page.waitForResponse(response => new URL(response.url()).pathname === '/api/logs' && new URL(response.url()).searchParams.get('job_id') === job.id);
+  await page.getByRole('button', { name: '查询', exact: true }).click();
+  await filtered;
+  await expect(page.getByText('任务已加入队列', { exact: true })).toHaveCount(1);
   await expect(page.getByText('任务已加入队列', { exact: true })).toBeVisible();
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
