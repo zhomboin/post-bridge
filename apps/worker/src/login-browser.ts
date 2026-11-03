@@ -1,5 +1,6 @@
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { safeRequestURL, type Config } from './config.js';
+import { fillLoginInput, focusNextLoginInput } from './login-focus.js';
 import { loginHeight, loginWidth, type LoginBrowser, type LoginInput } from './remote-login.js';
 
 export function loginNavigationAllowed(value: string): boolean {
@@ -7,12 +8,25 @@ export function loginNavigationAllowed(value: string): boolean {
   const url = new URL(value);
   return url.hostname === 'passport.csdn.net' || (url.hostname === 'mp.csdn.net' && ['/', '/mp_blog/', '/mp_blog/creation'].includes(url.pathname));
 }
+const firstLoginPostPaths = new Set([
+  '/v1/register/pc/wxapplets/createQrCode',
+  '/v1/register/pc/wxapplets/checkScan',
+  '/v1/register/pc/wxapplets/checkLogin',
+  '/v1/register/pc/wxapplets/doLogin',
+  '/v1/register/pc/sendVerifyCode',
+  '/v1/register/pc/login/doLogin',
+  '/v1/api/get/mobileAreaCode',
+  '/cdn_cgi_bs_bot/api',
+]);
 export function loginRequestAllowed(value: string, method: string): boolean {
+  let url: URL;
+  try { url = new URL(value); } catch { return false; }
+  if (url.username || url.password) return false;
+  if (method === 'GET' && url.origin === 'https://res.wx.qq.com' && url.pathname === '/connect/zh_CN/htmledition/js/wxLogin.js') return true;
   if (!safeRequestURL(value)) return false;
-  const url = new URL(value);
   if (url.hostname === 'editor.csdn.net' || /(?:editor|autoSave|saveArticle|publish|upload|deleteArticle)/i.test(url.pathname)) return false;
   if (method === 'GET' || method === 'HEAD') return true;
-  return method === 'POST' && url.hostname === 'passport.csdn.net' && (url.pathname === '/v1/login' || url.pathname.startsWith('/v1/login/') || url.pathname === '/account/login');
+  return method === 'POST' && url.hostname === 'passport.csdn.net' && (url.pathname === '/v1/login' || url.pathname.startsWith('/v1/login/') || url.pathname === '/account/login' || firstLoginPostPaths.has(url.pathname));
 }
 interface Fixture { origin: string; loginPath: string; accountPath: string }
 export async function openLoginBrowser(config: Pick<Config, 'profileDir' | 'username' | 'executablePath'>, signal: AbortSignal, fixture?: Fixture): Promise<LoginBrowser> {
@@ -66,9 +80,13 @@ export async function openLoginBrowser(config: Pick<Config, 'profileDir' | 'user
     const input = async (value: LoginInput) => {
       signal.throwIfAborted();
       switch (value.type) {
+        case 'fill': await fillLoginInput(page, value.field, value.text, fixture?.origin); break;
         case 'click': await page.mouse.click(value.x, value.y); break;
         case 'text': await page.keyboard.insertText(value.text); break;
-        case 'key': await page.keyboard.press(value.key); break;
+        case 'key':
+          if (value.key === 'Tab' || value.key === 'Shift+Tab') await focusNextLoginInput(page, value.key === 'Shift+Tab', fixture?.origin);
+          else await page.keyboard.press(value.key);
+          break;
         case 'scroll': await page.mouse.wheel(0, value.deltaY); break;
         case 'drag':
           await page.mouse.move(value.points[0].x, value.points[0].y);

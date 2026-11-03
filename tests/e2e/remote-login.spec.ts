@@ -11,7 +11,11 @@ test('无桌面远程输入与拖动验证成功后自动恢复等待草稿',asy
   for(const width of [1440,390,320]){await page.setViewportSize({width,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('远程登录-'+width+'.png'),fullPage:true});}
   await page.setViewportSize({width:1440,height:1000});
   const point=async(x:number,y:number)=>{await image.scrollIntoViewIfNeeded();const box=(await image.boundingBox())!;return{x:box.x+x*box.width/1280,y:box.y+y*box.height/800}};
-  let at=await point(80,100);await page.mouse.click(at.x,at.y);await page.getByLabel('输入到页面的文字').fill('synthetic-code');await page.getByRole('button',{name:'发送文字'}).click();await expect(page.getByRole('button',{name:'发送文字'})).toBeDisabled();
+  await page.getByLabel('手机号', {exact:true}).fill('12345678901');await page.getByRole('button',{name:'填写手机号',exact:true}).click();await expect(page.getByLabel('手机号',{exact:true})).toHaveValue('');
+  await page.getByLabel('短信验证码',{exact:true}).fill('123456');await page.getByRole('button',{name:'填写验证码',exact:true}).click();await expect(page.getByLabel('短信验证码',{exact:true})).toHaveValue('');
+  await expect(page.getByText('验证码已填入，请在画面确认登录',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'下一输入框'})).toBeEnabled();
+  let at;
   at=await point(60,185);const end=await point(230,185);await page.mouse.move(at.x,at.y);await page.mouse.down();await page.mouse.move(end.x,end.y,{steps:10});await page.mouse.up();await expect(page.getByRole('button',{name:'下一输入框'})).toBeEnabled();
   at=await point(80,265);await page.mouse.click(at.x,at.y);
   await expect(page.getByText('指定账号登录成功，等待任务已恢复',{exact:true})).toBeVisible();

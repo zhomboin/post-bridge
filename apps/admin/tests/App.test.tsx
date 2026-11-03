@@ -397,6 +397,42 @@ describe('后台远程登录验证', () => {
 });
 
 describe('远程登录输入',()=>{
+ it('手机号和短信验证码直接填写指定输入框，清空本地值且不自动发短信或确认登录',async()=>{
+  window.history.replaceState({},'', '/account');const fallback=handler;
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
+  handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?response({ok:true}):fallback(url,init);
+  render(<App/>);await screen.findByRole('img',{name:'CSDN 远程登录画面'});
+  const phone=screen.getByLabelText('手机号') as HTMLInputElement;
+  const code=screen.getByLabelText('短信验证码') as HTMLInputElement;
+  expect(phone.type).toBe('tel');expect(phone.inputMode).toBe('numeric');expect(phone.autocomplete).toBe('off');
+  expect(code.type).toBe('password');expect(code.inputMode).toBe('numeric');expect(code.autocomplete).toBe('off');
+  fireEvent.change(phone,{target:{value:'13800000000'}});fireEvent.click(screen.getByRole('button',{name:'填写手机号'}));
+  expect(phone.value).toBe('');await screen.findByText('手机号已填入，请在画面获取验证码');
+  fireEvent.change(code,{target:{value:'654321'}});fireEvent.click(screen.getByRole('button',{name:'填写验证码'}));
+  expect(code.value).toBe('');await screen.findByText('验证码已填入，请在画面确认登录');
+  expect(calls.filter(c=>c.init?.method==='POST').map(c=>({url:c.url,body:JSON.parse(String(c.init?.body))}))).toEqual([
+   {url:'/api/account/login/login-test/input',body:{type:'fill',field:'phone',text:'13800000000'}},
+   {url:'/api/account/login/login-test/input',body:{type:'fill',field:'code',text:'654321'}},
+  ]);
+  expect(screen.queryByText(/13800000000|654321/)).toBeNull();
+ });
+ it('明确输入只接受指定长度的数字，失败时不显示成功提示并清空本地值',async()=>{
+  window.history.replaceState({},'', '/account');const fallback=handler;
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
+  handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?response({message:'登录输入框当前不可用'},409):fallback(url,init);
+  render(<App/>);await screen.findByRole('img',{name:'CSDN 远程登录画面'});
+  const phone=screen.getByLabelText('手机号') as HTMLInputElement;const code=screen.getByLabelText('短信验证码') as HTMLInputElement;
+  for(const value of ['1234','123456789012345678901','+8613800000000','12345 ']){
+   fireEvent.change(phone,{target:{value}});expect((screen.getByRole('button',{name:'填写手机号'}) as HTMLButtonElement).disabled).toBe(true);
+  }
+  for(const value of ['123','123456789','１２３４','123a']){
+   fireEvent.change(code,{target:{value}});expect((screen.getByRole('button',{name:'填写验证码'}) as HTMLButtonElement).disabled).toBe(true);
+  }
+  expect(calls.filter(c=>c.url.endsWith('/input'))).toHaveLength(0);
+  fireEvent.change(phone,{target:{value:'13800000000'}});fireEvent.click(screen.getByRole('button',{name:'填写手机号'}));
+  expect(phone.value).toBe('');await screen.findByText('登录输入框当前不可用');
+  expect(screen.queryByText('手机号已填入，请在画面获取验证码')).toBeNull();
+ });
  it('短信或密码文字仅发送到输入接口并立即清空，键盘支持切换输入框',async()=>{
   window.history.replaceState({},'', '/account');const fallback=handler;
   vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));

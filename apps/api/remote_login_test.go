@@ -197,7 +197,7 @@ func TestRemoteLoginRejectsMalformedInputBeforeForwarding(t *testing.T) {
 	if after != before {
 		t.Fatal("invalid input reached worker")
 	}
-	valid := []string{`{"type":"click","x":1279.9,"y":799.9}`, `{"type":"text","text":"test-password"}`, `{"type":"key","key":"Shift+Tab"}`, `{"type":"drag","points":[{"x":0,"y":0},{"x":10.5,"y":10}]}`, `{"type":"scroll","deltaY":-1600}`}
+	valid := []string{`{"type":"fill","field":"phone","text":"13800000000"}`, `{"type":"fill","field":"code","text":"654321"}`, `{"type":"click","x":1279.9,"y":799.9}`, `{"type":"text","text":"test-password"}`, `{"type":"key","key":"Shift+Tab"}`, `{"type":"drag","points":[{"x":0,"y":0},{"x":10.5,"y":10}]}`, `{"type":"scroll","deltaY":-1600}`}
 	for _, body := range valid {
 		if w := remoteRequest(h, "POST", "/api/account/login/"+f.id+"/input", body, owner); w.Code != 200 {
 			t.Fatalf("valid input status %d", w.Code)
@@ -623,5 +623,97 @@ func TestRemoteLoginShutdownLockWaitIsBounded(t *testing.T) {
 		once.Do(proxy.mu.Unlock)
 		<-done
 		t.Fatal("shutdown waited without a deadline for active browser I/O")
+	}
+}
+
+func TestRemoteLoginExplicitFillBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		valid      bool
+	}{
+		{"phone lower", `{"type":"fill","field":"phone","text":"12345"}`, true},
+		{"phone upper", `{"type":"fill","field":"phone","text":"12345678901234567890"}`, true},
+		{"code lower", `{"type":"fill","field":"code","text":"1234"}`, true},
+		{"code upper", `{"type":"fill","field":"code","text":"12345678"}`, true},
+		{"phone short", `{"type":"fill","field":"phone","text":"1234"}`, false},
+		{"phone long", `{"type":"fill","field":"phone","text":"123456789012345678901"}`, false},
+		{"phone country prefix", `{"type":"fill","field":"phone","text":"+8613800000000"}`, false},
+		{"code short", `{"type":"fill","field":"code","text":"123"}`, false},
+		{"code long", `{"type":"fill","field":"code","text":"123456789"}`, false},
+		{"code non digit", `{"type":"fill","field":"code","text":"123a"}`, false},
+		{"unicode digit", `{"type":"fill","field":"code","text":"１２３４"}`, false},
+		{"whitespace", `{"type":"fill","field":"phone","text":"12345 "}`, false},
+		{"newline", `{"type":"fill","field":"phone","text":"12345\n"}`, false},
+		{"empty", `{"type":"fill","field":"phone","text":""}`, false},
+		{"unknown field", `{"type":"fill","field":"password","text":"123456"}`, false},
+		{"missing field", `{"type":"fill","text":"123456"}`, false},
+		{"null field", `{"type":"fill","field":null,"text":"123456"}`, false},
+		{"null text", `{"type":"fill","field":"phone","text":null}`, false},
+		{"numeric text", `{"type":"fill","field":"code","text":1234}`, false},
+		{"extra known field", `{"type":"fill","field":"code","text":"1234","key":"Enter"}`, false},
+		{"extra unknown field", `{"type":"fill","field":"phone","text":"12345","submit":true}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validRemoteInput([]byte(tc.body)); got != tc.valid {
+				t.Fatalf("fill validation = %v, want %v", got, tc.valid)
+			}
+		})
+	}
+}
+
+func TestRemoteLoginExplicitFillPreservesAccessAndForwarding(t *testing.T) {
+	f, good := newRemoteFixture(t)
+	var forwarded []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/input") {
+			data, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(400)
+				return
+			}
+			forwarded = append(forwarded, string(data))
+			r.Body = io.NopCloser(bytes.NewReader(data))
+		}
+		good.Config.Handler.ServeHTTP(w, r)
+	}))
+	defer upstream.Close()
+	h, s := remoteHandler(t, upstream.URL)
+	owner, other := remoteSession(t, s), remoteSession(t, s)
+	if w := remoteRequest(h, "POST", "/api/account/login", "{}", owner); w.Code != 202 {
+		t.Fatal(w.Code)
+	}
+	path := "/api/account/login/" + f.id + "/input"
+	phone := `{"type":"fill","field":"phone","text":"13800000000"}`
+	for _, tc := range []struct {
+		credential remoteCredential
+		status     int
+	}{
+		{remoteCredential{}, 401}, {remoteCredential{cookie: owner.cookie}, 403}, {other, 404},
+	} {
+		if w := remoteRequest(h, "POST", path, phone, tc.credential); w.Code != tc.status || w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("fill boundary: %d", w.Code)
+		}
+	}
+	if w := remoteRequest(h, "POST", path, `{"type":"fill","field":"phone","text":"1234"}`, owner); w.Code != 400 {
+		t.Fatal(w.Code)
+	}
+	if len(forwarded) != 0 {
+		t.Fatal("unauthorized or invalid fill reached worker")
+	}
+	for _, body := range []string{phone, `{"type":"fill","field":"code","text":"654321"}`} {
+		w := remoteRequest(h, "POST", path, body, owner)
+		if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("fill response: %d", w.Code)
+		}
+		if forwarded[len(forwarded)-1] != body {
+			t.Fatal("fill input changed in transit")
+		}
+		if strings.Contains(w.Body.String(), "13800000000") || strings.Contains(w.Body.String(), "654321") {
+			t.Fatal("fill response exposed private input")
+		}
+	}
+	if len(forwarded) != 2 {
+		t.Fatalf("unexpected forwarded input count: %d", len(forwarded))
 	}
 }
