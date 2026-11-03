@@ -85,7 +85,7 @@ test('真实管理接口拒绝公开发布与跨站写入并保证请求幂等',
   expect(missing.headers()['content-type']).toContain('application/json');
 });
 
-test('未知结果阻止新建且人工结束保留事实并禁止重试', async ({ page, stack }) => {
+test('未知结果阻止新建且人工结束保留事实并禁止重试', async ({ page, stack }, info) => {
   await login(page, stack);
   const token = await csrf(page.request);
   const headers = { Origin: stack.url, 'X-CSRF-Token': token };
@@ -106,10 +106,37 @@ test('未知结果阻止新建且人工结束保留事实并禁止重试', async
   const blocked = await page.request.post('/internal/worker/claim', { headers: { Authorization: 'Bearer ' + stack.workerToken }, data: { worker_id: 'e2e-fixed-worker' } });
   expect(blocked.status()).toBe(204);
   await page.goto('/jobs/' + original.id);
-  await expect(page.getByText('先核对，避免重复草稿', { exact: true })).toBeVisible();
+  await expect(page.getByText('后台正在自动查询草稿', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '重试任务', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('候选草稿ID（仅数字）', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '正在自动核对…', exact: true })).toBeDisabled();
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath('草稿自动核对-' + width + '.png'), fullPage: true });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  for (let round = 0; round < 4; round++) {
+    const schedule = await page.request.post('/api/jobs/' + original.id + '/reconcile', { headers, data: {} });
+    expect(schedule.status()).toBe(200);
+    claim = await (await worker(page.request, stack, '/internal/worker/claim', { worker_id: 'e2e-fixed-worker' })).json();
+    expect(claim.job.id).toBe(original.id);
+    expect(claim.job.run_mode).toBe('reconcile');
+    await worker(page.request, stack, path + '/progress', { lease_token: claim.lease_token, stage: 'verifying' });
+    await worker(page.request, stack, path + '/complete', { lease_token: claim.lease_token, status: 'failed', error_code: 'reconcile_unavailable' });
+  }
+  const exhausted = await (await page.request.get('/api/jobs/' + original.id)).json();
+  expect(exhausted.status).toBe('failed');
+  expect(exhausted.outcome).toBe('unknown');
+  expect(exhausted.error_code).toBe('reconcile_exhausted');
+  expect(exhausted.reconcile_count).toBe(4);
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(page.getByText('草稿查询未完成', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('候选草稿ID（仅数字）', { exact: true })).toBeEnabled();
   await page.getByLabel('候选草稿ID（仅数字）', { exact: true }).fill('987654321');
-  await page.getByRole('button', { name: '仅核对既有草稿', exact: true }).click();
+  const manualReconcile = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/api/jobs/' + original.id + '/reconcile'));
+  await page.getByRole('button', { name: '重新自动核对', exact: true }).click();
+  expect((await manualReconcile).status()).toBe(200);
   claim = await (await worker(page.request, stack, '/internal/worker/claim', { worker_id: 'e2e-fixed-worker' })).json();
   expect(claim.job.run_mode).toBe('reconcile');
   expect(claim.job.remote_id).toBe('');
@@ -118,6 +145,8 @@ test('未知结果阻止新建且人工结束保留事实并禁止重试', async
   await worker(page.request, stack, path + '/complete', { lease_token: claim.lease_token, status: 'failed', error_code: 'draft_mismatch' });
   await worker(page.request, stack, '/internal/worker/heartbeat', { worker_id: 'e2e-fixed-worker', browser_idle: true, profile_available: true });
   await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(page.getByText('草稿核对存在冲突', { exact: true })).toBeVisible();
+  await page.getByText('无法匹配完整稿件', { exact: true }).click();
   await page.getByLabel('我已确认本任务浏览器停止，并保留可能存在的草稿').check();
   await page.getByLabel('人工结束原因').fill('合成用例：保留已有草稿，不再次提交。');
   await page.getByRole('button', { name: '保留草稿并结束任务', exact: true }).click();

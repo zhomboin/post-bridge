@@ -33,6 +33,10 @@ type Job struct {
 	Outcome              string     `json:"outcome"`
 	Stage                string     `json:"stage"`
 	Attempts             int        `json:"attempts"`
+	ReconcileCount       int        `json:"reconcile_count"`
+	AutoReconcileStarted bool       `json:"auto_reconcile_started"`
+	AbsenceChecks        int        `json:"absence_checks"`
+	LastAbsenceAt        time.Time  `json:"last_absence_at"`
 	RetryCount           int        `json:"retry_count"`
 	MaxRetries           int        `json:"max_retries"`
 	RunMode              string     `json:"run_mode"`
@@ -151,7 +155,7 @@ func (r *record) bind(id string) error {
 	if !numericID.MatchString(id) || !r.ExternalStarted || (r.RemoteID != "" && r.RemoteID != id) {
 		return ErrConflict
 	}
-	if r.RunMode == "reconcile" && r.RemoteID == "" && r.ReconcileCandidateID != id {
+	if r.RunMode == "reconcile" && r.RemoteID == "" && r.ReconcileCandidateID != "" && r.ReconcileCandidateID != id {
 		return ErrConflict
 	}
 	r.RemoteID = id
@@ -197,17 +201,21 @@ func (r *record) progress(in ProgressInput, now time.Time) error {
 }
 
 var safeErrors = map[string]string{
-	"network_error":    "平台连接暂时失败",
-	"timeout":          "平台操作超时",
-	"needs_login":      "需要人工登录",
-	"account_mismatch": "平台账号与配置不符",
-	"adapter_mismatch": "平台页面结构已变化",
-	"draft_mismatch":   "草稿内容与任务快照不匹配",
-	"draft_not_found":  "未找到匹配草稿",
-	"browser_busy":     "账号浏览器仍在使用",
-	"lease_expired":    "执行器领取已失效",
-	"cancelled":        "执行器已停止",
-	"shutdown":         "执行器已停止",
+	"draft_absent":          "平台完整查询未找到同名草稿",
+	"draft_conflict":        "草稿存在重复或不完整内容，自动恢复已停止",
+	"reconcile_unavailable": "平台草稿查询暂不可用",
+	"reconcile_exhausted":   "自动核对次数已用尽，平台结果仍未确认",
+	"network_error":         "平台连接暂时失败",
+	"timeout":               "平台操作超时",
+	"needs_login":           "需要人工登录",
+	"account_mismatch":      "平台账号与配置不符",
+	"adapter_mismatch":      "平台页面结构已变化",
+	"draft_mismatch":        "草稿内容与任务快照不匹配",
+	"draft_not_found":       "未找到匹配草稿",
+	"browser_busy":          "账号浏览器仍在使用",
+	"lease_expired":         "执行器领取已失效",
+	"cancelled":             "执行器已停止",
+	"shutdown":              "执行器已停止",
 }
 
 func safeError(code string) (string, string) {
@@ -229,7 +237,7 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 		return ErrInvalid
 	}
 	if in.Status == "succeeded" {
-		if r.CancelRequested {
+		if r.CancelRequested && r.RunMode != "reconcile" {
 			return ErrConflict
 		}
 		if r.Kind == "save_draft" {
@@ -247,6 +255,10 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 			r.Outcome = "draft_saved"
 		}
 		r.Status = "succeeded"
+		if r.CancelRequested {
+			r.Status = "cancelled"
+		}
+		r.ErrorCode, r.ErrorMessage = "", ""
 		r.Stage = "finished"
 		r.FinishedAt = &now
 		r.Ready = false
@@ -262,11 +274,17 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 		r.ErrorCode, r.ErrorMessage = safeError(in.ErrorCode)
 		r.Ready = false
 		if r.ExternalStarted {
-			r.Status = "reconciling"
-			r.Outcome = "unknown"
-			r.RunMode = "reconcile"
+			wasReconcile := r.RunMode == "reconcile"
+			r.Status, r.Outcome, r.RunMode = "reconciling", "unknown", "reconcile"
+			r.AutoReconcileStarted = true
 			if in.Status == "waiting_user" {
 				r.Status = "waiting_user"
+				r.AbsenceChecks = 0
+			} else if wasReconcile {
+				r.finishReconcile(in, now)
+			} else {
+				r.Ready = true
+				r.AvailableAt = now.Add(20 * time.Second)
 			}
 		} else {
 			switch in.Status {
@@ -338,19 +356,21 @@ func (r *record) action(action string, in ActionInput, now time.Time, proof *wor
 		if r.ExternalStarted {
 			r.Status = "reconciling"
 			r.RunMode = "reconcile"
-			if r.RemoteID == "" && r.ReconcileCandidateID == "" {
-				return ErrConflict
-			}
 		} else {
 			r.Status = "queued"
 			r.Stage = "queued"
 		}
 		r.Ready = true
 		r.AvailableAt = now
-		r.CancelRequested = false
+		if !r.ExternalStarted {
+			r.CancelRequested = false
+		}
 	case "reconcile":
-		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user") {
+		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user" || (r.Status == "failed" && r.Outcome == "unknown")) {
 			return ErrConflict
+		}
+		if in.RemoteID == "" && r.RemoteID == "" {
+			r.ReconcileCandidateID = ""
 		}
 		if in.RemoteID != "" {
 			if !numericID.MatchString(in.RemoteID) || (r.RemoteID != "" && r.RemoteID != in.RemoteID) {
@@ -360,16 +380,13 @@ func (r *record) action(action string, in ActionInput, now time.Time, proof *wor
 				r.ReconcileCandidateID = in.RemoteID
 			}
 		}
-		if r.RemoteID == "" && r.ReconcileCandidateID == "" {
-			return ErrInvalid
-		}
 		r.Status = "reconciling"
 		r.RunMode = "reconcile"
 		r.Ready = true
+		r.AutoReconcileStarted = true
 		r.AvailableAt = now
-		r.CancelRequested = false
 	case "resolve":
-		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user") || !in.ConfirmedBrowserStopped || utf8.RuneCountInString(strings.TrimSpace(in.Note)) < 1 || utf8.RuneCountInString(in.Note) > 500 || proof == nil || now.Sub(proof.SeenAt) > 45*time.Second || proof.SeenAt.After(now) || !proof.BrowserIdle || !proof.ProfileAvailable {
+		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user" || (r.Status == "failed" && r.Outcome == "unknown")) || !in.ConfirmedBrowserStopped || utf8.RuneCountInString(strings.TrimSpace(in.Note)) < 1 || utf8.RuneCountInString(in.Note) > 500 || proof == nil || now.Sub(proof.SeenAt) > 45*time.Second || proof.SeenAt.After(now) || !proof.BrowserIdle || !proof.ProfileAvailable {
 			return ErrConflict
 		}
 		r.ManualResolved = true
@@ -395,7 +412,17 @@ func (r *record) recover(now time.Time) {
 		r.Status = "reconciling"
 		r.RunMode = "reconcile"
 		r.Outcome = "unknown"
-		r.Ready = false
+		r.AutoReconcileStarted = true
+		r.Ready = true
+		r.AvailableAt = now.Add(20 * time.Second)
+		// 失租的核对也消耗持久预算，防止重启无限重试。
+		r.ReconcileCount++
+		if r.ReconcileCount >= 4 {
+			r.Status = "failed"
+			r.Ready = false
+			r.FinishedAt = &now
+		}
+		r.AbsenceChecks = 0
 	} else if r.CancelRequested {
 		r.Status = "cancelled"
 		r.Ready = false
@@ -418,4 +445,48 @@ func (r *record) recover(now time.Time) {
 	r.ErrorMessage = safeErrors["lease_expired"]
 	r.UpdatedAt = now
 	r.updateRetry()
+}
+
+// 核对只消费读取预算；只有两次间隔完整空结果才能重新排队写入。
+func (r *record) finishReconcile(in CompleteInput, now time.Time) {
+	r.ReconcileCount++
+	if in.ErrorCode == "draft_absent" && r.Stage == "verifying" && r.RemoteID == "" && r.ReconcileCandidateID == "" {
+		if r.AbsenceChecks == 0 || !now.Before(r.LastAbsenceAt.Add(20*time.Second)) {
+			r.AbsenceChecks++
+			r.LastAbsenceAt = now
+		}
+		if r.AbsenceChecks >= 2 {
+			r.ExternalStarted = false
+			r.Outcome = "not_submitted"
+			r.AbsenceChecks = 0
+			if r.CancelRequested {
+				r.Status = "cancelled"
+				r.FinishedAt = &now
+				return
+			}
+			if r.RetryCount >= r.MaxRetries {
+				r.Status = "failed"
+				r.FinishedAt = &now
+				return
+			}
+			r.RetryCount++
+			r.ReconcileCount = 0
+			r.Status, r.Stage, r.RunMode = "queued", "queued", "execute"
+			r.Ready = true
+			r.AvailableAt = now.Add(5 * time.Second)
+			return
+		}
+	} else {
+		r.AbsenceChecks = 0
+	}
+	if in.ErrorCode == "draft_conflict" || in.ErrorCode == "draft_mismatch" || r.ReconcileCount >= 4 {
+		r.Status = "failed"
+		r.FinishedAt = &now
+		if r.ReconcileCount >= 4 && in.ErrorCode != "draft_conflict" && in.ErrorCode != "draft_mismatch" {
+			r.ErrorCode, r.ErrorMessage = safeError("reconcile_exhausted")
+		}
+		return
+	}
+	r.Ready = true
+	r.AvailableAt = now.Add(20 * time.Second)
 }

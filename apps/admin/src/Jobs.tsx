@@ -4,10 +4,15 @@ import ReactMarkdown from 'react-markdown';
 import Logs from './Logs';
 import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, jobHref, queryPage, stageLabels, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
 
+function autoReconcileActive(job: Job) {
+  return !job.manual_resolved && job.run_mode === 'reconcile' && ['queued', 'reconciling', 'running'].includes(job.status);
+}
 function outcomeText(job: Job) {
   if (job.manual_resolved) return '已人工结束，草稿可能保留';
   if (job.kind === 'check_account') return job.status === 'succeeded' ? '登录状态已检查' : '账号检查任务';
   if (job.outcome === 'draft_saved') return '草稿已保存';
+  if (autoReconcileActive(job)) return '后台自动核对中';
+  if (job.status === 'queued' && (job.absence_checks ?? 0) >= 2) return '确认未保存，等待自动重试';
   if (job.outcome === 'unknown' || job.external_started) return '草稿结果待核对';
   return '尚未保存到CSDN';
 }
@@ -41,7 +46,7 @@ export function Jobs() {
       <ResourceError error={resource.error} stale={!!resource.data} />
       {resource.data?.items.length ? <table className="data-table"><thead><tr><th className="title-cell">文章 / 任务</th><th>执行状态</th><th>草稿结果</th><th>最近更新</th></tr></thead><tbody>{resource.data.items.map(job => <tr key={job.id}>
         <td className="title-cell"><RouteLink className="title-link" href={jobHref(job.id, route)}>{job.title || 'CSDN 登录状态检查'}</RouteLink><div className="job-subline"><span>CSDN</span><span>{job.kind === 'check_account' ? '账号检查' : '文字草稿'}</span><span className="mono">{job.id}</span></div></td>
-        <td><Status value={job.status} cancelling={job.cancel_requested && ['queued', 'running'].includes(job.status)} /><div className="table-title-note">{stageLabels[job.stage] || '步骤待确认'}</div></td>
+        <td><Status value={job.status} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /><div className="table-title-note">{stageLabels[job.stage] || '步骤待确认'}</div></td>
         <td>{outcomeText(job)}</td><td><time dateTime={job.updated_at}>{time(job.updated_at)}</time></td>
       </tr>)}</tbody></table> : <Empty loading={resource.loading}><strong>{params.size ? '暂无符合条件的任务' : '还没有草稿任务'}</strong>{params.size ? '调整搜索或筛选条件后再试。' : '新建文字草稿后，可在这里查看保存进度。'}</Empty>}
       {resource.data && <Pagination total={resource.data.total} page={page} pageSize={50} onPage={value => { params.set('page', String(value)); navigate('/jobs?' + params); }} />}
@@ -99,26 +104,38 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   const [stopped, setStopped] = useState(false);
   const [cancelConfirmed, setCancelConfirmed] = useState(false);
   const [note, setNote] = useState('');
-  const uncertain = job.status === 'reconciling' || (job.outcome === 'unknown' && !job.manual_resolved);
+  const [reconcileAccepted, setReconcileAccepted] = useState(false);
+  useEffect(() => { setReconcileAccepted(false); }, [job]);
+  const uncertain = !job.manual_resolved && (job.status === 'reconciling' || job.outcome === 'unknown');
+  const checking = autoReconcileActive(job) || reconcileAccepted;
+  const conflict = /conflict|mismatch/.test(job.error_code || '');
   async function perform(name: string, body: object = {}) {
     const result = await action.run(signal => api<Job>('/api/jobs/' + encodeURIComponent(job.id) + '/' + name, { method: 'POST', body: JSON.stringify(body), signal }), name === 'resolve' ? '请先刷新当前状态；任务仍在执行，或服务尚未确认最近 45 秒内的浏览器空闲状态。' : undefined);
-    if (result) onUpdate();
+    if (result) {
+      if (name === 'reconcile') setReconcileAccepted(true);
+      onUpdate();
+    }
   }
   function reconcile() {
-    if (!job.remote_id && !/^\d{1,32}$/.test(candidate.trim())) { action.setError('请输入仅由数字组成的候选草稿ID。'); return; }
+    if (checking || action.pending) return;
     if (candidate.trim() && !/^\d{1,32}$/.test(candidate.trim())) { action.setError('候选草稿ID仅接受数字。'); return; }
     void perform('reconcile', candidate.trim() && !job.remote_id ? { remote_id: candidate.trim() } : {});
   }
   return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">
-    {job.cancel_requested && ['queued', 'running'].includes(job.status) && <div className="notice warning"><strong>取消中</strong><p>正在等待后台停止本任务。可能存在的草稿仍需核对，请勿重新创建。</p></div>}
+    {job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status) && <div className="notice warning"><strong>取消中</strong><p>正在等待后台停止本任务。可能存在的草稿仍需核对，请勿重新创建。</p></div>}
     {job.status === 'waiting_user' && <><div className="notice warning">请在验证主机上，由管理员使用本地登录助手完成 CSDN 登录。完成后返回这里继续；本页不会提供公开远程浏览器入口。</div><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已在验证主机完成登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
-    {uncertain && <><div className="notice warning"><strong>先核对，避免重复草稿</strong><p>保存结果尚未确认。这里只读取已有草稿，核对标题和正文，不会新建或改写。</p></div>
-      {!job.remote_id && <label>候选草稿ID（仅数字）<input aria-label="候选草稿ID（仅数字）" aria-describedby="candidate-help" maxLength={32} inputMode="numeric" value={candidate} disabled={action.pending} onChange={event => setCandidate(event.target.value)} placeholder="例如 123456789" /><span id="candidate-help" className="form-hint">在 CSDN 草稿地址中找到数字ID。它只是候选，匹配后才会关联。</span></label>}
-      <button className="primary" disabled={action.pending} onClick={reconcile}>仅核对既有草稿</button>
-      <details open><summary>无法匹配完整稿件</summary><p>可保留已有或可能存在的草稿并人工结束。本操作不会删除、改写草稿，也不会记为保存成功。</p>
-        <label className="checkbox"><input type="checkbox" checked={stopped} onChange={event => setStopped(event.target.checked)} />我已确认本任务浏览器停止，并保留可能存在的草稿</label>
-        <label>人工结束原因<textarea rows={3} maxLength={500} value={note} onChange={event => setNote(event.target.value)} placeholder="说明保留草稿和结束任务的原因" /></label>
-        <button className="danger" disabled={!stopped || !note.trim() || action.pending} onClick={() => void perform('resolve', { confirmed_browser_stopped: true, note: note.trim() })}>保留草稿并结束任务</button>
+    {uncertain && <><div className={'notice ' + (job.status === 'failed' ? 'error' : 'warning')}>
+      <strong>{checking ? '后台正在自动查询草稿' : job.status === 'failed' ? conflict ? '草稿核对存在冲突' : '草稿查询未完成' : '等待草稿自动核对'}</strong>
+      <p>{checking ? '后台读取草稿列表并核对标题、正文和草稿状态，无需提供草稿ID。' : '保存结果仍未确认，不能据此认定平台没有草稿。账号暂不接受新的写入任务，可重新自动核对。'}</p>
+      {checking && <><p>已完成 {job.reconcile_count ?? 0} / 4 轮查询，自动复查间隔 20 秒。</p>{job.status !== 'running' && job.available_at && <p>下一次查询：{time(job.available_at)}</p>}</>}
+      <p>{job.cancel_requested ? '本任务已请求取消，核对只读取结果，不再自动保存。' : '连续两次确认未保存后，后台会在安全重试预算内自动继续原任务；发现冲突或查询次数用尽会停止并说明原因。'}</p>
+    </div>
+      {!job.remote_id && <label>候选草稿ID（仅数字）<input aria-label="候选草稿ID（仅数字）" aria-describedby="candidate-help" maxLength={32} inputMode="numeric" value={candidate} disabled={action.pending || checking} onChange={event => setCandidate(event.target.value)} placeholder="可留空，由后台自动查找" /><span id="candidate-help" className="form-hint">候选草稿ID为可选项。已有明确草稿地址时可填写数字ID，标题和正文完全匹配后才会关联。</span></label>}
+      <button className="primary" disabled={action.pending || checking} onClick={reconcile}>{checking ? '正在自动核对…' : job.remote_id ? '仅核对既有草稿' : '重新自动核对'}</button>
+      <details><summary>无法匹配完整稿件</summary><p>可保留已有或可能存在的草稿并人工结束。本操作不会删除、改写草稿，也不会记为保存成功。</p>
+        <label className="checkbox"><input type="checkbox" checked={stopped} onChange={event => setStopped(event.target.checked)} disabled={action.pending || checking} />我已确认本任务浏览器停止，并保留可能存在的草稿</label>
+        <label>人工结束原因<textarea rows={3} maxLength={500} value={note} onChange={event => setNote(event.target.value)} disabled={action.pending || checking} placeholder="说明保留草稿和结束任务的原因" /></label>
+        <button className="danger" disabled={!stopped || !note.trim() || action.pending || checking} onClick={() => void perform('resolve', { confirmed_browser_stopped: true, note: note.trim() })}>保留草稿并结束任务</button>
       </details></>}
     {job.retry_allowed && !uncertain && <><p>后台已确认该失败可安全重试；重试将继续使用原任务内容。</p><button disabled={action.pending} onClick={() => void perform('retry')}>重试任务</button></>}
     {['queued', 'running'].includes(job.status) && !job.cancel_requested && <details><summary>取消此任务</summary><p>排队任务会停止执行；执行中的任务需等待后台确认。已可能保存的草稿会保留并进入核对。</p><label className="checkbox"><input type="checkbox" checked={cancelConfirmed} onChange={event => setCancelConfirmed(event.target.checked)} />我已了解取消范围</label><button className="danger" disabled={!cancelConfirmed || action.pending} onClick={() => void perform('cancel')}>确认取消任务</button></details>}
@@ -138,12 +155,12 @@ export function JobDetail({ id }: { id: string }) {
   const remote = draftURL(job.remote_url);
   return <div className="page">
     <RouteLink className="back-link" href={backHref}><ArrowLeft size={14} aria-hidden="true" />返回任务列表</RouteLink>
-    <div className="page-heading"><div><h1 className="detail-title">{job.title || 'CSDN 登录状态检查'}</h1><p><span className="mono">{job.id}</span></p></div><Status value={job.status} cancelling={job.cancel_requested && ['queued', 'running'].includes(job.status)} /></div>
+    <div className="page-heading"><div><h1 className="detail-title">{job.title || 'CSDN 登录状态检查'}</h1><p><span className="mono">{job.id}</span></p></div><Status value={job.status} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /></div>
     <ResourceError error={resource.error} stale />
     <div className="detail-layout">
       <section className="surface detail-result"><div className="surface-header"><h2>执行结果</h2><span className="muted" style={{ fontSize: 12 }}>CSDN</span></div><RefreshBar resource={resource} /><div className="surface-body">
         <div className="result-line"><strong>{outcomeText(job)}</strong>{remote && <a href={remote} target="_blank" rel="noopener noreferrer">查看CSDN草稿 <ArrowUpRight size={13} aria-hidden="true" /></a>}<p>{job.kind === 'save_draft' ? '保存成功仅代表草稿已保存，文章不会公开发布。' : '此任务只检查账号状态，不修改平台内容。'}</p></div>
-        <dl className="detail-facts"><div><dt>当前步骤</dt><dd>{stageLabels[job.stage] || '步骤待确认'}</dd></div><div><dt>执行次数</dt><dd>{job.attempts ?? 0} 次</dd></div><div><dt>安全重试</dt><dd>{job.retry_count ?? 0} / {job.max_retries ?? 3} 次</dd></div><div><dt>创建时间</dt><dd>{time(job.created_at)}</dd></div><div><dt>最近确认</dt><dd>{time(job.updated_at)}</dd></div><div><dt>执行方式</dt><dd>{job.run_mode === 'reconcile' ? '只读核对' : '保存草稿'}</dd></div>{job.remote_id && <div><dt>已关联草稿ID</dt><dd className="mono">{job.remote_id}</dd></div>}</dl>
+        <dl className="detail-facts"><div><dt>当前步骤</dt><dd>{stageLabels[job.stage] || '步骤待确认'}</dd></div><div><dt>执行次数</dt><dd>{job.attempts ?? 0} 次</dd></div><div><dt>安全重试</dt><dd>{job.retry_count ?? 0} / {job.max_retries ?? 3} 次</dd></div><div><dt>创建时间</dt><dd>{time(job.created_at)}</dd></div><div><dt>最近确认</dt><dd>{time(job.updated_at)}</dd></div><div><dt>执行方式</dt><dd>{job.run_mode === 'reconcile' ? '自动查询草稿' : '保存草稿'}</dd></div>{job.remote_id && <div><dt>已关联草稿ID</dt><dd className="mono">{job.remote_id}</dd></div>}</dl>
         {job.error_message && <div className="notice error section-gap"><strong>最近错误</strong><p>{job.error_message}</p>{job.error_code && <p className="mono">{job.error_code}</p>}</div>}
       </div></section>
       <JobActions key={job.id} job={job} onUpdate={resource.refresh} />
