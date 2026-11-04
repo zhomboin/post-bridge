@@ -16,7 +16,7 @@ async function finishRead(request: APIRequestContext, stack: Stack, id: string, 
 
 test('账号文章只读同步、分页、筛选、正文、安全外链和窄屏', async ({ page, stack, request }, info) => {
   await login(page, stack);
-  await page.getByRole('link', { name: '账号文章', exact: true }).click();
+  await page.getByRole('link', { name: '平台账号', exact: true }).click();
   await expect(page.getByText('暂无文章快照', { exact: true })).toBeVisible();
   const accepted = page.waitForResponse(response => response.url().endsWith('/api/account/articles/sync') && response.request().method() === 'POST');
   await page.getByRole('button', { name: '同步文章', exact: true }).click();
@@ -24,11 +24,15 @@ test('账号文章只读同步、分页、筛选、正文、安全外链和窄�
   await page.getByRole('button', { name: '刷新本地状态', exact: true }).click();
   await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible();
   await expect(page.getByText('共 24 条记录', { exact: true })).toBeVisible();
+  await expect(page.getByText('24,829', { exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: '数据统计', exact: true }).click();
   await expect(page.getByText('24,829', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: '文章', exact: true }).click();
   await page.getByRole('button', { name: '下一页', exact: true }).click(); await expect(page).toHaveURL(/page=2/); await expect(page.getByText('第 2 页 / 2 页', { exact: true })).toBeVisible();
   await page.getByLabel('文章状态', { exact: true }).selectOption('unknown'); await page.getByRole('button', { name: '筛选', exact: true }).click(); await expect(page.getByText('未知状态', { exact: true })).toBeVisible(); await expect(page.getByText('共 1 条记录', { exact: true })).toBeVisible();
   await page.getByLabel('文章状态', { exact: true }).selectOption('published'); await page.getByLabel('搜索文章', { exact: true }).fill('只读文章'); await page.getByRole('button', { name: '筛选', exact: true }).click();
   await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: '账号身份' }).getByText('已连接', { exact: true })).toBeVisible();
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 }); await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -51,8 +55,46 @@ test('账号文章只读同步、分页、筛选、正文、安全外链和窄�
     await page.screenshot({ path: info.outputPath('account-article-detail-' + width + '.png'), fullPage: true });
   }
   await page.getByRole('button', { name: 'Markdown 源文', exact: true }).focus(); await page.keyboard.press('Enter'); await expect(page.locator('pre.article-source')).toContainText('## 合成正文');
-  await page.getByRole('link', { name: '返回账号文章', exact: true }).click(); await expect(page).toHaveURL(/q=.*status=published/); await expect(page.getByLabel('搜索文章', { exact: true })).toHaveValue('只读文章');
+  await page.getByRole('link', { name: '返回账号文章', exact: true }).click(); await expect(page).toHaveURL(/\/account\?q=.*status=published/); await expect(page.getByLabel('搜索文章', { exact: true })).toHaveValue('只读文章');
   const token = await csrf(page.request); const failedSync = await page.request.post('/api/account/articles/sync', { headers: { Origin: stack.url, 'X-CSRF-Token': token }, data: { request_id: 'failing-sync' } }); expect(failedSync.status()).toBe(202); const failed = await failedSync.json();
   const claim = await (await worker(request, stack, '/internal/worker/claim', { worker_id: 'synthetic-reader' })).json(); expect(claim.job.id).toBe(failed.id); await worker(request, stack, '/internal/worker/jobs/' + failed.id + '/complete', { lease_token: claim.lease_token, status: 'failed', error_code: 'article_read_unavailable' });
   await page.getByRole('button', { name: '刷新本地状态', exact: true }).click(); await expect(page.getByText('平台文章读取暂不可用', { exact: true })).toBeVisible(); await expect(page.getByRole('link', { name: title, exact: true })).toBeVisible();
+});
+
+
+test('平台账号页签与正文保持文章筛选、分页和浏览器历史', async ({ page, stack, request }, info) => {
+  await login(page, stack);
+  const token = await csrf(page.request);
+  const accepted = await page.request.post('/api/account/articles/sync', { headers: { Origin: stack.url, 'X-CSRF-Token': token }, data: { request_id: 'account-tabs-seed' } });
+  expect(accepted.status()).toBe(202); await finishRead(request, stack, (await accepted.json()).id, { articles: snapshot() }, 'sync_articles');
+  await page.getByRole('link', { name: '平台账号', exact: true }).click();
+  await expect(page.getByRole('tab', { name: '文章', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '账号文章', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: 'CSDN 账号', exact: true })).toHaveCount(0);
+  await page.getByLabel('搜索文章', { exact: true }).fill('合成'); await page.getByRole('button', { name: '筛选', exact: true }).click();
+  await page.getByRole('button', { name: '下一页', exact: true }).click(); await expect(page).toHaveURL(/page=2/);
+  const listAddress = page.url(); const listID = new URL(listAddress).searchParams;
+  await page.getByRole('tab', { name: '数据统计', exact: true }).click();
+  await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('24,829', { exact: true })).toBeVisible(); await expect(page.getByLabel('搜索文章')).toHaveCount(0);
+  await page.getByText('近期趋势', { exact: true }).click();
+  await expect(page.getByRole('region', { name: '近期趋势数据' })).toBeVisible();
+  await expect(page.getByRole('rowheader', { name: '2026-11-03', exact: true })).toBeVisible();
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 }); await page.emulateMedia({ reducedMotion: 'reduce' }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath('platform-account-stats-' + width + '.png'), fullPage: true });
+  }
+  await page.getByRole('tab', { name: '账号设置', exact: true }).click(); await expect(page.getByRole('button', { name: '检查登录状态', exact: true })).toBeVisible(); await expect(page.getByLabel('搜索文章')).toHaveCount(0);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 }); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath('platform-account-settings-' + width + '.png'), fullPage: true });
+  }
+  await page.reload(); await expect(page.getByRole('tab', { name: '账号设置', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: '文章', exact: true }).click(); await expect(page.getByLabel('搜索文章', { exact: true })).toHaveValue('合成'); await expect(page.getByText('第 2 页 / 2 页', { exact: true })).toBeVisible();
+  const first = page.locator('.article-table tbody .title-link').first(); const selectedTitle = await first.innerText(); await first.click(); await expect(page.getByRole('heading', { name: selectedTitle, exact: true })).toBeVisible();
+  await page.getByRole('link', { name: '返回账号文章', exact: true }).click(); expect(new URL(page.url()).searchParams.get('q')).toBe(listID.get('q')); expect(new URL(page.url()).searchParams.get('page')).toBe('2');
+  await page.getByRole('tab', { name: '文章', exact: true }).focus(); await page.keyboard.press('ArrowRight'); await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toBeFocused(); await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.goBack(); await expect(page.getByRole('tab', { name: '文章', exact: true })).toHaveAttribute('aria-selected', 'true'); await expect(page.getByText('第 2 页 / 2 页', { exact: true })).toBeVisible();
+  await page.goForward(); await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.goto('/articles?q=%E5%90%88%E6%88%90&page=2'); await expect(page).toHaveURL(/\/account\?q=.*page=2/); await expect(page.getByText('第 2 页 / 2 页', { exact: true })).toBeVisible();
 });
