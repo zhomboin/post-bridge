@@ -104,7 +104,9 @@ test('平台账号页签与正文保持文章筛选、分页和浏览器历史',
   await page.getByRole('tab', { name: '文章', exact: true }).click(); await expect(page.getByLabel('搜索文章', { exact: true })).toHaveValue('合成'); await expect(page.getByText('第 2 页 / 2 页', { exact: true })).toBeVisible();
   const automaticRead = page.waitForResponse(response => /\/api\/account\/articles\/\d+\/read$/.test(response.url()) && response.request().method() === 'POST');
   const first = page.locator('.article-table tbody .title-link').first(); const selectedTitle = await first.innerText(); await first.click(); await expect(page.getByRole('heading', { name: selectedTitle, exact: true })).toBeVisible();
-  expect((await automaticRead).status()).toBe(202);
+  const automaticResponse = await automaticRead; expect(automaticResponse.status()).toBe(202);
+  const automaticJob = await automaticResponse.json();
+  await finishRead(request, stack, automaticJob.id, { article: { id: automaticJob.article_id, title: selectedTitle, markdown: '# 导航用合成正文', html: '', description: '', tags: [], categories: [], type: 'original', visibility: 'public', platform_status: '1', reason: '' } }, 'read_article');
   await page.getByRole('link', { name: '返回账号文章', exact: true }).click(); expect(new URL(page.url()).searchParams.get('q')).toBe(listID.get('q')); expect(new URL(page.url()).searchParams.get('page')).toBe('2');
   await page.getByRole('tab', { name: '文章', exact: true }).focus(); await page.keyboard.press('ArrowRight'); await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toBeFocused(); await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.goBack(); await expect(page.getByRole('tab', { name: '文章', exact: true })).toHaveAttribute('aria-selected', 'true'); await expect(page.getByText('第 2 页 / 2 页', { exact: true })).toBeVisible();
