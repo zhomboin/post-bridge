@@ -346,6 +346,7 @@ func (h *handler) routes() {
 		}))
 	}
 	h.mux.HandleFunc("GET /api/logs", h.admin(h.logs))
+	h.processRoutes()
 	h.mux.HandleFunc("POST /internal/worker/claim", h.worker(func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			WorkerID string `json:"worker_id"`

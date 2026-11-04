@@ -154,6 +154,19 @@ export function useAction() {
   }
   return { pending, error, setError, run };
 }
+export function jobOutcome(job: Job) {
+  if (job.kind === 'sync_articles' || job.kind === 'read_article') {
+    const name = job.kind === 'sync_articles' ? '文章同步' : '正文读取';
+    return name + (({ succeeded: '完成', failed: '失败', cancelled: '已取消', waiting_user: '等待登录', queued: '排队中', running: '中' } as Record<string, string>)[job.status] || '状态待确认');
+  }
+  if (job.manual_resolved) return '已人工结束，草稿可能保留';
+  if (job.kind === 'check_account') return ({ succeeded: '登录状态已检查', failed: '账号检查失败', waiting_user: '账号需要登录', cancelled: '账号检查已取消', running: '正在检查账号', queued: '等待检查账号' } as Record<string, string>)[job.status] || '账号结果待确认';
+  if (job.outcome === 'draft_saved') return '草稿已保存';
+  if (job.run_mode === 'reconcile' && ['queued', 'reconciling', 'running'].includes(job.status)) return '后台自动核对中';
+  if (job.status === 'queued' && (job.absence_checks ?? 0) >= 2) return '确认未保存，等待自动重试';
+  if (job.outcome === 'unknown' || job.external_started) return '草稿结果待核对';
+  return '尚未保存到CSDN';
+}
 export function jobHref(id: string, back?: string) {
   return '/jobs/' + encodeURIComponent(id) + (back ? '?back=' + encodeURIComponent(back) : '');
 }

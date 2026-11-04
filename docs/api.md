@@ -37,6 +37,9 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 | POST /api/jobs/{id}/resume | 会话及 CSRF | 登录完成后继续等待任务；已开始外站操作则只进入核对 |
 | POST /api/jobs/{id}/reconcile | 可选 remote_id | 仅核对既有草稿；管理员输入仅作候选，匹配后才绑定；无 ID 时自动查询草稿列表；数字 ID 为可选候选，不创建或改写草稿 |
 | POST /api/jobs/{id}/resolve | confirmed_browser_stopped、note | 明确保留已有或可能存在的草稿并结束任务；无有效领取且执行器近期确认浏览器空闲后才允许，不删除或改写草稿，不再自动重试，记录管理员决定 |
+| GET /api/processes | q、status、platform、kind、job_id、level、from、to、page、page_size | 按任务分页的对象处理记录，含平台、对象、账号、步骤、结果和事件统计，不含正文 |
+| GET /api/jobs/{id}/history | page、page_size | 本次处理全部保留日志，按时间正序分页；transitions 单独返回完整压缩状态流转，不受当前页或列表时间范围限制 |
+| GET /api/jobs/{id}/changes | 可选 attempt | 受保护的提交内容、实际前后快照、已采集轮次及内容保留状态；未指定轮次取最早 before 和最新 after |
 | GET /api/logs | job_id、level、q、from、to、page、page_size | 脱敏日志列表，不返回任务正文 |
 | GET /api/settings | 会话 | draft_only、platform、limits、poll_interval_ms、worker_last_seen_at；当前只读 |
 
@@ -44,7 +47,7 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 
 ## 任务字段与状态
 
-任务对象：id、request_id、platform、account_id、kind、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
+任务对象：id、request_id、platform、account_id、account_username、kind、article_id、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
 
 - kind 为 save_draft、check_account、sync_articles 或 read_article；读取任务由文章专用接口创建，使用 account_username 绑定账号，正文读取另含 article_id。读取任务不设置 external_started 和 remote_id，成功仍为 not_submitted，不表示外站保存或发布。
 - status 为 queued、running、waiting_user、reconciling、succeeded、failed、cancelled。
@@ -54,7 +57,11 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 - remote_id 仅接受数字；remote_url 由服务端根据固定 CSDN 域名与 ID 生成，不接受任意网址。
 - attempts 记录所有领取次数；retry_count 与 max_retries 单独控制安全网络重试，最多 3 次，自动与手动重试共用预算，退避 5、20、60 秒。登录恢复和只读核对不占该预算。登录问题等待人工处理，不重复登录。核对使用独立读取预算；draft_absent 表示一次完整空结果，draft_conflict 表示重复或残稿，reconcile_unavailable 表示查询失败，reconcile_exhausted 表示自动读取预算耗尽。
 
-日志字段：id、job_id、attempt、level、stage、message、created_at。level 为 info、warning、error。事件消息采用固定描述和受限摘要，不包含密码、令牌、Cookie、正文或完整页面；前端按纯文本展示。
+日志字段：id、job_id、attempt、level、stage、message、created_at、status、outcome、run_mode。后三项在事件产生时记录；已有事件没有该值时保持空，不按当前任务状态补填。level 为 info、warning、error。事件消息采用固定描述和受限摘要，不包含密码、令牌、Cookie、正文或完整页面；前端按纯文本展示。
+
+处理记录一行对应一个任务，额外返回 object_type、object_id、object_name、account_name、event_count、warning_count 和 error_count。object_type 为 article 或 account。列表按最近任务更新或事件时间筛选，重试不产生额外列表行；重复对象的不同任务分别返回。
+
+内容快照字段包括 id、attempt、phase、object_type、captured_at 及适用的 title、markdown、status、remote_id、username、display_name。phase 为 before 或 after。内容不混入日志，读取必须登录并禁止缓存。未采集不返回虚假快照；空标题或正文仍显式返回空字符串。
 
 ## 账号文章契约
 
@@ -79,8 +86,10 @@ body 含 id、title、markdown、html、description、tags、categories、type�
 | POST /internal/worker/claim | worker_id | 无任务返回 204；有任务返回 job、lease_token、lease_seconds、lease_expires_at |
 | POST /internal/worker/heartbeat | worker_id、browser_idle、profile_available | 登记存活及本地浏览器空闲证明，不领取任务；profile_available 必须检查专属配置锁和可能遗留的浏览器进程 |
 | POST /internal/worker/jobs/{id}/heartbeat | lease_token | 返回 cancel_requested；过期或错误领取返回 409 |
-| POST /internal/worker/jobs/{id}/progress | lease_token、stage、可选 remote_id、external_started、message | 核对领取代次；进度上报仅能设置外站已开始；只有服务端接受两次完整空查询后才可清除未知状态，由正常任务取得或核对匹配后的远端 ID 绑定后不能换成另一个；管理员输入的候选 ID 不在 progress 直接绑定 |
+| POST /internal/worker/jobs/{id}/progress | lease_token、stage、可选 remote_id、external_started、message、observation | 核对领取代次；进度上报仅能设置外站已开始；只有服务端接受两次完整空查询后才可清除未知状态，由正常任务取得或核对匹配后的远端 ID 绑定后不能换成另一个；管理员输入的候选 ID 不在 progress 直接绑定 |
 | POST /internal/worker/jobs/{id}/complete | lease_token、status、可选 remote_id、error_code、error_message、retryable | status 为 succeeded、failed、waiting_user、reconciling、cancelled；服务端校验合法转换及副作用边界 |
+
+observation 含 phase、title、markdown、status 及可选 remote_id，表示实际内容；before 只允许执行方式为 execute 的 filling，after 只允许 verifying。仅文章任务可上报，使用有效租约在事务中保存；同一任务、轮次、阶段的相同内容可重复，不同内容返回冲突。标题最长 100 字，正文最长 200000 字，不允许 NUL，超限实测值跳过采集而不截断。账号检查由 API 在领取及结果事务内记录检查前后状态。
 
 同一账号只允许一个有效领取；租期 60 秒，执行器每 15 秒续期，过期领取不能继续写入。领取事务使用 PostgreSQL 行锁并跳过已锁定任务。
 

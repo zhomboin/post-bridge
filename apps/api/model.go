@@ -65,12 +65,21 @@ type record struct {
 	LeaseExpiresAt time.Time
 	WorkerID       string
 }
+type Observation struct {
+	Phase    string `json:"phase"`
+	Title    string `json:"title"`
+	Markdown string `json:"markdown"`
+	Status   string `json:"status"`
+	RemoteID string `json:"remote_id,omitempty"`
+}
+
 type ProgressInput struct {
-	LeaseToken      string `json:"lease_token"`
-	Stage           string `json:"stage"`
-	RemoteID        string `json:"remote_id"`
-	ExternalStarted bool   `json:"external_started"`
-	Message         string `json:"message"`
+	Observation     *Observation `json:"observation,omitempty"`
+	LeaseToken      string       `json:"lease_token"`
+	Stage           string       `json:"stage"`
+	RemoteID        string       `json:"remote_id"`
+	ExternalStarted bool         `json:"external_started"`
+	Message         string       `json:"message"`
 }
 type CompleteInput struct {
 	Articles     *ArticleSnapshot `json:"articles,omitempty"`

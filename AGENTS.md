@@ -2,7 +2,7 @@
 
 ## 项目结构与范围
 
-本项目提供独立内容分发后台，当前实现 CSDN 文字 Markdown 草稿流程及账号文章只读列表、统计和正文查看。完整范围见 [需求](docs/requirements.md)，交付状态见 [进度](docs/progress.md)；公开发布、其他平台和 CMS 对接仍待实施。
+本项目提供独立内容分发后台，当前实现 CSDN 文字 Markdown 草稿流程、按对象组织的处理记录及账号文章只读列表、统计和正文查看。完整范围见 [需求](docs/requirements.md)，交付状态见 [进度](docs/progress.md)；公开发布、其他平台和 CMS 对接仍待实施。
 
 - apps/api：Go 管理接口、认证、PostgreSQL 队列及数据库初始化。
 - apps/admin/src：React/TypeScript 后台、页面和样式。

@@ -77,3 +77,17 @@ CREATE TABLE IF NOT EXISTS article_read_requests (
  fingerprint text NOT NULL,
  job_id text NOT NULL REFERENCES jobs(id)
 );
+
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT '';
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS outcome text NOT NULL DEFAULT '';
+ALTER TABLE logs ADD COLUMN IF NOT EXISTS run_mode text NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS process_snapshots (
+ id bigserial PRIMARY KEY,
+ job_id text NOT NULL REFERENCES jobs(id),
+ attempt integer NOT NULL CHECK(attempt>0),
+ phase text NOT NULL CHECK(phase IN ('before','after')),
+ object_type text NOT NULL CHECK(object_type IN ('article','account')),
+ data jsonb NOT NULL,
+ captured_at timestamptz NOT NULL,
+ UNIQUE(job_id,attempt,phase)
+);

@@ -327,3 +327,23 @@ func TestArticleCancelLoginRaceAndWaitingCancellation(t *testing.T) {
 		})
 	}
 }
+func TestArticleProcessesUseReadObjects(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	completeArticles(t, s, "sync-process", sampleArticles())
+	j, _, err := s.Create(ctx, CreateInput{RequestID: "read-process", Kind: "read_article", Platform: "csdn", ArticleID: "101"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := ProcessFilter{From: time.Now().Add(-time.Hour), To: time.Now().Add(time.Hour), Page: 1, Size: 50}
+	f.Kind = "sync_articles"
+	items, total, err := s.Processes(ctx, f)
+	if err != nil || total != 1 || items[0].ObjectType != "account" || items[0].ObjectID != "csdn-main" {
+		t.Fatal("sync process is not account", items, err)
+	}
+	f.Kind = "read_article"
+	items, total, err = s.Processes(ctx, f)
+	if err != nil || total != 1 || items[0].ObjectType != "article" || items[0].ObjectID != "101" || items[0].ObjectName != "已发布测试文章" || items[0].ID != j.ID {
+		t.Fatal("body process lost article identity", items, err)
+	}
+}
