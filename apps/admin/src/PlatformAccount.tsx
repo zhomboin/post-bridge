@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent } from 'react';
 import { AccountStats, Articles, type ArticlePage } from './Articles';
 import RemoteLogin from './RemoteLogin';
+import AccountAvatar from './AccountAvatar';
 import { Empty, RefreshBar, ResourceError, Status, jobHref, queryPage, time, useAction, useResource, useWorkspace, type Account, type Job } from './runtime';
 
 const tabs = [{ value: '', label: '文章' }, { value: 'stats', label: '数据统计' }, { value: 'settings', label: '账号设置' }] as const;
@@ -48,7 +49,7 @@ export default function PlatformAccount() {
     tabButtons.current[next]?.focus();
   }
   return <div className="page platform-account-page"><div className="page-heading"><h1>平台账号</h1></div>
-    <section className="surface platform-account-header" aria-label="账号身份"><div className="account-summary"><div className="account-identity"><div className="account-icon" aria-hidden="true">C</div><div><span className="account-platform">CSDN</span><h2>{snapshot?.profile.nickname || account.data?.display_name || account.data?.username || 'CSDN 固定账号'}</h2><p><span className="account-id-label">账号 ID</span>{snapshot?.username || account.data?.username || account.data?.id || '—'}</p></div></div><Status value={account.data?.status || 'unchecked'} /></div><p className="article-sync-time">最近同步 {time(snapshot?.synced_at)}</p></section>
+    <section className="surface platform-account-header" aria-label="账号身份"><div className="account-summary"><div className="account-identity"><AccountAvatar url={snapshot?.profile.avatar_url} /><div><span className="account-platform">CSDN</span><h2>{snapshot?.profile.nickname || account.data?.display_name || account.data?.username || 'CSDN 固定账号'}</h2><p><span className="account-id-label">账号 ID</span>{snapshot?.username || account.data?.username || account.data?.id || '—'}</p></div></div><Status value={account.data?.status || 'unchecked'} /></div><p className="article-sync-time">最近同步 {time(snapshot?.synced_at)}</p></section>
     <ResourceError error={account.error} stale={!!account.data} />
     <div className="account-tabs" role="tablist" aria-label="平台账号">{tabs.map((item, index) => <button key={item.value} ref={element => { tabButtons.current[index] = element; }} id={'account-tab-' + (item.value || 'articles')} type="button" role="tab" aria-selected={tab === item.value} aria-controls={'account-panel-' + (item.value || 'articles')} tabIndex={tab === item.value ? 0 : -1} onClick={() => select(item.value)} onKeyDown={event => keyDown(event, index)}>{item.label}</button>)}</div>
     <div role="tabpanel" id={'account-panel-' + (tab || 'articles')} aria-labelledby={'account-tab-' + (tab || 'articles')} tabIndex={0}>
