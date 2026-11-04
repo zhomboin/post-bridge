@@ -35,8 +35,8 @@ function Login({ api, onLogin, notice }: { api: Api; onLogin: (session: Session)
       controller.current.abort(); busy.current = false;
     }
   }
-  return <main className="login-page"><section className="login-box"><div className="login-brand"><span className="brand-mark"><BookOpenText size={18} aria-hidden="true" /></span>Post Bridge</div><h1>登录发布工作台</h1><p>管理 CSDN 草稿任务，查看执行状态与脱敏日志。</p>
-    <form onSubmit={submit}><label>管理员账号<input autoComplete="username" value={username} disabled={pending} onChange={event => setUsername(event.target.value)} /></label><label>密码<input type="password" autoComplete="current-password" value={password} disabled={pending} onChange={event => setPassword(event.target.value)} /></label>{(error || notice) && <div className="notice error" role="alert">{error || notice}</div>}<button className="primary" type="submit" disabled={pending}>{pending ? '正在登录…' : '登录工作台'}</button></form><div className="login-footnote">管理员登录与 CSDN 账号登录分别管理。请使用独立的管理员账号。</div>
+  return <main className="login-page"><section className="login-box"><div className="login-brand"><span className="brand-mark"><BookOpenText size={18} aria-hidden="true" /></span>Post Bridge</div><h1>登录发布工作台</h1>
+    <form onSubmit={submit}><label>管理员账号<input autoComplete="username" value={username} disabled={pending} onChange={event => setUsername(event.target.value)} /></label><label>密码<input type="password" autoComplete="current-password" value={password} disabled={pending} onChange={event => setPassword(event.target.value)} /></label>{(error || notice) && <div className="notice error" role="alert">{error || notice}</div>}<button className="primary" type="submit" disabled={pending}>{pending ? '正在登录…' : '登录工作台'}</button></form>
   </section></main>;
 }
 export default function App() {
@@ -107,6 +107,6 @@ export default function App() {
   return <WorkspaceContext.Provider value={context}><a className="skip-link" href="#main-content">跳到主要内容</a><div className="app-shell"><aside className="sidebar">
     <RouteLink className="brand" href="/"><span className="brand-mark"><BookOpenText size={18} aria-hidden="true" /></span>Post Bridge</RouteLink>
     <nav aria-label="主导航">{navigation.map(({ href, label, icon: Icon }) => <RouteLink className="nav-link" key={href} href={href} aria-current={href === (pathname.startsWith('/jobs') ? '/jobs' : pathname) ? 'page' : undefined}><Icon size={17} aria-hidden="true" />{label}</RouteLink>)}</nav>
-    <div className="sidebar-note"><strong>CSDN 草稿工作区</strong>仅保存文字草稿<br />公开发布暂未开放</div>
+
   </aside><div className="workspace"><header className="topbar"><span className="topbar-title">{pageName}</span><div className="topbar-session"><span>{session.user.username}</span><button type="button" disabled={loggingOut} onClick={() => void logout()}>退出登录</button></div></header><main id="main-content" tabIndex={-1}>{notice && <div className="page" style={{ paddingBottom: 0 }}><div className="notice error" role="alert">{notice}</div></div>}{content}</main></div></div></WorkspaceContext.Provider>;
 }

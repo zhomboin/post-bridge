@@ -10,6 +10,7 @@ export function remoteLoginTest(method:'sms'|'qr'){
   const stopWorker=stack.startWorker();
   try{
   await page.goto('/account');await expect(page.getByRole('button',{name:'开始远程登录'})).toBeEnabled();await page.getByRole('button',{name:'开始远程登录'}).click();
+  await expect(page.getByRole('dialog',{name:'CSDN 登录'})).toBeVisible();
   const image=page.getByRole('img',{name:'CSDN 远程登录画面'});await expect(image).toBeVisible();await expect.poll(()=>image.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth===1280)).toBe(true);
   for(const width of [1440,390,320]){await page.setViewportSize({width,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:info.outputPath('远程登录-'+width+'.png'),fullPage:true});}
   await page.setViewportSize({width:1440,height:1000});

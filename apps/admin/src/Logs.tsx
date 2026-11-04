@@ -49,7 +49,7 @@ export default function Logs({ jobId }: { jobId?: string }) {
     else { params.set('page', String(value)); navigate('/logs?' + params); }
   }
   const content = <section className="surface">
-    <div className="surface-header"><h2>{jobId ? '任务日志' : '运行记录'}</h2><span className="muted" style={{ fontSize: 12 }}>脱敏文本</span></div>
+    <div className="surface-header"><h2>{jobId ? '任务日志' : '运行记录'}</h2></div>
     {!jobId && <form className="toolbar log-filters" onSubmit={submit}>
       <label className="search">搜索日志<input value={q} onChange={event => setQ(event.target.value)} placeholder="关键词" /></label>
       <label>日志级别<select value={level} onChange={event => setLevel(event.target.value)}><option value="">全部级别</option>{Object.entries(levelNames).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
@@ -69,8 +69,8 @@ export default function Logs({ jobId }: { jobId?: string }) {
         {entry.attempt !== undefined && <span>第 {entry.attempt} 次执行</span>}
         {entry.job_id && <RouteLink className="mono" href={jobHref(entry.job_id, route)}>{entry.job_id}</RouteLink>}
       </div></div>
-    </li>)}</ul> : <Empty loading={resource.loading}><strong>暂无符合条件的日志</strong>默认查询最近 24 小时，可调整关键词和时间范围。</Empty>}
+    </li>)}</ul> : <Empty loading={resource.loading}><strong>暂无符合条件的日志</strong></Empty>}
     {resource.data && <Pagination total={resource.data.total} page={page} pageSize={50} onPage={changePage} />}
   </section>;
-  return jobId ? content : <div className="page"><div className="page-heading"><div><h1>运行日志</h1><p>查看任务步骤、异常原因与处理结果。默认最近 24 小时，单次最多 31 天。</p></div></div>{content}</div>;
+  return jobId ? content : <div className="page"><div className="page-heading"><div><h1>运行日志</h1></div></div>{content}</div>;
 }
