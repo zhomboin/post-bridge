@@ -71,6 +71,7 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 	h.remoteLoginProxy = remote
 	h.routes()
 	h.remoteLoginRoutes()
+	h.articleRoutes()
 	return h, nil
 }
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -103,12 +104,13 @@ func replyError(w http.ResponseWriter, err error) {
 		fail(w, 500, "internal_error", "服务暂时无法完成请求")
 	}
 }
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+func decode(w http.ResponseWriter, r *http.Request, v any) bool { return decodeLimit(w, r, v, 1<<20) }
+func decodeLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
 	if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(strings.ToLower(ct), "application/json") {
 		fail(w, 400, "invalid_request", "请求需要 JSON 格式")
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
 	if err := d.Decode(v); err != nil {
@@ -409,7 +411,7 @@ func (h *handler) routes() {
 	}))
 	h.mux.HandleFunc("POST /internal/worker/jobs/{id}/complete", h.worker(func(w http.ResponseWriter, r *http.Request) {
 		var in CompleteInput
-		if !decode(w, r, &in) {
+		if !decodeLimit(w, r, &in, 8<<20) {
 			return
 		}
 		if err := h.store.Complete(r.Context(), r.PathValue("id"), in); err != nil {

@@ -100,7 +100,7 @@ func (s *Store) Processes(ctx context.Context, f ProcessFilter) ([]ProcessSummar
 	const base = ` FROM jobs j CROSS JOIN account a
  LEFT JOIN LATERAL (SELECT count(*)::int AS events,count(*) FILTER(WHERE level='error')::int AS errors,count(*) FILTER(WHERE level='warning')::int AS warnings,max(created_at) AS latest FROM logs WHERE job_id=j.id) l ON true
  WHERE a.id=j.record->>'account_id'
- AND ($1='' OR j.record->>'title' ILIKE '%'||$1||'%' OR j.id ILIKE '%'||$1||'%' OR j.record->>'remote_id' ILIKE '%'||$1||'%' OR (j.record->>'kind'='check_account' AND a.display_name ILIKE '%'||$1||'%') OR EXISTS(SELECT 1 FROM logs x WHERE x.job_id=j.id AND x.message ILIKE '%'||$1||'%'))
+ AND ($1='' OR j.record->>'title' ILIKE '%'||$1||'%' OR j.id ILIKE '%'||$1||'%' OR j.record->>'remote_id' ILIKE '%'||$1||'%' OR j.record->>'article_id' ILIKE '%'||$1||'%' OR (j.record->>'kind' IN ('check_account','sync_articles') AND a.display_name ILIKE '%'||$1||'%') OR EXISTS(SELECT 1 FROM logs x WHERE x.job_id=j.id AND x.message ILIKE '%'||$1||'%'))
  AND ($2='' OR j.record->>'status'=$2) AND ($3='' OR j.record->>'platform'=$3)
  AND ($4='' OR j.record->>'kind'=$4) AND ($5='' OR j.id=$5)
  AND ($6='' OR EXISTS(SELECT 1 FROM logs x WHERE x.job_id=j.id AND x.level=$6))
@@ -132,10 +132,13 @@ func (s *Store) Processes(ctx context.Context, f ProcessFilter) ([]ProcessSummar
 		if p.ObjectID == "" {
 			p.ObjectID = p.ID
 		}
-		if p.Kind == "check_account" {
+		if p.Kind == "check_account" || p.Kind == "sync_articles" {
 			p.ObjectType = "account"
 			p.ObjectID = p.AccountID
 			p.ObjectName = p.AccountName
+		}
+		if p.Kind == "read_article" {
+			p.ObjectID = p.ArticleID
 		}
 		items = append(items, p)
 	}

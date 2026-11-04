@@ -1,5 +1,6 @@
 import type { BrowserContext, Page, Request, Response } from 'playwright';
 import { safeRequestURL, validContent } from './config.js';
+import { nativeReadRequest } from './native-read.js';
 import type { Hooks, Job, JobResult, Observation, Progress } from './types.js';
 
 interface Identity { username: string; displayName?: string; timeoutMs?: number }
@@ -260,12 +261,12 @@ export class CSDNAdapter {
     for (let number = 1; number <= 100; number++) {
       signal.throwIfAborted();
       const expectedOrigin = this.fixture ? this.site.origin : 'https://bizapi.csdn.net';
-      const requestPromise = page.waitForRequest(request => {
+      const target = number === 1 ? page.getByText(/^草稿箱/) : page.getByRole('button', { name: '下一页', exact: true });
+      const request = await nativeReadRequest(page, target, request => {
         const url = new URL(request.url());
         return url.origin === expectedOrigin && url.pathname === '/blog/phoenix/console/v1/article/list' && url.searchParams.get('status') === 'draft' && (url.searchParams.get('page') ?? '1') === String(number) && request.method() === 'GET';
-      }, { timeout: this.timeout });
+      }, this.timeout);
       // 由官方页面触发带会话校验的读取，不复制或自行生成私有签名。
-      const [request] = await Promise.all([requestPromise, number === 1 ? page.getByText(/^草稿箱/).click() : page.getByRole('button', { name: '下一页', exact: true }).click()]);
       const text = await this.listResponseBody(request);
       if (text.length > 1500000) throw new AdapterFailure('reconcile_unavailable');
       const body: unknown = JSON.parse(text);

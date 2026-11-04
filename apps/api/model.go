@@ -15,6 +15,7 @@ var ErrInvalid = errors.New("invalid")
 var ErrNotFound = errors.New("not_found")
 
 type CreateInput struct {
+	ArticleID string `json:"article_id,omitempty"`
 	RequestID string `json:"request_id"`
 	Kind      string `json:"kind"`
 	Platform  string `json:"platform"`
@@ -22,6 +23,8 @@ type CreateInput struct {
 	Markdown  string `json:"markdown"`
 }
 type Job struct {
+	ArticleID            string     `json:"article_id,omitempty"`
+	AccountUsername      string     `json:"account_username,omitempty"`
 	ID                   string     `json:"id"`
 	RequestID            string     `json:"request_id"`
 	Platform             string     `json:"platform"`
@@ -79,12 +82,14 @@ type ProgressInput struct {
 	Message         string       `json:"message"`
 }
 type CompleteInput struct {
-	LeaseToken   string `json:"lease_token"`
-	Status       string `json:"status"`
-	RemoteID     string `json:"remote_id"`
-	ErrorCode    string `json:"error_code"`
-	ErrorMessage string `json:"error_message"`
-	Retryable    bool   `json:"retryable"`
+	Articles     *ArticleSnapshot `json:"articles,omitempty"`
+	Article      *ArticleBody     `json:"article,omitempty"`
+	LeaseToken   string           `json:"lease_token"`
+	Status       string           `json:"status"`
+	RemoteID     string           `json:"remote_id"`
+	ErrorCode    string           `json:"error_code"`
+	ErrorMessage string           `json:"error_message"`
+	Retryable    bool             `json:"retryable"`
 }
 type ActionInput struct {
 	RemoteID                string `json:"remote_id"`
@@ -98,7 +103,7 @@ type workerProof struct {
 }
 
 func ValidateCreate(in CreateInput) error {
-	if !validKey(in.RequestID) || in.Kind != "save_draft" || in.Platform != "csdn" || utf8.RuneCountInString(strings.TrimSpace(in.Title)) < 5 || utf8.RuneCountInString(in.Title) > 100 || strings.TrimSpace(in.Markdown) == "" || utf8.RuneCountInString(in.Markdown) > 200000 || !utf8.ValidString(in.Markdown) {
+	if in.ArticleID != "" || !validKey(in.RequestID) || in.Kind != "save_draft" || in.Platform != "csdn" || utf8.RuneCountInString(strings.TrimSpace(in.Title)) < 5 || utf8.RuneCountInString(in.Title) > 100 || strings.TrimSpace(in.Markdown) == "" || utf8.RuneCountInString(in.Markdown) > 200000 || !utf8.ValidString(in.Markdown) {
 		return ErrInvalid
 	}
 	fence := byte(0)
@@ -155,7 +160,7 @@ func randomToken() string {
 	return hex.EncodeToString(b[:])
 }
 func newRecord(in CreateInput, now time.Time) *record {
-	return &record{Job: Job{ID: randomToken(), RequestID: in.RequestID, Platform: "csdn", AccountID: "csdn-main", Kind: in.Kind, Title: in.Title, Markdown: in.Markdown, Status: "queued", Outcome: "not_submitted", Stage: "queued", MaxRetries: 3, RunMode: "execute", CreatedAt: now, UpdatedAt: now, AvailableAt: now}, Ready: true}
+	return &record{Job: Job{ID: randomToken(), RequestID: in.RequestID, Platform: "csdn", AccountID: "csdn-main", Kind: in.Kind, ArticleID: in.ArticleID, Title: in.Title, Markdown: in.Markdown, Status: "queued", Outcome: "not_submitted", Stage: "queued", MaxRetries: 3, RunMode: "execute", CreatedAt: now, UpdatedAt: now, AvailableAt: now}, Ready: true}
 }
 func (r *record) bind(id string) error {
 	if id == "" {
@@ -179,7 +184,11 @@ func (r *record) progress(in ProgressInput, now time.Time) error {
 	if !ok || in.Stage == "queued" || in.Stage == "finished" || r.Status != "running" {
 		return ErrConflict
 	}
-	if r.RunMode == "reconcile" {
+	if readKind(r.Kind) {
+		if in.ExternalStarted || in.RemoteID != "" || !(in.Stage == "checking_login" || in.Stage == "verifying") || rank < stages[r.Stage] {
+			return ErrConflict
+		}
+	} else if r.RunMode == "reconcile" {
 		if in.ExternalStarted || !(in.Stage == "checking_login" || in.Stage == "verifying") || in.RemoteID != "" {
 			return ErrConflict
 		}
@@ -210,21 +219,23 @@ func (r *record) progress(in ProgressInput, now time.Time) error {
 }
 
 var safeErrors = map[string]string{
-	"draft_absent":          "平台完整查询未找到同名草稿",
-	"draft_conflict":        "草稿存在重复或不完整内容，自动恢复已停止",
-	"reconcile_unavailable": "平台草稿查询暂不可用",
-	"reconcile_exhausted":   "自动核对次数已用尽，平台结果仍未确认",
-	"network_error":         "平台连接暂时失败",
-	"timeout":               "平台操作超时",
-	"needs_login":           "需要人工登录",
-	"account_mismatch":      "平台账号与配置不符",
-	"adapter_mismatch":      "平台页面结构已变化",
-	"draft_mismatch":        "草稿内容与任务快照不匹配",
-	"draft_not_found":       "未找到匹配草稿",
-	"browser_busy":          "账号浏览器仍在使用",
-	"lease_expired":         "执行器领取已失效",
-	"cancelled":             "执行器已停止",
-	"shutdown":              "执行器已停止",
+	"article_read_unavailable": "平台文章读取暂不可用",
+	"article_not_found":        "文章已不存在或无法读取",
+	"draft_absent":             "平台完整查询未找到同名草稿",
+	"draft_conflict":           "草稿存在重复或不完整内容，自动恢复已停止",
+	"reconcile_unavailable":    "平台草稿查询暂不可用",
+	"reconcile_exhausted":      "自动核对次数已用尽，平台结果仍未确认",
+	"network_error":            "平台连接暂时失败",
+	"timeout":                  "平台操作超时",
+	"needs_login":              "需要人工登录",
+	"account_mismatch":         "平台账号与配置不符",
+	"adapter_mismatch":         "平台页面结构已变化",
+	"draft_mismatch":           "草稿内容与任务快照不匹配",
+	"draft_not_found":          "未找到匹配草稿",
+	"browser_busy":             "账号浏览器仍在使用",
+	"lease_expired":            "执行器领取已失效",
+	"cancelled":                "执行器已停止",
+	"shutdown":                 "执行器已停止",
 }
 
 func safeError(code string) (string, string) {
@@ -245,7 +256,18 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 	default:
 		return ErrInvalid
 	}
+	if readKind(r.Kind) && (in.Status == "reconciling" || in.RemoteID != "" || r.ExternalStarted || r.RunMode != "execute") {
+		return ErrInvalid
+	}
+	if readKind(r.Kind) && r.CancelRequested && in.Status != "succeeded" {
+		in.Status = "cancelled"
+		in.ErrorCode = "cancelled"
+		in.Retryable = false
+	}
 	if in.Status == "succeeded" {
+		if readKind(r.Kind) && r.Stage != "verifying" {
+			return ErrConflict
+		}
 		if r.CancelRequested && r.RunMode != "reconcile" {
 			return ErrConflict
 		}
@@ -330,7 +352,7 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 	return nil
 }
 func (r *record) updateRetry() {
-	r.RetryAllowed = r.Status == "failed" && !r.ExternalStarted && !r.ManualResolved && r.RetryCount < r.MaxRetries
+	r.RetryAllowed = r.Status == "failed" && !r.ExternalStarted && !r.ManualResolved && r.RetryCount < r.MaxRetries && !(readKind(r.Kind) && r.ErrorCode == "account_mismatch")
 }
 func (r *record) action(action string, in ActionInput, now time.Time, proof *workerProof) error {
 	active := r.LeaseToken != "" && r.LeaseExpiresAt.After(now)
@@ -340,7 +362,7 @@ func (r *record) action(action string, in ActionInput, now time.Time, proof *wor
 			r.CancelRequested = true
 			break
 		}
-		if r.Status != "queued" || r.ExternalStarted {
+		if (r.Status != "queued" && !(readKind(r.Kind) && r.Status == "waiting_user")) || r.ExternalStarted {
 			return ErrConflict
 		}
 		r.Status = "cancelled"

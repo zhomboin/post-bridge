@@ -48,6 +48,7 @@ function ComparisonData({ jobId, active, kind }: { jobId: string; active: boolea
 }
 export default function ContentComparison({ jobId, active = false, kind = 'save_draft' }: { jobId: string; active?: boolean; kind?: string }) {
   const [open, setOpen] = useState(false);
+  if (kind === 'sync_articles' || kind === 'read_article') return null;
   return <section className="surface section-gap" aria-label="内容变更"><div className="surface-header"><h2>内容变更</h2><button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '收起内容变更' : '查看内容变更'}</button></div>
     {open && <ComparisonData jobId={jobId} active={active} kind={kind} />}
   </section>;

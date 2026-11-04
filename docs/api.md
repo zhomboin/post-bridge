@@ -1,8 +1,8 @@
-# CSDN 后台任务接口
+# CSDN 后台接口
 
 ## 本轮交付边界
 
-实现独立管理员登录、CSDN 登录状态检查、文字 Markdown 草稿任务、持久队列、任务详情和日志。仅支持一个 CSDN 账号，公开发布和其他平台均不开放；CMS 连接与图片上传继续待实施，生产远程登录仍待实际环境验收。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
+实现独立管理员登录、CSDN 登录状态检查、文字 Markdown 草稿任务、账号文章只读快照与正文、持久队列、任务详情和日志。仅支持一个 CSDN 账号，公开发布和其他平台均不开放；CMS 连接与图片上传继续待实施，生产远程登录仍待实际环境验收。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
 
 API 管理数据库，执行器通过受限内部接口领取和上报，不直接访问数据库。管理界面只操作管理接口。本文为三单元共享契约，字段变化需同时更新实现与用例。
 
@@ -24,6 +24,10 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 | POST /api/logout | 会话及 CSRF | 撤销会话并清除 Cookie |
 | GET /api/overview | 会话 | counts 按状态计数、worker_last_seen_at、account 状态 |
 | GET /api/account | 会话 | id、platform、username、display_name、status、last_checked_at、last_error |
+| GET /api/account/articles | q、status、page、page_size | 文章列表及快照摘要；首次 snapshot 为 null；不含正文 |
+| POST /api/account/articles/sync | request_id | 新建或复用活动同步任务；需会话、CSRF 与来源验证 |
+| GET /api/account/articles/{id} | 数字文章 ID | article、body、fetched_at、read_job；正文未读时 body 为 null，无快照条目为 404 |
+| POST /api/account/articles/{id}/read | request_id | 仅为当前账号快照内文章新建或复用活动正文读取任务 |
 | POST /api/account/check | request_id | 新建 check_account 任务，返回任务；不修改平台内容 |
 | POST /api/jobs | request_id、kind、platform、title、markdown | 当前 kind 仅 save_draft，platform 仅 csdn；新建 202，重复相同内容返回已有任务，同标识不同内容 409 |
 | GET /api/jobs | q、status、page、page_size | 任务列表，不含 Markdown 正文 |
@@ -43,9 +47,9 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 
 ## 任务字段与状态
 
-任务对象：id、request_id、platform、account_id、kind、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
+任务对象：id、request_id、platform、account_id、account_username、kind、article_id、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
 
-- kind 为 save_draft 或 check_account；后者由账号检查接口创建。
+- kind 为 save_draft、check_account、sync_articles 或 read_article；读取任务由文章专用接口创建，使用 account_username 绑定账号，正文读取另含 article_id。读取任务不设置 external_started 和 remote_id，成功仍为 not_submitted，不表示外站保存或发布。
 - status 为 queued、running、waiting_user、reconciling、succeeded、failed、cancelled。
 - outcome 为 not_submitted、draft_saved 或 unknown；任务成功不表示文章已公开。
 - run_mode 为 execute 或 reconcile；核对只读，不调用填稿或新建。
@@ -58,6 +62,20 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 处理记录一行对应一个任务，额外返回 object_type、object_id、object_name、account_name、event_count、warning_count 和 error_count。object_type 为 article 或 account。列表按最近任务更新或事件时间筛选，重试不产生额外列表行；重复对象的不同任务分别返回。
 
 内容快照字段包括 id、attempt、phase、object_type、captured_at 及适用的 title、markdown、status、remote_id、username、display_name。phase 为 before 或 after。内容不混入日志，读取必须登录并禁止缓存。未采集不返回虚假快照；空标题或正文仍显式返回空字符串。
+
+## 账号文章契约
+
+列表返回 items、total、page、page_size、snapshot 与 sync_job。状态参数为 published、draft、rejected、recycled、unknown，空值查询全部含草稿。snapshot 包含账号、profile、counts、stats、trend、synced_at；分页与筛选只操作持久化快照。
+
+文章条目含 id、title、status、platform_status、posted_at、type、views、likes、comments、favorites、exposures、gained_fans、quality_score、is_top、fans_only、vip_only、editor_type、cover_urls，以及服务端生成的 blog_url、editor_url。仅已发布条目提供公开文章链接；链接存在不代表本次完成公开可达性验证。
+
+profile 提供昵称、头像地址、等级、积分、原创文章数与粉丝数；stats 提供文章数、阅读、点赞、评论、收藏、展现、粉丝及可获取的昨日变化。trend 按日期提供阅读、评论、收藏、粉丝净变化、推广与外链点击。未取得指标为 null，净变化可为负，不以零替代未知。
+
+body 含 id、title、markdown、html、description、tags、categories、type、visibility、platform_status、reason。所有正文接口要求管理员会话，正文不进入任务记录、列表、日志和错误信息。平台 HTML 只作为文本返回；界面禁用原始 HTML，正文链接只允许 HTTP/HTTPS，禁止自动加载外站图片。
+
+同步成功的内部完成请求携带 articles，正文成功携带 article；与完成状态在同一事务提交。其他任务、失败、取消、过期领取和账号不匹配均不能保存读取载荷。最多 2000 条文章、366 条趋势；快照最大 6 MiB、单篇正文最大 2 MiB，内部完成接口最大 8 MiB。普通管理请求维持 1 MiB。
+
+完整同步一次替换快照并清除旧正文缓存；分页不全、重复、总数变化或超限整体失败，保留旧数据。正文缓存最长 30 天，账号变更后旧数据不再可见，旧账号上报不能改变新账号状态。同一活动读取复用任务，并保留各请求标识的幂等映射。
 
 ## 内部执行器接口
 

@@ -116,8 +116,12 @@ func fingerprint(in CreateInput) string {
 	return hex.EncodeToString(h[:])
 }
 func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
-	if in.Kind == "check_account" {
-		if !validKey(in.RequestID) || in.Platform != "csdn" || in.Title != "" || in.Markdown != "" {
+	if readKind(in.Kind) {
+		if !validKey(in.RequestID) || in.Platform != "csdn" || in.Title != "" || in.Markdown != "" || (in.Kind == "sync_articles" && in.ArticleID != "") || (in.Kind == "read_article" && !numericID.MatchString(in.ArticleID)) {
+			return Job{}, false, ErrInvalid
+		}
+	} else if in.Kind == "check_account" {
+		if in.ArticleID != "" || !validKey(in.RequestID) || in.Platform != "csdn" || in.Title != "" || in.Markdown != "" {
 			return Job{}, false, ErrInvalid
 		}
 	} else if err := ValidateCreate(in); err != nil {
@@ -126,6 +130,13 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 	var job Job
 	created := false
 	err := s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
+		var currentUsername string
+		if err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&currentUsername); err != nil {
+			return err
+		}
+		if readKind(in.Kind) && !csdnUsername.MatchString(currentUsername) {
+			return ErrInvalid
+		}
 		var hash string
 		var data []byte
 		err := tx.QueryRow(ctx, "SELECT fingerprint,record FROM jobs WHERE request_id=$1", in.RequestID).Scan(&hash, &data)
@@ -137,13 +148,69 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 			if err = json.Unmarshal(data, &r); err != nil {
 				return err
 			}
+			if readKind(in.Kind) && r.AccountUsername != currentUsername {
+				return ErrConflict
+			}
 			job = r.Job
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
+		err = tx.QueryRow(ctx, "SELECT a.fingerprint,j.record FROM article_read_requests a JOIN jobs j ON j.id=a.job_id WHERE a.request_id=$1", in.RequestID).Scan(&hash, &data)
+		if err == nil {
+			if hash != fingerprint(in) {
+				return ErrConflict
+			}
+			var existing record
+			if e := json.Unmarshal(data, &existing); e != nil {
+				return e
+			}
+			if existing.AccountUsername != currentUsername {
+				return ErrConflict
+			}
+			job = existing.Job
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if readKind(in.Kind) {
+			if in.Kind == "read_article" {
+				var exists bool
+				if e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM account_articles WHERE username=$1 AND id=$2)", currentUsername, in.ArticleID).Scan(&exists); e != nil {
+					return e
+				}
+				if !exists {
+					return ErrNotFound
+				}
+			}
+			var active []byte
+			e := tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'kind'=$1 AND COALESCE(record->>'article_id','')=$2 AND record->>'account_username'=$3 AND record->>'status' IN ('queued','running','waiting_user') ORDER BY created_at DESC,id DESC LIMIT 1", in.Kind, in.ArticleID, currentUsername).Scan(&active)
+			if e == nil {
+				var existing record
+				if e = json.Unmarshal(active, &existing); e != nil {
+					return e
+				}
+				if _, e = tx.Exec(ctx, "INSERT INTO article_read_requests(request_id,fingerprint,job_id) VALUES($1,$2,$3)", in.RequestID, fingerprint(in), existing.ID); e != nil {
+					return e
+				}
+				job = existing.Job
+				return nil
+			}
+			if !errors.Is(e, pgx.ErrNoRows) {
+				return e
+			}
+		}
 		r := newRecord(in, now)
+		if readKind(in.Kind) {
+			r.AccountUsername = currentUsername
+			if in.Kind == "read_article" {
+				if err = tx.QueryRow(ctx, "SELECT record->>'title' FROM account_articles WHERE account_id='csdn-main' AND username=$1 AND id=$2", currentUsername, in.ArticleID).Scan(&r.Title); err != nil {
+					return err
+				}
+			}
+		}
 		data, err = json.Marshal(r)
 		if err != nil {
 			return err
@@ -186,6 +253,10 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
+		var currentUsername string
+		if err = tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&currentUsername); err != nil {
+			return err
+		}
 		active := false
 		unknown := ""
 		for _, r := range records {
@@ -210,6 +281,21 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 					return err
 				}
 			}
+			if readKind(r.Kind) && r.AccountUsername != currentUsername && r.Status != "running" && (r.Status == "queued" || r.Status == "waiting_user") {
+				r.Status = "failed"
+				r.Ready = false
+				r.ErrorCode = "account_mismatch"
+				r.ErrorMessage = safeErrors["account_mismatch"]
+				r.FinishedAt = &now
+				r.UpdatedAt = now
+				r.updateRetry()
+				if err = save(ctx, tx, r); err != nil {
+					return err
+				}
+				if err = appendLog(ctx, tx, r, "warning", "账号已变更，读取任务已停止", now); err != nil {
+					return err
+				}
+			}
 			if r.Status == "running" {
 				active = true
 			}
@@ -224,7 +310,7 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 			if !r.Ready || r.AvailableAt.After(now) || !(r.Status == "queued" || r.Status == "reconciling") {
 				continue
 			}
-			if unknown != "" && r.RunMode != "reconcile" && r.Kind != "check_account" {
+			if unknown != "" && r.RunMode != "reconcile" && r.Kind != "check_account" && !readKind(r.Kind) {
 				continue
 			}
 
@@ -277,6 +363,15 @@ func (s *Store) mutateLease(ctx context.Context, id, token string, fn func(pgx.T
 		if !leaseValid(r, token, now) {
 			return ErrConflict
 		}
+		if readKind(r.Kind) {
+			var username string
+			if err = tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&username); err != nil {
+				return err
+			}
+			if r.AccountUsername != username {
+				return ErrConflict
+			}
+		}
 		if err = fn(tx, r, now); err != nil {
 			return err
 		}
@@ -319,6 +414,9 @@ func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error
 }
 func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error {
 	return s.mutateLease(ctx, id, in.LeaseToken, func(tx pgx.Tx, r *record, now time.Time) error {
+		if err := s.acceptArticleResult(ctx, tx, r, in, now); err != nil {
+			return err
+		}
 		if in.RemoteID != "" {
 			var exists bool
 			if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id<>$1 AND record->>'remote_id'=$2)", id, in.RemoteID).Scan(&exists); err != nil {
@@ -338,7 +436,7 @@ func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error
 			status = "connected"
 		} else if r.Status == "waiting_user" {
 			status = "needs_login"
-		} else if in.ErrorCode == "account_mismatch" {
+		} else if in.ErrorCode == "account_mismatch" && r.Status != "cancelled" {
 			status = "blocked"
 		}
 		if status != "" {
@@ -556,6 +654,10 @@ func (s *Store) Maintain(ctx context.Context) error {
 			return err
 		}
 		if _, err = tx.Exec(ctx, "DELETE FROM admin_decisions WHERE created_at<$1", now.Add(-90*24*time.Hour)); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, "DELETE FROM account_article_bodies WHERE fetched_at<$1", now.Add(-30*24*time.Hour)); err != nil {
+
 			return err
 		}
 		if _, err = tx.Exec(ctx, "DELETE FROM process_snapshots WHERE job_id IN (SELECT id FROM jobs WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome'<>'unknown' AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1)", now.Add(-30*24*time.Hour)); err != nil {

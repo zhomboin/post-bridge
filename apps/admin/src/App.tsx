@@ -3,12 +3,14 @@ import { BookOpenText, LayoutDashboard, ListFilter, Logs as LogsIcon, ShieldChec
 import { Dashboard, AccountPage } from './Dashboard';
 import { Jobs, JobDetail, NewJob } from './Jobs';
 import Logs from './Logs';
+import { Articles, ArticleDetail } from './Articles';
 import { ProcessDetail } from './Processes';
 import { ApiError, WorkspaceContext, RouteLink, errorText, type Api, type Session } from './runtime';
 
 const locationRoute = () => window.location.pathname + window.location.search;
 const navigation = [
   { href: '/', label: '总览', icon: LayoutDashboard },
+  { href: '/articles', label: '账号文章', icon: BookOpenText },
   { href: '/jobs', label: '草稿任务', icon: ListFilter },
   { href: '/logs', label: '处理记录', icon: LogsIcon },
   { href: '/account', label: 'CSDN 账号', icon: ShieldCheck },
@@ -98,6 +100,8 @@ export default function App() {
   let content;
   if (loggingOut) content = <div className="loading-page" role="status">正在退出…</div>;
   else if (pathname === '/') content = <Dashboard />;
+  else if (pathname === '/articles') content = <Articles />;
+  else if (/^\/articles\/\d{1,32}$/.test(pathname)) content = <ArticleDetail key={pathname} id={pathname.slice('/articles/'.length)} />;
   else if (pathname === '/jobs') content = <Jobs />;
   else if (pathname === '/jobs/new') content = <NewJob />;
   else if (/^\/jobs\/[^/]+$/.test(pathname)) content = <JobDetail key={pathname} id={decodeURIComponent(pathname.slice('/jobs/'.length))} />;
@@ -105,10 +109,10 @@ export default function App() {
   else if (/^\/logs\/[^/]+$/.test(pathname)) content = <ProcessDetail key={pathname} id={decodeURIComponent(pathname.slice('/logs/'.length))} />;
   else if (pathname === '/account') content = <AccountPage />;
   else content = <div className="page"><h1>页面不存在</h1><p className="section-gap"><RouteLink href="/jobs">返回草稿任务</RouteLink></p></div>;
-  const pageName = navigation.find(item => item.href === (pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname))?.label || '工作台';
+  const pageName = navigation.find(item => item.href === (pathname.startsWith('/articles') ? '/articles' : pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname))?.label || '工作台';
   return <WorkspaceContext.Provider value={context}><a className="skip-link" href="#main-content">跳到主要内容</a><div className="app-shell"><aside className="sidebar">
     <RouteLink className="brand" href="/"><span className="brand-mark"><BookOpenText size={18} aria-hidden="true" /></span>Post Bridge</RouteLink>
-    <nav aria-label="主导航">{navigation.map(({ href, label, icon: Icon }) => <RouteLink className="nav-link" key={href} href={href} aria-current={href === (pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname) ? 'page' : undefined}><Icon size={17} aria-hidden="true" />{label}</RouteLink>)}</nav>
+    <nav aria-label="主导航">{navigation.map(({ href, label, icon: Icon }) => <RouteLink className="nav-link" key={href} href={href} aria-current={href === (pathname.startsWith('/articles') ? '/articles' : pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname) ? 'page' : undefined}><Icon size={17} aria-hidden="true" />{label}</RouteLink>)}</nav>
 
   </aside><div className="workspace"><header className="topbar"><span className="topbar-title">{pageName}</span><div className="topbar-session"><span>{session.user.username}</span><button type="button" disabled={loggingOut} onClick={() => void logout()}>退出登录</button></div></header><main id="main-content" tabIndex={-1}>{notice && <div className="page" style={{ paddingBottom: 0 }}><div className="notice error" role="alert">{notice}</div></div>}{content}</main></div></div></WorkspaceContext.Provider>;
 }
