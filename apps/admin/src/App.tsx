@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { BookOpenText, LayoutDashboard, ListFilter, Logs as LogsIcon } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { BookOpenText, FileText, LayoutDashboard, ListFilter, Logs as LogsIcon } from 'lucide-react';
 import { Dashboard } from './Dashboard';
 import PlatformAccount from './PlatformAccount';
 import Integrations from './Integrations';
@@ -9,6 +9,15 @@ import Logs from './Logs';
 import { ArticleDetail } from './Articles';
 import { ProcessDetail } from './Processes';
 import { ApiError, WorkspaceContext, RouteLink, errorText, type Api, type Session } from './runtime';
+
+const IntegrationDocs = lazy(async () => {
+  try { return await import('./IntegrationDocs'); }
+  catch {
+    return { default: function DocumentUnavailable() {
+      return <div className="page"><div className="notice error" role="alert">接入文档加载失败，请刷新页面重试。</div><button className="section-gap" onClick={() => window.location.reload()}>刷新页面</button></div>;
+    } };
+  }
+});
 
 const locationRoute = () => {
   if (window.location.pathname === '/articles') window.history.replaceState({}, '', '/account' + window.location.search);
@@ -113,13 +122,14 @@ export default function App() {
   else if (pathname === '/logs') content = <Logs />;
   else if (/^\/logs\/[^/]+$/.test(pathname)) content = <ProcessDetail key={pathname} id={decodeURIComponent(pathname.slice('/logs/'.length))} />;
   else if (pathname === '/account') content = <PlatformAccount />;
+  else if (pathname === '/docs/integrations') content = <Suspense fallback={<div className="loading-page" role="status">正在读取接入文档…</div>}><IntegrationDocs /></Suspense>;
   else if (pathname === '/integrations') content = <Integrations />;
   else if (/^\/integration-preparations\/[^/]+$/.test(pathname)) content = <IntegrationDraft key={pathname} id={decodeURIComponent(pathname.slice('/integration-preparations/'.length))} />;
   else content = <div className="page"><h1>页面不存在</h1><p className="section-gap"><RouteLink href="/jobs">返回草稿任务</RouteLink></p></div>;
-  const pageName = navigation.find(item => item.href === (pathname.startsWith('/integration-preparations') ? '/integrations' : pathname.startsWith('/articles') ? '/account' : pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname))?.label || '工作台';
+  const pageName = pathname === '/docs/integrations' ? '接入文档' : navigation.find(item => item.href === (pathname.startsWith('/integration-preparations') ? '/integrations' : pathname.startsWith('/articles') ? '/account' : pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname))?.label || '工作台';
   return <WorkspaceContext.Provider value={context}><a className="skip-link" href="#main-content">跳到主要内容</a><div className="app-shell"><aside className="sidebar">
     <RouteLink className="brand" href="/"><span className="brand-mark"><BookOpenText size={18} aria-hidden="true" /></span>Post Bridge</RouteLink>
     <nav aria-label="主导航">{navigation.map(({ href, label, icon: Icon }) => <RouteLink className="nav-link" key={href} href={href} aria-current={href === (pathname.startsWith('/integration-preparations') ? '/integrations' : pathname.startsWith('/articles') ? '/account' : pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname) ? 'page' : undefined}><Icon size={17} aria-hidden="true" />{label}</RouteLink>)}</nav>
 
-  </aside><div className="workspace"><header className="topbar"><span className="topbar-title">{pageName}</span><div className="topbar-session"><span>{session.user.username}</span><button type="button" disabled={loggingOut} onClick={() => void logout()}>退出登录</button></div></header><main id="main-content" tabIndex={-1}>{notice && <div className="page" style={{ paddingBottom: 0 }}><div className="notice error" role="alert">{notice}</div></div>}{content}</main></div></div></WorkspaceContext.Provider>;
+  </aside><div className="workspace"><header className="topbar"><span className="topbar-title">{pageName}</span><div className="topbar-session"><RouteLink className="topbar-docs-link" href="/docs/integrations" aria-label="接入文档" title="接入文档" aria-current={pathname === '/docs/integrations' ? 'page' : undefined}><FileText size={18} aria-hidden="true" /></RouteLink><span>{session.user.username}</span><button type="button" disabled={loggingOut} onClick={() => void logout()}>退出登录</button></div></header><main id="main-content" tabIndex={-1}>{notice && <div className="page" style={{ paddingBottom: 0 }}><div className="notice error" role="alert">{notice}</div></div>}{content}</main></div></div></WorkspaceContext.Provider>;
 }
