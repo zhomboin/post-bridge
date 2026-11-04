@@ -21,6 +21,7 @@ let context: BrowserContext;
 const job = { id: 'test-job', kind: 'save_draft' as const, title: '本地草稿验证文章', markdown: '# 章节\n\n第一行\n第二行\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n', run_mode: 'execute' as const, external_started: false, remote_id: null, reconcile_candidate_id: null };
 const events: Progress[] = [];
 const hooks = { progress: async (value: Progress) => { events.push(value); } };
+const observations = () => events.flatMap(event => event.observation ? [event.observation] : []);
 
 beforeAll(async () => {
   server = createServer(async (req, res) => {
@@ -64,20 +65,20 @@ beforeAll(async () => {
       const input=document.querySelector('input'); const body=document.querySelector('pre'); let committedTitle=${JSON.stringify(existing ? title : '【无标题】')};
       ${mode === 'deferred-title' ? `input.oninput=()=>{setTimeout(()=>{committedTitle=input.value},100)};` : ''}
       document.querySelector('div').onclick=()=>{input.style.display='block'};
-      input.value=${JSON.stringify(existing ? title : '【无标题】')};body.textContent=${JSON.stringify(existing ? markdown : '# 欢迎使用官方Markdown编辑器\n\n这是默认模板，不是已有文章。')};
+      input.value=${JSON.stringify(existing ? title : '【无标题】')};body.textContent=${JSON.stringify(existing ? markdown : mode === 'oversized-before' ? 'x'.repeat(200001) : mode === 'nul-before' ? '\u0000' : '# 欢迎使用官方Markdown编辑器\n\n这是默认模板，不是已有文章。')};
       document.querySelector('button').onclick=async()=>{await fetch('/save',{method:'POST',body:JSON.stringify({title:${['deferred-title','unsynced-title'].includes(mode) ? 'committedTitle' : 'input.value'},markdown:body.textContent})});history.replaceState({},'', '/md/?articleId=123')};
       ${existing ? `fetch('/blog-console-api/v3/editor/getArticle?articleId=${existing}',{method:'POST'}).then(r=>r.json()).then(r=>{input.value=r.data.title;body.textContent=r.data.markdowncontent})` : mode === 'late-id' ? '' : `setTimeout(()=>{history.replaceState({},'', '/md/?articleId=123');fetch('/acquired')}, 20)`}
       </script>`);
     } else if (url.pathname === '/save') {
       let text = ''; for await (const chunk of req) text += chunk;
-      const payload = JSON.parse(text); title = payload.title; markdown = payload.markdown; writes++;
+      const payload = JSON.parse(text); title = payload.title; markdown = mode === 'saved-mismatch' ? '平台实际保留的正文' : mode === 'oversized-after' ? 'x'.repeat(200001) : payload.markdown; writes++;
       res.end('{}');
     } else if (url.pathname === '/acquired') {
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ data: { articleId: '123' } }));
     } else if (url.pathname.endsWith('/getArticle')) {
       res.setHeader('Content-Type', 'application/json');
       if (mode === 'lost') { res.statusCode = 503; res.end('{}'); }
-      else { const entry = draftEntries.find(value => value.articleId === url.searchParams.get('articleId')); res.end(JSON.stringify({ data: { article_id: entry?.articleId ?? '123', title: entry?.title ?? title, markdowncontent: entry?.markdown ?? markdown, ...(mode === 'missing-state' ? {} : { status: mode === 'not-draft' ? 1 : entry?.status ?? 2 }) } })); }
+      else { const entry = draftEntries.find(value => value.articleId === url.searchParams.get('articleId')); res.end(JSON.stringify({ data: { article_id: entry?.articleId ?? '123', title: entry?.title ?? title, markdowncontent: entry?.markdown ?? markdown, ...(mode === 'missing-state' ? {} : { status: mode === 'not-draft' ? 1 : mode === 'oversized-status' ? 'x'.repeat(101) : entry?.status ?? 2 }) } })); }
     } else { res.statusCode = 404; res.end(''); }
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -100,6 +101,13 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     expect(writes).toBe(1);
     expect(events.findIndex(e=>e.external_started === true)).toBeLessThan(events.findIndex(e=>e.remote_id === '123'));
     expect(events.some(e=>e.stage === 'draft_acquired')).toBe(true);
+    expect(observations()).toEqual([
+      { phase: 'before', title: '【无标题】', markdown: '# 欢迎使用官方Markdown编辑器\n\n这是默认模板，不是已有文章。', status: 'editor' },
+      { phase: 'after', title: job.title, markdown: job.markdown, status: '2', remote_id: '123' },
+    ]);
+    expect(events.filter(value => value.observation?.phase === 'before').map(value => value.stage)).toEqual(['filling']);
+    expect(events.filter(value => value.observation?.phase === 'after').map(value => value.stage)).toEqual(['verifying']);
+    expect(events.every(value => !value.message?.includes(job.markdown) && !value.message?.includes('这是默认模板'))).toBe(true);
     await context.grantPermissions(['clipboard-read'], { origin });
     const checkPage = await context.newPage();
     await checkPage.goto(origin + '/account');
@@ -146,6 +154,7 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     expect(result.status).toBe('reconciling');
     expect(editorVisits).toBeLessThanOrEqual(2);
     expect(writes).toBeLessThanOrEqual(1);
+    expect(observations().some(value => value.phase === 'after')).toBe(false);
   });
   it('核对只读，候选错误不绑定；修正后的相同快照才可成功', async () => {
     await reset(); title = '其他文章'; markdown = '其他正文';
@@ -153,16 +162,48 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     const mismatch = await adapter().run(reconcile, hooks, new AbortController().signal);
     expect(mismatch.status).toBe('reconciling');
     expect(events.some(e=>e.remote_id)).toBe(false);
+    expect(observations()).toEqual([{ phase: 'after', title: '其他文章', markdown: '其他正文', status: '2', remote_id: '123' }]);
+    events.length = 0;
     title = job.title; markdown = job.markdown;
     const match = await adapter().run(reconcile, hooks, new AbortController().signal);
     expect(match.status).toBe('succeeded'); expect(match.remote_id).toBe('123'); expect(writes).toBe(0);
+    expect(observations()).toEqual([{ phase: 'after', title: job.title, markdown: job.markdown, status: '2', remote_id: '123' }]);
+  });
+  it('保存核对失败仍记录平台实际值，不使用任务期望正文', async () => {
+    await reset('saved-mismatch');
+    const result = await adapter().run(job, hooks, new AbortController().signal);
+    expect(result).toMatchObject({ status: 'reconciling', error_code: 'draft_mismatch' });
+    expect(observations().find(value => value.phase === 'after')).toEqual({ phase: 'after', title: job.title, markdown: '平台实际保留的正文', status: '2', remote_id: '123' });
+    expect(writes).toBe(1);
+  });
+  it.each(['oversized-before', 'oversized-after'])('超长实际观察不截断或阻止安全保存：%s', async state => {
+    await reset(state);
+    const result = await adapter().run(job, hooks, new AbortController().signal);
+    expect(writes).toBe(1);
+    expect(result.status).toBe(state === 'oversized-before' ? 'succeeded' : 'reconciling');
+    expect(observations().map(value => value.phase)).toEqual(state === 'oversized-before' ? ['after'] : ['before']);
+  });
+  it('不合法编辑器实值不发送观察，仍完成安全草稿保存', async () => {
+    await reset('nul-before');
+    const result = await adapter().run(job, hooks, new AbortController().signal);
+    expect(result.status).toBe('succeeded'); expect(writes).toBe(1);
+    expect(observations().map(value => value.phase)).toEqual(['after']);
+  });
+  it('平台状态超出观察限额时不发送该快照，也不伪造为草稿状态', async () => {
+    await reset('oversized-status');
+    const result = await adapter().run(job, hooks, new AbortController().signal);
+    expect(result.status).toBe('reconciling'); expect(writes).toBe(1);
+    expect(observations().map(value => value.phase)).toEqual(['before']);
   });
   it.each(['not-draft', 'missing-state'])('相同内容缺少已观测草稿状态时，保存和核对均保持待核对：%s', async state => {
     await reset(state);
     const saved = await adapter().run(job, hooks, new AbortController().signal);
     expect(saved.status).toBe('reconciling');
+    expect(observations().find(value => value.phase === 'after')?.status).toBe(state === 'missing-state' ? 'unknown' : '1');
+    events.length = 0;
     const checked = await adapter().run({ ...job, run_mode: 'reconcile', external_started: true, reconcile_candidate_id: '123' }, hooks, new AbortController().signal);
     expect(checked.status).toBe('reconciling');
+    expect(observations()).toEqual([{ phase: 'after', title: job.title, markdown: job.markdown, status: state === 'missing-state' ? 'unknown' : '1', remote_id: '123' }]);
     expect(writes).toBe(1);
   });
   it('只读核对阻止编辑器脚本自动写稿，错误候选也不会新建或修改', async () => {
@@ -171,11 +212,13 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     expect(result.status).toBe('reconciling');
     expect(writes).toBe(0); expect(title).toBe(job.title); expect(markdown).toBe(job.markdown);
     expect(events.some(e=>e.remote_id)).toBe(false);
+    expect(observations()).toEqual([]);
   });
   it('账号检查阻止页面脚本提交任何草稿写入', async () => {
     await reset('auto-account');
     const result = await adapter().run({ ...job, kind: 'check_account' }, hooks, new AbortController().signal);
     expect(result.status).toBe('succeeded'); expect(editorVisits).toBe(0); expect(writes).toBe(0);
+    expect(observations()).toEqual([]);
   });
   it('无ID时完整分页查找并只读核对唯一匹配草稿', async () => {
     await reset();
@@ -183,6 +226,7 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     const result = await adapter().run({ ...job, run_mode: 'reconcile', external_started: true }, hooks, new AbortController().signal);
     expect(result).toMatchObject({ status: 'succeeded', remote_id: '1020' });
     expect(listRequests).toEqual([1, 2]); expect(writes).toBe(0); expect(editorVisits).toBe(1);
+    expect(observations()).toEqual([{ phase: 'after', title: job.title, markdown: job.markdown.replace(/\n/g, '\r\n'), status: '2', remote_id: '1020' }]);
   });
   it('只核对本次点击发起的列表请求，不接受导航时滞后的空响应', async () => {
     await reset('list-stale-response');
@@ -211,6 +255,7 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     const result = await adapter().run({ ...job, run_mode: 'reconcile', external_started: true }, hooks, new AbortController().signal);
     expect(result).toMatchObject({ status: 'reconciling', error_code: 'draft_conflict' });
     expect(writes).toBe(0);
+    expect(observations()).toEqual(state === 'partial-match' ? [{ phase: 'after', title: job.title, markdown: '残留正文', status: '2', remote_id: '123' }] : []);
   });
   it('候选正文读取失败时不能报告未找到或内容冲突', async () => {
     await reset('lost');
@@ -231,6 +276,15 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     const result = await adapter().run({ ...job, run_mode: 'reconcile', external_started: true }, hooks, new AbortController().signal);
     expect(result).toMatchObject({ status: 'reconciling', error_code: 'draft_absent' });
     expect(restored.isClosed()).toBe(true); expect(writes).toBe(0);
+  });
+  it('填入前观察检查点取消时不会继续编辑或保存', async () => {
+    await reset();
+    const controller = new AbortController();
+    const result = await adapter().run(job, { progress: async value => { events.push(value); if (value.observation) controller.abort(); } }, controller.signal);
+    expect(result.status).toBe('reconciling');
+    expect(writes).toBe(0);
+    expect(observations().map(value => value.phase)).toEqual(['before']);
+    expect(events.some(value => value.stage === 'saving')).toBe(false);
   });
   it('取消中止浏览器操作，不继续保存', async () => {
     await reset();

@@ -9,7 +9,14 @@ export interface Job {
   reconcile_candidate_id: string | null;
 }
 export interface Claim { job: Job; lease_token: string; lease_seconds: number; lease_expires_at: string }
-export interface Progress { stage: string; external_started?: boolean; remote_id?: string; message?: string }
+export interface Observation {
+  phase: 'before' | 'after';
+  title: string;
+  markdown: string;
+  status: string;
+  remote_id?: string;
+}
+export interface Progress { stage: string; external_started?: boolean; remote_id?: string; message?: string; observation?: Observation }
 export interface JobResult {
   status: 'succeeded' | 'failed' | 'waiting_user' | 'reconciling' | 'cancelled';
   remote_id?: string;

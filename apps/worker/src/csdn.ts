@@ -1,6 +1,6 @@
 import type { BrowserContext, Page, Request, Response } from 'playwright';
 import { safeRequestURL, validContent } from './config.js';
-import type { Hooks, Job, JobResult, Progress } from './types.js';
+import type { Hooks, Job, JobResult, Observation, Progress } from './types.js';
 
 interface Identity { username: string; displayName?: string; timeoutMs?: number }
 interface Snapshot { id?: string; title: string; markdown: string; status: unknown }
@@ -74,6 +74,17 @@ export class CSDNAdapter {
       progressTail = operation.catch(() => {});
       return operation;
     };
+    const observation = (phase: Observation['phase'], snapshot: Snapshot): Observation | undefined => {
+      // 超长实值保持未采集，不能截断成看似完整的内容，也不能中断草稿安全流程。
+      if ([...snapshot.title].length > 100 || [...snapshot.markdown].length > 200000 || snapshot.title.includes('\0') || snapshot.markdown.includes('\0')) return undefined;
+      const status = ['string', 'number', 'boolean'].includes(typeof snapshot.status) && String(snapshot.status).trim() ? String(snapshot.status) : 'unknown';
+      if ([...status].length > 100 || status.includes('\0')) return undefined;
+      return { phase, title: snapshot.title, markdown: snapshot.markdown, status, ...(snapshot.id ? { remote_id: snapshot.id } : {}) };
+    };
+    const reportAfter = async (snapshot: Snapshot) => {
+      const value = observation('after', snapshot);
+      if (value) await progress({ stage: 'verifying', observation: value });
+    };
     const persistID = (value: unknown) => {
       const id = numericID(value);
       if (!id || job.run_mode === 'reconcile' || remoteID === id || pendingID === id) return;
@@ -136,12 +147,14 @@ export class CSDNAdapter {
           await page.goto(this.editorURL(id), { waitUntil: 'domcontentloaded' });
           const snapshot = await this.readSnapshot(readSnapshot, id, signal);
           if (!snapshot) return { status: 'reconciling', error_code: 'reconcile_unavailable', error_message: '平台草稿暂时无法读取' };
+          await reportAfter(snapshot);
           if (!this.matches(snapshot, job)) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '草稿内容或草稿状态未通过核对' };
           return { status: 'succeeded', remote_id: id };
         }
         const candidates = await this.draftCandidates(page, job.title, signal);
         if (!candidates.length) return { status: 'reconciling', error_code: 'draft_absent', error_message: '完整查询未找到同标题草稿，后台将再次确认' };
-        const matches: string[] = [];
+        const matches: Snapshot[] = [];
+        let soleCandidate: Snapshot | undefined;
         let conflict = false;
         for (const candidate of candidates) {
           signal.throwIfAborted();
@@ -149,10 +162,13 @@ export class CSDNAdapter {
           await page.goto(this.editorURL(candidate), { waitUntil: 'domcontentloaded' });
           const snapshot = await this.readSnapshot(readSnapshot, candidate, signal);
           if (!snapshot) return { status: 'reconciling', error_code: 'reconcile_unavailable', error_message: '候选草稿暂时无法读取' };
-          if (this.matches(snapshot, job)) matches.push(candidate); else conflict = true;
+          if (candidates.length === 1) soleCandidate = snapshot;
+          if (this.matches(snapshot, job)) matches.push(snapshot); else conflict = true;
         }
+        if (soleCandidate) await reportAfter(soleCandidate);
         if (matches.length !== 1 || conflict) return { status: 'reconciling', error_code: 'draft_conflict', error_message: '存在重复或不完整的同标题草稿，不能自动重写' };
-        return { status: 'succeeded', remote_id: matches[0] };
+        if (!soleCandidate) await reportAfter(matches[0]);
+        return { status: 'succeeded', remote_id: matches[0].id };
       }
       if (external || remoteID) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '任务已有外站操作，需要只读核对' };
       await progress({ stage: 'opening_editor', external_started: true, message: '即将打开平台草稿编辑器' });
@@ -174,7 +190,9 @@ export class CSDNAdapter {
       await save.waitFor({ state: 'visible', timeout: this.timeout });
       if (await save.count() !== 1 || await body.count() !== 1 || await titleInput.count() !== 1) throw new AdapterFailure('adapter_mismatch');
       await queue; if (checkpointFailure) throw checkpointFailure;
-      await progress({ stage: 'filling', message: '正在填入任务快照' });
+      const before = observation('before', { title: await titleInput.inputValue(), markdown: await body.textContent() ?? '', status: 'editor' });
+      await progress({ stage: 'filling', message: '正在填入任务快照', ...(before ? { observation: before } : {}) });
+      signal.throwIfAborted();
       await titleInput.fill(job.title);
       await titleInput.press('Enter');
       // 官方标题监听器延迟 100 毫秒同步保存状态，输入框值不代表同步已完成。
@@ -200,7 +218,10 @@ export class CSDNAdapter {
       await progress({ stage: 'verifying', message: '正在从平台重新读取草稿' });
       snapshotState.value = undefined;
       await page.reload({ waitUntil: 'domcontentloaded' });
-      if (!await this.waitSnapshot(readSnapshot, job, signal) || (readSnapshot()?.id && readSnapshot()?.id !== remoteID)) throw new AdapterFailure('draft_mismatch');
+      const matched = await this.waitSnapshot(readSnapshot, job, signal);
+      const actual = readSnapshot();
+      if (actual?.id === remoteID) await reportAfter(actual);
+      if (!matched || (actual?.id && actual.id !== remoteID)) throw new AdapterFailure('draft_mismatch');
       await queue; if (checkpointFailure) throw checkpointFailure;
       return { status: 'succeeded', remote_id: remoteID };
     } catch (error) {
