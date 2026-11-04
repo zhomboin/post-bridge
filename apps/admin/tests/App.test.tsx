@@ -14,6 +14,7 @@ beforeEach(() => {
     if (url === '/api/session') return response(session);
     if (url.startsWith('/api/jobs?')) return response({ items: [job], total: 1, page: 1, page_size: 50 });
     if (url === '/api/jobs/job-1') return response(job);
+    if (url.startsWith('/api/jobs/job-1/history?')) return response({ items: [], transitions: [], total: 0, page: 1, page_size: 50 });
     if (url.startsWith('/api/logs?')) return response({ items: [], total: 0, page: 1, page_size: 50 });
     if (url === '/api/account') return response({ id: 'csdn-main', platform: 'csdn', display_name: '测试账号', status: 'needs_login' });
     if (url === '/api/settings') return response({ draft_only: true, platform: 'csdn', limits: {}, poll_interval_ms: 5000 });
@@ -147,7 +148,7 @@ describe('管理员会话与任务闭环', () => {
   });
 
   it('日志本地时间转换为UTC查询并拒绝超过31天的范围', async () => {
-    window.history.replaceState({}, '', '/logs');
+    window.history.replaceState({}, '', '/logs?view=events');
     render(<App />);
     await screen.findByRole('heading', { name: '运行记录' });
     fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '2026-11-01T09:00' } });
@@ -290,7 +291,7 @@ describe('管理员会话与任务闭环', () => {
   it('草稿保存结果明确标识且运行日志以纯文本显示', async () => {
     window.history.replaceState({}, '', '/jobs/job-1');
     const fallback = handler;
-    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'succeeded', outcome: 'draft_saved', remote_id: '123', remote_url: 'https://mp.csdn.net/mp_blog/creation/editor/123' }) : url.startsWith('/api/logs?') ? response({ items: [{ id: 'log-1', job_id: 'job-1', stage: 'saving', level: 'info', message: '<img src=x onerror=alert(1)>', created_at: job.created_at }], total: 1, page: 1, page_size: 50 }) : fallback(url, init);
+    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'succeeded', outcome: 'draft_saved', remote_id: '123', remote_url: 'https://mp.csdn.net/mp_blog/creation/editor/123' }) : url.startsWith('/api/jobs/job-1/history?') ? response({ transitions: [], items: [{ id: 'log-1', job_id: 'job-1', stage: 'saving', level: 'info', message: '<img src=x onerror=alert(1)>', created_at: job.created_at }], total: 1, page: 1, page_size: 50 }) : fallback(url, init);
     const { container } = render(<App />);
     await screen.findByText('草稿已保存');
     expect(screen.queryByText('已公开')).toBeNull();
@@ -541,4 +542,13 @@ describe('弹窗终态清理', () => {
     expect(calls.filter(c => c.url.endsWith('/input')).every(c => c.init?.signal?.aborted)).toBe(true);
     expect(screen.queryByDisplayValue('temporary-secret')).toBeNull();
   });
+});
+
+
+it('从处理详情进入任务后返回原处理及筛选上下文', async () => {
+  const back = '/logs/job-1?back=' + encodeURIComponent('/logs?status=failed');
+  window.history.replaceState({}, '', '/jobs/job-1?back=' + encodeURIComponent(back));
+  render(<App />);
+  const link = await screen.findByRole('link', { name: '返回处理详情' });
+  expect(link.getAttribute('href')).toBe(back);
 });

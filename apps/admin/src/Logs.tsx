@@ -1,8 +1,10 @@
+import Processes from './Processes';
+import ProcessTimeline from './ProcessTimeline';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, jobHref, queryPage, stageLabels, time, useResource, useWorkspace, type LogEntry, type PageData } from './runtime';
 
 const levelNames: Record<string, string> = { info: '信息', warning: '警告', error: '错误' };
-export default function Logs({ jobId }: { jobId?: string }) {
+function RawLogs({ jobId }: { jobId?: string }) {
   const { route, navigate } = useWorkspace();
   const params = new URLSearchParams(route.split('?')[1]);
   const [detailPage, setDetailPage] = useState(1);
@@ -42,7 +44,8 @@ export default function Logs({ jobId }: { jobId?: string }) {
     if (job.trim()) next.set('job_id', job.trim());
     if (from) next.set('from', from);
     if (to) next.set('to', to);
-    navigate('/logs' + (next.size ? '?' + next : ''));
+    next.set('view', 'events');
+    navigate('/logs?' + next);
   }
   function changePage(value: number) {
     if (jobId) setDetailPage(value);
@@ -72,5 +75,11 @@ export default function Logs({ jobId }: { jobId?: string }) {
     </li>)}</ul> : <Empty loading={resource.loading}><strong>暂无符合条件的日志</strong></Empty>}
     {resource.data && <Pagination total={resource.data.total} page={page} pageSize={50} onPage={changePage} />}
   </section>;
-  return jobId ? content : <div className="page"><div className="page-heading"><div><h1>运行日志</h1></div></div>{content}</div>;
+  return jobId ? content : <div className="page"><div className="page-heading"><h1>全部日志</h1><RouteLink className="button" href="/logs">处理记录</RouteLink></div>{content}</div>;
+}
+
+export default function Logs({ jobId }: { jobId?: string }) {
+  const { route } = useWorkspace();
+  if (jobId) return <ProcessTimeline jobId={jobId} />;
+  return new URLSearchParams(route.split('?')[1]).get('view') === 'events' ? <RawLogs /> : <Processes />;
 }

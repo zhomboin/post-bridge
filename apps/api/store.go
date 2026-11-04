@@ -36,6 +36,9 @@ type Account struct {
 	LastError     string     `json:"last_error"`
 }
 type Log struct {
+	Status    string    `json:"status"`
+	Outcome   string    `json:"outcome"`
+	RunMode   string    `json:"run_mode"`
 	ID        int64     `json:"id"`
 	JobID     string    `json:"job_id"`
 	Attempt   int       `json:"attempt"`
@@ -104,7 +107,7 @@ func save(ctx context.Context, tx pgx.Tx, r *record) error {
 	return err
 }
 func appendLog(ctx context.Context, tx pgx.Tx, r *record, level, message string, now time.Time) error {
-	_, err := tx.Exec(ctx, "INSERT INTO logs(job_id,attempt,level,stage,message,created_at) VALUES($1,$2,$3,$4,$5,$6)", r.ID, r.Attempts, level, r.Stage, message, now)
+	_, err := tx.Exec(ctx, "INSERT INTO logs(job_id,attempt,level,stage,message,created_at,status,outcome,run_mode) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", r.ID, r.Attempts, level, r.Stage, message, now, r.Status, r.Outcome, r.RunMode)
 	return err
 }
 func fingerprint(in CreateInput) string {
@@ -250,6 +253,11 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 			if err = appendLog(ctx, tx, r, "info", "执行器已领取任务", now); err != nil {
 				return err
 			}
+			if r.Kind == "check_account" {
+				if err = captureAccount(ctx, tx, r, "before", now); err != nil {
+					return err
+				}
+			}
 			claim = &Claim{Job: r.Job, LeaseToken: r.LeaseToken, LeaseSeconds: 60, LeaseExpiresAt: r.LeaseExpiresAt}
 			return nil
 		}
@@ -298,6 +306,11 @@ func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error
 				return ErrConflict
 			}
 		}
+		if in.Observation != nil {
+			if err := captureObservation(ctx, tx, r, in, now); err != nil {
+				return err
+			}
+		}
 		if err := r.progress(in, now); err != nil {
 			return err
 		}
@@ -330,6 +343,11 @@ func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error
 		}
 		if status != "" {
 			if _, err := tx.Exec(ctx, "UPDATE account SET status=$1,last_checked_at=$2,last_error=$3 WHERE id='csdn-main'", status, now, r.ErrorMessage); err != nil {
+				return err
+			}
+		}
+		if r.Kind == "check_account" {
+			if err := captureAccount(ctx, tx, r, "after", now); err != nil {
 				return err
 			}
 		}
@@ -477,7 +495,7 @@ func (s *Store) Counts(ctx context.Context) (map[string]int, error) {
 }
 func (s *Store) Logs(ctx context.Context, job, level, q string, from, to time.Time, page, size int) ([]Log, int, error) {
 	where := " FROM logs WHERE ($1='' OR job_id=$1) AND ($2='' OR level=$2) AND ($3='' OR message ILIKE '%'||$3||'%') AND created_at >= $4 AND created_at <= $5"
-	rows, err := s.pool.Query(ctx, "SELECT id,job_id,attempt,level,stage,message,created_at,count(*) OVER()"+where+" ORDER BY created_at DESC,id DESC LIMIT $6 OFFSET $7", job, level, q, from, to, size, (page-1)*size)
+	rows, err := s.pool.Query(ctx, "SELECT id,job_id,attempt,level,stage,message,created_at,status,outcome,run_mode,count(*) OVER()"+where+" ORDER BY created_at DESC,id DESC LIMIT $6 OFFSET $7", job, level, q, from, to, size, (page-1)*size)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -486,7 +504,7 @@ func (s *Store) Logs(ctx context.Context, job, level, q string, from, to time.Ti
 	total := 0
 	for rows.Next() {
 		var l Log
-		if err = rows.Scan(&l.ID, &l.JobID, &l.Attempt, &l.Level, &l.Stage, &l.Message, &l.CreatedAt, &total); err != nil {
+		if err = rows.Scan(&l.ID, &l.JobID, &l.Attempt, &l.Level, &l.Stage, &l.Message, &l.CreatedAt, &l.Status, &l.Outcome, &l.RunMode, &total); err != nil {
 			return nil, 0, err
 		}
 		logs = append(logs, l)
@@ -538,6 +556,9 @@ func (s *Store) Maintain(ctx context.Context) error {
 			return err
 		}
 		if _, err = tx.Exec(ctx, "DELETE FROM admin_decisions WHERE created_at<$1", now.Add(-90*24*time.Hour)); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, "DELETE FROM process_snapshots WHERE job_id IN (SELECT id FROM jobs WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome'<>'unknown' AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1)", now.Add(-30*24*time.Hour)); err != nil {
 			return err
 		}
 		// 仅清理不可重试终结记录的正文，未决和仍可重试的快照始终保留。

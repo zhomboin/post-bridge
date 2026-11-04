@@ -1,20 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import Logs from './Logs';
-import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, jobHref, queryPage, stageLabels, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
+import ProcessTimeline from './ProcessTimeline';
+import ContentComparison from './ContentComparison';
+import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, jobHref, jobOutcome, queryPage, stageLabels, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
 
 function autoReconcileActive(job: Job) {
   return !job.manual_resolved && job.run_mode === 'reconcile' && ['queued', 'reconciling', 'running'].includes(job.status);
-}
-function outcomeText(job: Job) {
-  if (job.manual_resolved) return '已人工结束，草稿可能保留';
-  if (job.kind === 'check_account') return job.status === 'succeeded' ? '登录状态已检查' : '账号检查任务';
-  if (job.outcome === 'draft_saved') return '草稿已保存';
-  if (autoReconcileActive(job)) return '后台自动核对中';
-  if (job.status === 'queued' && (job.absence_checks ?? 0) >= 2) return '确认未保存，等待自动重试';
-  if (job.outcome === 'unknown' || job.external_started) return '草稿结果待核对';
-  return '尚未保存到CSDN';
 }
 export function Jobs() {
   const { route, navigate } = useWorkspace();
@@ -47,7 +39,7 @@ export function Jobs() {
       {resource.data?.items.length ? <table className="data-table"><thead><tr><th className="title-cell">文章 / 任务</th><th>执行状态</th><th>草稿结果</th><th>最近更新</th></tr></thead><tbody>{resource.data.items.map(job => <tr key={job.id}>
         <td className="title-cell"><RouteLink className="title-link" href={jobHref(job.id, route)}>{job.title || 'CSDN 登录状态检查'}</RouteLink><div className="job-subline"><span>CSDN</span><span>{job.kind === 'check_account' ? '账号检查' : '文字草稿'}</span><span className="mono">{job.id}</span></div></td>
         <td><Status value={job.status} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /><div className="table-title-note">{stageLabels[job.stage] || '步骤待确认'}</div></td>
-        <td>{outcomeText(job)}</td><td><time dateTime={job.updated_at}>{time(job.updated_at)}</time></td>
+        <td>{jobOutcome(job)}</td><td><time dateTime={job.updated_at}>{time(job.updated_at)}</time></td>
       </tr>)}</tbody></table> : <Empty loading={resource.loading}><strong>{params.size ? '暂无符合条件的任务' : '还没有草稿任务'}</strong></Empty>}
       {resource.data && <Pagination total={resource.data.total} page={page} pageSize={50} onPage={value => { params.set('page', String(value)); navigate('/jobs?' + params); }} />}
     </section>
@@ -148,24 +140,25 @@ export function JobDetail({ id }: { id: string }) {
   const { route } = useWorkspace();
   const resource = useResource<Job>('/api/jobs/' + encodeURIComponent(id));
   const back = new URLSearchParams(route.split('?')[1]).get('back');
-  const backHref = back && (/^\/jobs(?:\?|$)/.test(back) || /^\/logs(?:\?|$)/.test(back) || back === '/account') ? back : '/jobs';
+  const backHref = back && (/^\/jobs(?:\?|$)/.test(back) || /^\/logs(?:\/[A-Za-z0-9._:-]+)?(?:\?|$)/.test(back) || back === '/account') ? back : '/jobs';
+  const backLabel = backHref.startsWith('/logs/') ? '返回处理详情' : backHref.startsWith('/logs') ? '返回处理记录' : backHref === '/account' ? '返回账号' : '返回任务列表';
   const job = resource.data;
-  if (!job) return <div className="page"><RouteLink className="back-link" href={backHref}><ArrowLeft size={14} />返回任务列表</RouteLink><section className="surface"><ResourceError error={resource.error} /><Empty loading={resource.loading}>无法读取任务，请刷新或返回列表。</Empty><RefreshBar resource={resource} /></section></div>;
+  if (!job) return <div className="page"><RouteLink className="back-link" href={backHref}><ArrowLeft size={14} />{backLabel}</RouteLink><section className="surface"><ResourceError error={resource.error} /><Empty loading={resource.loading}>无法读取任务，请刷新或返回列表。</Empty><RefreshBar resource={resource} /></section></div>;
   const remote = draftURL(job.remote_url);
   return <div className="page">
-    <RouteLink className="back-link" href={backHref}><ArrowLeft size={14} aria-hidden="true" />返回任务列表</RouteLink>
+    <RouteLink className="back-link" href={backHref}><ArrowLeft size={14} aria-hidden="true" />{backLabel}</RouteLink>
     <div className="page-heading"><div><h1 className="detail-title">{job.title || 'CSDN 登录状态检查'}</h1><p><span className="mono">{job.id}</span></p></div><Status value={job.status} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /></div>
     <ResourceError error={resource.error} stale />
     <div className="detail-layout">
       <section className="surface detail-result"><div className="surface-header"><h2>执行结果</h2><span className="muted" style={{ fontSize: 12 }}>CSDN</span></div><RefreshBar resource={resource} /><div className="surface-body">
-        <div className="result-line"><strong>{outcomeText(job)}</strong>{remote && <a href={remote} target="_blank" rel="noopener noreferrer">查看CSDN草稿 <ArrowUpRight size={13} aria-hidden="true" /></a>}</div>
+        <div className="result-line"><strong>{jobOutcome(job)}</strong>{remote && <a href={remote} target="_blank" rel="noopener noreferrer">查看CSDN草稿 <ArrowUpRight size={13} aria-hidden="true" /></a>}</div>
         <dl className="detail-facts"><div><dt>当前步骤</dt><dd>{stageLabels[job.stage] || '步骤待确认'}</dd></div><div><dt>执行次数</dt><dd>{job.attempts ?? 0} 次</dd></div><div><dt>安全重试</dt><dd>{job.retry_count ?? 0} / {job.max_retries ?? 3} 次</dd></div><div><dt>创建时间</dt><dd>{time(job.created_at)}</dd></div><div><dt>最近确认</dt><dd>{time(job.updated_at)}</dd></div><div><dt>执行方式</dt><dd>{job.run_mode === 'reconcile' ? '自动查询草稿' : '保存草稿'}</dd></div>{job.remote_id && <div><dt>已关联草稿ID</dt><dd className="mono">{job.remote_id}</dd></div>}</dl>
         {job.error_message && <div className="notice error section-gap"><strong>最近错误</strong><p>{job.error_message}</p>{job.error_code && <p className="mono">{job.error_code}</p>}</div>}
       </div></section>
       <JobActions key={job.id} job={job} onUpdate={resource.refresh} />
       <div className="detail-history">
       {job.markdown !== undefined && <section className="surface section-gap"><div className="surface-header"><h2>已确认的原稿</h2></div><div className="surface-body"><pre className="snapshot">{job.markdown}</pre></div></section>}
-      <div className="section-gap"><Logs jobId={job.id} /></div>
+      <ContentComparison kind={job.kind} jobId={job.id} active={['queued','running','reconciling','waiting_user'].includes(job.status)} /><ProcessTimeline jobId={job.id} job={job} />
     </div></div>
   </div>;
 }
