@@ -52,6 +52,7 @@ export class CSDNAdapter {
   async run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult> {
     let external = job.external_started;
     let writesAllowed = false;
+    let saveTitleMismatch = false;
     let remoteID = numericID(job.remote_id);
     let pendingID: string | undefined;
     let queue = Promise.resolve();
@@ -87,7 +88,7 @@ export class CSDNAdapter {
     const observe = async (response: Response) => {
       try {
         const url = new URL(response.url());
-        const editorResponse = /\/editor\/(?:getArticle|saveArticle|autoSave)/i.test(url.pathname) || (this.fixture && url.pathname === '/acquired');
+        const editorResponse = /\/(?:mdeditor|editor)\/(?:getArticle|saveArticle|autoSave)/i.test(url.pathname) || (this.fixture && url.pathname === '/acquired');
         if (!editorResponse || !this.allowed(url.href) || response.status() !== 200) return;
         const length = response.headers()['content-length'];
         if (length && Number(length) > 1500000) return;
@@ -104,6 +105,14 @@ export class CSDNAdapter {
       signal.throwIfAborted();
       await this.context.route('**/*', route => {
         const request = route.request();
+        const target = new URL(request.url());
+        const draftSave = this.fixture ? target.origin === this.site.origin && target.pathname === '/save' :
+          ['https://bizapi.csdn.net', 'https://editor.csdn.net'].includes(target.origin) && /^\/blog-console-api\/v3\/(?:mdeditor|editor)\/(?:saveArticle|autoSave)$/.test(target.pathname);
+        if (writesAllowed && lastStage === 'saving' && request.method() === 'POST' && draftSave) {
+          let payload: { title?: unknown } | undefined;
+          try { payload = request.postDataJSON() as { title?: unknown }; } catch { /* 无法确认标题的请求不能写入平台。 */ }
+          if (payload?.title !== job.title) { saveTitleMismatch = true; return route.abort('blockedbyclient'); }
+        }
         const allowed = this.allowed(request.url()) && (writesAllowed || this.readOnlyRequest(request.url(), request.method()));
         return allowed ? route.continue() : route.abort('blockedbyclient');
       });
@@ -167,6 +176,10 @@ export class CSDNAdapter {
       await queue; if (checkpointFailure) throw checkpointFailure;
       await progress({ stage: 'filling', message: '正在填入任务快照' });
       await titleInput.fill(job.title);
+      await titleInput.press('Enter');
+      // 官方标题监听器延迟 100 毫秒同步保存状态，输入框值不代表同步已完成。
+      await page.waitForTimeout(150);
+      signal.throwIfAborted();
       await this.context.grantPermissions(['clipboard-write'], { origin: new URL(page.url()).origin });
       await page.evaluate(text => navigator.clipboard.writeText(text), job.markdown);
       try { await body.focus(); await page.keyboard.press('Control+A'); await page.keyboard.press('Control+V'); }
@@ -176,11 +189,13 @@ export class CSDNAdapter {
       await progress({ stage: 'saving', message: '正在保存平台草稿' });
       await save.click();
       const idDeadline = Date.now() + this.timeout;
-      while (!remoteID && Date.now() < idDeadline) { signal.throwIfAborted(); captureURL(); await queue; if (checkpointFailure) throw checkpointFailure; await sleep(50); }
+      while (!remoteID && Date.now() < idDeadline) { signal.throwIfAborted(); if (saveTitleMismatch) throw new AdapterFailure('adapter_mismatch'); captureURL(); await queue; if (checkpointFailure) throw checkpointFailure; await sleep(50); }
+      if (saveTitleMismatch) throw new AdapterFailure('adapter_mismatch');
       if (!remoteID) throw new AdapterFailure('timeout');
       // 保存按钮可能异步提交；重新载入前等待浏览器完成对应保存请求。
       await page.waitForLoadState('networkidle', { timeout: Math.min(this.timeout, 5000) }).catch(() => {});
       signal.throwIfAborted();
+      if (saveTitleMismatch) throw new AdapterFailure('adapter_mismatch');
       writesAllowed = false;
       await progress({ stage: 'verifying', message: '正在从平台重新读取草稿' });
       snapshotState.value = undefined;
