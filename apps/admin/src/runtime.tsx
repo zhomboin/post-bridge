@@ -6,7 +6,7 @@ export type Job = {
   id: string; request_id: string; platform: string; account_id: string; kind: string;
   title: string; markdown?: string; status: string; outcome: string; stage: string;
   attempts: number; retry_count: number; max_retries: number; retry_allowed: boolean;
-  external_started: boolean; article_id?: string; remote_id?: string; remote_url?: string; reconcile_candidate_id?: string;
+  external_started: boolean; integration_distribution_id?: string; article_id?: string; remote_id?: string; remote_url?: string; reconcile_candidate_id?: string;
   cancel_requested: boolean; manual_resolved?: boolean; error_code?: string; error_message?: string;
   reconcile_count?: number; auto_reconcile_started?: boolean; absence_checks?: number; available_at?: string;
   run_mode?: string; created_at: string; updated_at: string; started_at?: string; finished_at?: string;
@@ -26,7 +26,7 @@ export function errorText(error: unknown) {
 export const WorkspaceContext = createContext<{ api: Api; route: string; navigate: (path: string) => void }>({ api: async () => { throw Error('尚未登录'); }, route: '/', navigate: () => {} });
 export const useWorkspace = () => useContext(WorkspaceContext);
 export const statusLabels: Record<string, string> = {
-  queued: '排队中', running: '执行中', waiting_user: '等待登录', reconciling: '待核对',
+  queued: '排队中', running: '执行中', waiting_user: '等待处理', reconciling: '待核对',
   succeeded: '执行完成', failed: '执行失败', cancelled: '已取消', connected: '已连接',
   unchecked: '尚未检查', needs_login: '需要登录', blocked: '账号受限',
 };
@@ -35,8 +35,11 @@ export const stageLabels: Record<string, string> = {
   syncing_articles: '读取文章列表', reading_article: '读取文章正文',
   draft_acquired: '已取得草稿', filling: '填写正文', saving: '保存草稿', verifying: '核对结果', finished: '处理结束',
 };
-export function Status({ value, cancelling = false }: { value: string; cancelling?: boolean }) {
-  return <span aria-live="polite" aria-atomic="true" className={'status ' + (statusLabels[value] ? value : 'unknown')}>{cancelling ? '取消中' : statusLabels[value] || '未知状态'}</span>;
+export function isSourcePaused(job: Pick<Job, 'status' | 'error_code' | 'integration_distribution_id'>) {
+  return !!job.integration_distribution_id && job.status === 'waiting_user' && ['source_guard_failed', 'source_changed'].includes(job.error_code || '');
+}
+export function Status({ value, cancelling = false, label }: { value: string; cancelling?: boolean; label?: string }) {
+  return <span aria-live="polite" aria-atomic="true" className={'status ' + (statusLabels[value] ? value : 'unknown')}>{cancelling ? '取消中' : label || statusLabels[value] || '未知状态'}</span>;
 }
 export function time(value?: string) {
   if (!value) return '尚无记录';

@@ -59,8 +59,14 @@ def write_private(path, value):
 
 def validate_config(value):
     keys = ['DATABASE_URL', 'PUBLIC_ORIGIN', 'ADMIN_USERNAME', 'CSDN_USERNAME', 'CSDN_DISPLAY_NAME']
-    if not isinstance(value, dict) or set(value) != set(keys):
-        raise ValueError('请完整填写部署配置的五个字段，不添加其他环境变量')
+    optional = {'INTEGRATION_ENVIRONMENT', 'INTEGRATION_SERVICE_ID'}
+    if not isinstance(value, dict) or not set(keys) <= set(value) or not set(value) <= set(keys) | optional:
+        raise ValueError('请填写必要部署字段，只允许额外配置接入环境和服务标识')
+    selected = set(value) & optional
+    if selected and selected != optional:
+        raise ValueError('接入环境和服务标识必须同时配置')
+    if any(not isinstance(value[k], str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', value[k]) for k in selected):
+        raise ValueError('接入环境和服务标识格式无效')
     if any(not isinstance(value[k], str) or not value[k].strip() or any(c in value[k] for c in '\r\n\0') for k in keys):
         raise ValueError('配置字段不可为空或包含换行')
     origin = urllib.parse.urlsplit(value['PUBLIC_ORIGIN'])
@@ -108,6 +114,33 @@ def ensure_secrets(state=STATE):
         write_private(admin, secrets.token_urlsafe(32) + '\n')
 
 
+
+def ensure_integration_key(state=STATE, enabled=False, previously_enabled=False):
+    key = state / 'api/integration-master-key'
+    if not enabled:
+        return None
+    if key.is_symlink():
+        raise ValueError('接入存储密钥不能为符号链接')
+    if key.exists():
+        try:
+            raw = bytes.fromhex(key.read_text().strip())
+        except (OSError, ValueError):
+            raise ValueError('接入存储密钥损坏，需从受控备份恢复') from None
+        if not key.is_file() or key.stat().st_mode & 0o077 or len(raw) != 32:
+            raise ValueError('接入存储密钥必须是私有的32字节十六进制文件')
+    elif previously_enabled or (state / 'api/integration-key-initialized').exists():
+        raise ValueError('已有接入密钥缺失，停止升级；请先恢复原密钥')
+    else:
+        directory(state / 'api')
+        write_private(key, secrets.token_hex(32) + '\n')
+    marker = state / 'api/integration-key-initialized'
+    if marker.is_symlink():
+        raise ValueError('接入初始化标记不能为符号链接')
+    if not marker.exists():
+        write_private(marker, '1\n')
+    return key
+
+
 def environments(config):
     common = {'LANG': 'C.UTF-8', 'API_BASE_URL': 'http://127.0.0.1:18080',
               'CSDN_USERNAME': config['CSDN_USERNAME'], 'CSDN_DISPLAY_NAME': config['CSDN_DISPLAY_NAME']}
@@ -119,6 +152,8 @@ def environments(config):
     worker = {**common, 'WORKER_TOKEN_FILE': str(STATE / 'worker/worker-token'),
               'LOGIN_CONTROL_ADDR': '127.0.0.1:18081', 'CSDN_PROFILE_DIR': str(STATE / 'worker/profile'),
               'WORKER_HEADLESS': 'true', 'PLAYWRIGHT_BROWSERS_PATH': str(BROWSERS), 'HOME': str(STATE / 'worker')}
+    if config.get('INTEGRATION_ENVIRONMENT'):
+        api.update({'INTEGRATION_ENVIRONMENT': config['INTEGRATION_ENVIRONMENT'], 'INTEGRATION_SERVICE_ID': config['INTEGRATION_SERVICE_ID'], 'INTEGRATION_MASTER_KEY_FILE': str(STATE / 'api/integration-master-key')})
     return api, worker
 
 
@@ -336,10 +371,13 @@ def install(config_path, upgrade=False):
     directory(STATE, 0o711)
     users = {kind: service_user(kind) for kind in ['api', 'worker']}
     ensure_secrets()
+    previous_api = CONFIG / 'api.env'
+    previously_enabled = previous_api.is_file() and 'INTEGRATION_MASTER_KEY_FILE=' in previous_api.read_text()
+    integration_key = ensure_integration_key(STATE, bool(config.get('INTEGRATION_ENVIRONMENT')), previously_enabled)
     directory(STATE / 'worker/profile')
     for kind, user in users.items():
         os.chown(STATE / kind, user.pw_uid, user.pw_gid)
-        for name in (['admin-password', 'worker-token'] if kind == 'api' else ['worker-token', 'profile']):
+        for name in (['admin-password', 'worker-token'] + (['integration-master-key'] if integration_key else []) if kind == 'api' else ['worker-token', 'profile']):
             os.chown(STATE / kind / name, user.pw_uid, user.pw_gid)
     node, go = tools()
     release = INSTALL / 'releases' / (time.strftime('%Y%m%dT%H%M%S') + '-' + secrets.token_hex(4))

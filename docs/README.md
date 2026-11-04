@@ -1,20 +1,20 @@
 # 项目文档
 
-本项目提供 CSDN 草稿后台、统一平台账号工作台与独立任务执行流程，并继续推进三平台发布、CMS 对接和上线验收。当前已授权登录、草稿验证和账号文章只读操作；A01、A02 整体及完整首期尚未通过。
+本项目已提供 CSDN 文字 Markdown 草稿后台、平台账号工作台及 PostBridge 侧外部来源接入。本地验证覆盖注册、签名、平台稿确认、来源守卫和分发查询；实际 CMS 连接、跨网络生产、公开发布及其他平台仍待验收。完整首期尚未通过。
 
-- [需求规划](requirements.md)：项目范围、系统边界和验收要求。
-- [完整实施计划](implementation-plan.md)：五阶段任务、前置依赖、文件规划、测试与验收对应。
-- [CMS 主入口接入方案](cms-integration.md)：跨网络调用平台注册认证、双方接口与权限、改造范围、实施顺序和联调关口，功能待实施。
-- [平台能力与环境验证](platform-capabilities.md)：环境初检、统一清单、依赖缺口与用户配合事项。
-- [验收记录](acceptance.md)：阶段状态、检查证据与后续登记要求。
-- [管理后台与界面规范](admin-ui.md)：页面、发布信息、日志与界面验收要求。
-- [前端技能与使用规则](frontend-skills.md)：项目技能入口、官方来源与强制审阅流程。
-- [总体进度](progress.md)：交付状态与下一步工作。
-- [版本记录](version.md)：简要变更记录。
-- [贡献指南](../AGENTS.md)：开发、测试、文档与提交约定。
-
-- [本地开发与运行](development.md)：环境、PowerShell 入口、平台账号页签与草稿流程。
-- [CSDN 后台 API](api.md)：管理与执行器协议、权限和恢复规则。
-- [运维说明](operations.md)：进程清理、异常恢复、保留规则及方案参考。
-
-- [Ubuntu 无桌面部署](ubuntu-deployment.md)：安装、升级、systemd 常驻、HTTPS 与后台远程登录。
+- [需求规划](requirements.md)：完整范围、当前子范围和验收要求。
+- [总体进度](progress.md)：代码、本地、真实平台与生产状态。
+- [验收记录](acceptance.md)：实际运行证据及未验边界。
+- [版本记录](version.md)：简要变更。
+- [完整实施计划](implementation-plan.md)：阶段依赖与剩余工作。
+- [CMS 接入总体方案](cms-integration.md)：双方职责、流程、当前实现和调用方剩余工作。
+- [外部系统接入手册](external-integration.md)：注册、签名、指纹、可靠投递与来源状态要求。
+- [外部接口机器契约](../contracts/cms.openapi.yaml)：实际开放接口、模型和权限。
+- [后台及内部 API](api.md)：管理员、任务与执行器协议。
+- [管理后台规范](admin-ui.md)：界面规则、来源工作台与合成截图。
+- [平台能力](platform-capabilities.md)：各平台实际证据与限制。
+- [本地开发](development.md)：私有配置、启动、停止及本地验证。
+- [运维说明](operations.md)：来源暂停、密钥、恢复和保留。
+- [Ubuntu 部署](ubuntu-deployment.md)：安装升级、可选接入配置与生产边界。
+- [前端技能](frontend-skills.md)：设计与审阅要求。
+- [贡献指南](../AGENTS.md)：实际结构、测试和提交规范。

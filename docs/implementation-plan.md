@@ -6,7 +6,7 @@
 
 交付独立部署的多平台内容发布系统：管理员在中文后台预览分发稿、确认目标平台，服务器持久化执行 CSDN、知乎和小红书的发布任务，提供状态核对、日志及安全的登录验证入口，并与一个 CMS 可靠连接。
 
-依据：[需求规划](requirements.md)、[CMS 主入口接入方案](cms-integration.md)、[后台规范](admin-ui.md)、[前端技能要求](frontend-skills.md)和[贡献指南](../AGENTS.md)。需求是范围依据，后台规范是界面依据；本计划说明实施顺序。仓库包含三个应用单元、CSDN 草稿与账号文章只读接口、测试、CI 及 WSL 本地运行脚本。用户指定优先完成 CSDN 后台草稿链路，详细交付见[总体进度](progress.md)；未完成的全平台、CMS 与上线任务继续按本计划推进。下文涉及的扩展目录和部署产物按对应任务建立。
+依据：[需求规划](requirements.md)、[CMS 主入口接入方案](cms-integration.md)、[后台规范](admin-ui.md)、[前端技能要求](frontend-skills.md)和[贡献指南](../AGENTS.md)。需求是范围依据，后台规范是界面依据；本计划说明实施顺序。仓库包含三个应用单元、CSDN 草稿与账号文章只读接口、PostBridge 侧来源接入、测试、CI 及 WSL/Ubuntu 运行脚本。用户指定优先完成 CSDN 后台草稿链路，详细交付见[总体进度](progress.md)；来源文字草稿子范围已实现并本地验证；未完成的全平台、CMS 实际连接与上线任务继续按本计划推进。下文涉及的扩展目录和部署产物按对应任务建立。
 
 首期保持单管理员、单 CMS、每个平台一个账号；不增加团队收费、定时发布、AI 改写、批量搬运、自动更新或撤回外站文章。跨平台发布成功必须有分别验证的证据，不能用页面、草稿或模拟结果替代。
 
@@ -22,27 +22,26 @@ API 是数据库唯一业务写入入口。执行器通过独立内部身份领�
 
 技术依据：[PostgreSQL 队列式取锁](https://www.postgresql.org/docs/current/sql-select.html)、[Playwright 登录状态](https://playwright.dev/docs/auth)、[Vite](https://vite.dev/guide/)及 [systemd 服务](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)。平台发布能力仍以目标账号和部署环境实测为准。
 
-## 文件与职责规划
+## 文件与职责
 
-以下为拟建路径；阶段计划进一步列出文件和测试，文件可按责任拆分，不将全部逻辑集中在单文件。
+下表定位当前已存在的实现；素材、完整多平台转换等后续路径在对应未完成任务中建立，不把拟建目录当作已交付。
 
 | 路径 | 职责 |
 | --- | --- |
-| `apps/api/cmd/server/main.go`、`apps/api/go.mod` | API 启动、依赖及退出处理 |
-| `apps/api/internal/auth/`、`apps/api/internal/sources/`、`apps/api/internal/accounts/` | 管理员会话、内容来源权限与平台账号 |
-| `apps/api/internal/drafts/`、`apps/api/internal/jobs/`、`apps/api/internal/publications/` | 不可变快照、持久化任务、外站副本及核对 |
-| `apps/api/internal/media/`、`apps/api/internal/logs/`、`apps/api/internal/settings/` | 素材安全、日志检索、有限配置 |
-| `apps/api/migrations/` | 数据结构、约束、索引和升级迁移 |
-| `apps/admin/src/app/`、`apps/admin/src/components/`、`apps/admin/src/features/` | 后台路由、通用组件及按业务组织的页面 |
-| `apps/worker/src/runtime/`、`apps/worker/src/content/`、`apps/worker/src/adapters/` | 账号浏览器、内容转换及三个平台适配 |
-| `contracts/cms.openapi.yaml`、`contracts/worker.openapi.yaml` | 可校验的来源与执行器接口定义，属于机器配置 |
-| `tests/integration/`、`tests/e2e/`、`tests/fixtures/` | 跨服务、界面流程及不含真实账号的样例 |
-| `deploy/systemd/`、`deploy/nginx/`、`scripts/ubuntu_deploy.py` | 本地和生产服务拓扑、持久化及隔离 |
-| `package.json`、`package-lock.json`、`vitest.config.ts` | Node 工作区、中央集成测试及共享配置 |
-| `scripts/`、`.github/workflows/ci.yml` | PowerShell 入口、清理和 CI 全量验证 |
-| `docs/` | 平台能力、架构、接口、部署、运维及验收说明 |
+| [apps/api](../apps/api) | 平铺 Go API、任务队列与 PostgreSQL 表初始化 |
+| [来源身份与注册](../apps/api/integration_auth.go)、[注册管理](../apps/api/integration_registry.go)、[签名](../apps/api/integration_signature.go) | 独立外部身份、权限、密钥和调用认证 |
+| [来源内容](../apps/api/integration_content_store.go)、[实时检查](../apps/api/integration_source.go)、[执行守卫](../apps/api/integration_guard.go) | 快照修订、父分发、生命周期与写入前检查 |
+| [apps/admin/src](../apps/admin/src) | 平铺后台路由、页面、通用交互与来源工作台 |
+| [apps/worker/src](../apps/worker/src) | 固定 CSDN 浏览器执行、只读核对、账号与登录控制 |
+| [外部契约](../contracts/cms.openapi.yaml)、[共享向量](../tests/fixtures/integration-contract.json) | 当前来源接口和可校验合成数据 |
+| [tests/e2e](../tests/e2e)、[tests/runtime](../tests/runtime) | 跨服务、浏览器与启动部署安全验证 |
+| [deploy/systemd](../deploy/systemd)、[deploy/nginx](../deploy/nginx)、[Ubuntu 安装器](../scripts/ubuntu_deploy.py) | 常驻单元、HTTPS 入口与私有配置 |
+| [scripts](../scripts)、[CI](../.github/workflows/ci.yml) | PowerShell/WSL 入口、清理和全量验证 |
+| [docs](.) | 当前接口、能力、部署、运维、验收与剩余计划 |
 
 ## 顺序、依赖与阶段关口
+
+当前完成状态以[总体进度](progress.md)为准：B04—B06 与 D 的 PostBridge 文字草稿子范围已验证；不将双方 D01、C03 公开提交、C07、完整 D04 或 E 生产项标为完成。
 
 | 阶段计划 | 任务 | 进入条件 | 阶段通过条件 |
 | --- | --- | --- | --- |
@@ -54,7 +53,7 @@ API 是数据库唯一业务写入入口。执行器通过独立内部身份领�
 
 关键顺序：A01 → A02/A03/A04 → A05 → B01/B02 → B03—B09 → B10—B12 → C01—C03 → C04/C05/C06 → C07 → D04 → E04/E05。
 
-CMS 作为选平台、确认及摘要主入口，PostBridge 提供平台稿预览与异常处理。接入顺序为 D01 注册认证及业务契约冻结 → B04—B06 双向注册认证与接入基础 → D02/D03 双端实现 → D04 模拟验收 → CSDN 草稿及公开能力分层验收 → C07 后完整 D04。D01 的定义不等待 B04—B06 实现，完整接口验收仍依赖基础能力；真实外站写入必须同时具备可靠投递、生命周期处理与执行前检查。
+CMS 作为选平台、确认及摘要主入口，PostBridge 提供平台稿预览与异常处理。接入顺序为 D01 注册认证及业务契约冻结 → B04—B06 双向注册认证与接入基础 → D02/D03 双端实现 → D04 模拟验收 → CSDN 草稿及公开能力分层验收 → C07 后完整 D04。PostBridge 当前契约、B04—B06 草稿子范围和后台已交付；CMS 改造、双方共同审阅和联合验收仍待。真实外站写入必须同时具备可靠投递、生命周期处理与执行前检查。
 
 B 阶段接口稳定后，前端使用模拟接口可与执行器并行推进；D02、D03 可先基于模拟平台与 CMS 联调，最终 D04 必须等待 C07。E01 的部署结构在 B 建立，E 阶段完成生产加固，不能将环境可行性留到最后。并行任务必须使用各自分支和 `.worktrees/`，不要同时修改共享契约。
 

@@ -23,47 +23,49 @@ type CreateInput struct {
 	Markdown  string `json:"markdown"`
 }
 type Job struct {
-	ArticleID            string     `json:"article_id,omitempty"`
-	AccountUsername      string     `json:"account_username,omitempty"`
-	ID                   string     `json:"id"`
-	RequestID            string     `json:"request_id"`
-	Platform             string     `json:"platform"`
-	AccountID            string     `json:"account_id"`
-	Kind                 string     `json:"kind"`
-	Title                string     `json:"title"`
-	Markdown             string     `json:"markdown,omitempty"`
-	Status               string     `json:"status"`
-	Outcome              string     `json:"outcome"`
-	Stage                string     `json:"stage"`
-	Attempts             int        `json:"attempts"`
-	ReconcileCount       int        `json:"reconcile_count"`
-	AutoReconcileStarted bool       `json:"auto_reconcile_started"`
-	AbsenceChecks        int        `json:"absence_checks"`
-	LastAbsenceAt        time.Time  `json:"last_absence_at"`
-	RetryCount           int        `json:"retry_count"`
-	MaxRetries           int        `json:"max_retries"`
-	RunMode              string     `json:"run_mode"`
-	ExternalStarted      bool       `json:"external_started"`
-	RemoteID             string     `json:"remote_id"`
-	ReconcileCandidateID string     `json:"reconcile_candidate_id"`
-	ManualResolved       bool       `json:"manual_resolved"`
-	RemoteURL            string     `json:"remote_url"`
-	CancelRequested      bool       `json:"cancel_requested"`
-	ErrorCode            string     `json:"error_code"`
-	ErrorMessage         string     `json:"error_message"`
-	RetryAllowed         bool       `json:"retry_allowed"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
-	StartedAt            *time.Time `json:"started_at"`
-	FinishedAt           *time.Time `json:"finished_at"`
-	AvailableAt          time.Time  `json:"available_at"`
+	IntegrationDistributionID string     `json:"integration_distribution_id,omitempty"`
+	ArticleID                 string     `json:"article_id,omitempty"`
+	AccountUsername           string     `json:"account_username,omitempty"`
+	ID                        string     `json:"id"`
+	RequestID                 string     `json:"request_id"`
+	Platform                  string     `json:"platform"`
+	AccountID                 string     `json:"account_id"`
+	Kind                      string     `json:"kind"`
+	Title                     string     `json:"title"`
+	Markdown                  string     `json:"markdown,omitempty"`
+	Status                    string     `json:"status"`
+	Outcome                   string     `json:"outcome"`
+	Stage                     string     `json:"stage"`
+	Attempts                  int        `json:"attempts"`
+	ReconcileCount            int        `json:"reconcile_count"`
+	AutoReconcileStarted      bool       `json:"auto_reconcile_started"`
+	AbsenceChecks             int        `json:"absence_checks"`
+	LastAbsenceAt             time.Time  `json:"last_absence_at"`
+	RetryCount                int        `json:"retry_count"`
+	MaxRetries                int        `json:"max_retries"`
+	RunMode                   string     `json:"run_mode"`
+	ExternalStarted           bool       `json:"external_started"`
+	RemoteID                  string     `json:"remote_id"`
+	ReconcileCandidateID      string     `json:"reconcile_candidate_id"`
+	ManualResolved            bool       `json:"manual_resolved"`
+	RemoteURL                 string     `json:"remote_url"`
+	CancelRequested           bool       `json:"cancel_requested"`
+	ErrorCode                 string     `json:"error_code"`
+	ErrorMessage              string     `json:"error_message"`
+	RetryAllowed              bool       `json:"retry_allowed"`
+	CreatedAt                 time.Time  `json:"created_at"`
+	UpdatedAt                 time.Time  `json:"updated_at"`
+	StartedAt                 *time.Time `json:"started_at"`
+	FinishedAt                *time.Time `json:"finished_at"`
+	AvailableAt               time.Time  `json:"available_at"`
 }
 type record struct {
 	Job
-	Ready          bool
-	LeaseToken     string
-	LeaseExpiresAt time.Time
-	WorkerID       string
+	SourceGuardBlocked bool `json:"source_guard_blocked,omitempty"`
+	Ready              bool
+	LeaseToken         string
+	LeaseExpiresAt     time.Time
+	WorkerID           string
 }
 type Observation struct {
 	Phase    string `json:"phase"`

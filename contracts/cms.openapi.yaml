@@ -1,0 +1,4549 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PostBridge 外部内容接入契约",
+    "version": "1.0.0",
+    "description": "当前开放CSDN文字Markdown保存草稿。publish、图片、MDX和其他平台未开放。PostBridge侧实现不代表调用方CMS、真实平台端到端和生产已验收。部署origin由环境提供，契约不包含真实地址或凭据。"
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "tags": [
+    {
+      "name": "外部调用"
+    },
+    {
+      "name": "注册"
+    },
+    {
+      "name": "管理员接入管理"
+    }
+  ],
+  "paths": {
+    "/api/integrations/v1/registrations": {
+      "post": {
+        "operationId": "integration_1_post",
+        "summary": "持一次性邀请提交注册申请",
+        "tags": [
+          "注册"
+        ],
+        "security": [
+          {
+            "Invitation": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationIssued"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationInput"
+              }
+            }
+          }
+        },
+        "description": "注册不使用应用签名。邀请使用一次即消费；响应丢失后由管理员核对申请，不保证重复注册可重取结果。"
+      }
+    },
+    "/api/integrations/v1/clients/self/activate": {
+      "post": {
+        "operationId": "integration_2_post",
+        "summary": "用待激活密钥签名完成激活",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "description": "请求体不解析JSON，可为空；摘要仍覆盖空字节。新密钥激活后旧密钥进入最多十分钟交接期。"
+      }
+    },
+    "/api/integrations/v1/targets": {
+      "get": {
+        "operationId": "integration_3_get",
+        "summary": "读取当前授权的实际目标能力",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Targets"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "x-required-scope": "targets:read"
+      }
+    },
+    "/api/integrations/v1/preparations": {
+      "post": {
+        "operationId": "integration_4_post",
+        "summary": "创建或重取平台准备稿",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "相同请求的幂等返回。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preparation"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preparation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreparationInput"
+              }
+            }
+          }
+        },
+        "x-required-scope": "preparations:write",
+        "description": "同一client_id和request_id、相同规范化请求返回同一准备稿；首次201、重复200。有效期为创建后24小时与来源授权有效期中较早者。"
+      }
+    },
+    "/api/integrations/v1/preparations/{id}": {
+      "get": {
+        "operationId": "integration_5_get",
+        "summary": "读取准备稿与管理员确认结果",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preparation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ],
+        "x-required-scope": "preparations:read"
+      }
+    },
+    "/api/integrations/v1/distributions": {
+      "post": {
+        "operationId": "integration_6_post",
+        "summary": "提交已确认平台稿到草稿队列",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "相同请求的幂等返回。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Distribution"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Distribution"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DistributionInput"
+              }
+            }
+          }
+        },
+        "x-required-scope": "distributions:write",
+        "description": "首次接受202，幂等重投200。已有外站副作用、unknown、remote_id、有效租约或普通排队任务时拒绝新建；明确未写入且已取消或被来源守卫暂停的旧任务，可在当前授权与新的预览确认后安全取代，旧任务取消并清除正文但保留记录。不支持已有外站副本显式再次新建，不能靠换request_id绕过。接受不代表草稿已保存或公开发布。"
+      },
+      "get": {
+        "operationId": "integration_7_get",
+        "summary": "按稳定request_id恢复原分发结果",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Distribution"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "x-required-scope": "distributions:read",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integrations/v1/distributions/{id}": {
+      "get": {
+        "operationId": "integration_8_get",
+        "summary": "读取父分发和各平台子任务状态",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Distribution"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ],
+        "x-required-scope": "distributions:read"
+      }
+    },
+    "/api/integrations/v1/source-events": {
+      "post": {
+        "operationId": "integration_9_post",
+        "summary": "接收来源状态事件",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceEvent"
+              }
+            }
+          }
+        },
+        "x-required-scope": "source-events:write",
+        "description": "相同event_id相同请求不重复应用；同event_id不同内容返回409。文章级事件在相同state_seq表达相同实际状态时可忽略，即使event_id不同；同序列实际状态不同返回409。旧序列不回退最新状态，授权撤销独立按authorization_id记录。"
+      }
+    },
+    "/api/integration-invitations": {
+      "get": {
+        "operationId": "integration_10_get",
+        "summary": "列出最近100条邀请，不含令牌",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitations"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "integration_11_post",
+        "summary": "创建一次性注册邀请",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationIssued"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-registrations": {
+      "get": {
+        "operationId": "integration_12_get",
+        "summary": "列出最近100条注册申请",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registrations"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/integration-registrations/{id}/approve": {
+      "post": {
+        "operationId": "integration_13_post",
+        "summary": "审批并一次签发待激活密钥",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretIssued"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-registrations/{id}/reject": {
+      "post": {
+        "operationId": "integration_14_post",
+        "summary": "拒绝待审批申请",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-clients": {
+      "get": {
+        "operationId": "integration_15_get",
+        "summary": "列出最近100条应用，绝不含密钥",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clients"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/integration-clients/{id}": {
+      "get": {
+        "operationId": "integration_16_get",
+        "summary": "读取应用授权及反向来源配置",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "integration_17_put",
+        "summary": "更新当前授权与反向来源配置",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "更新授权版本。source_secret仅写，空值保留；响应不会回显密钥。"
+      }
+    },
+    "/api/integration-clients/{id}/rotate": {
+      "post": {
+        "operationId": "integration_18_post",
+        "summary": "一次签发待激活的新密钥",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretIssued"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "仅active或pending_activation应用；新密钥须激活，激活后旧active密钥最多保留十分钟。"
+      }
+    },
+    "/api/integration-clients/{id}/suspend": {
+      "post": {
+        "operationId": "integration_19_post",
+        "summary": "暂停应用",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-clients/{id}/resume": {
+      "post": {
+        "operationId": "integration_20_post",
+        "summary": "启用应用",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-clients/{id}/revoke": {
+      "post": {
+        "operationId": "integration_21_post",
+        "summary": "撤销应用",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-audit": {
+      "get": {
+        "operationId": "integration_22_get",
+        "summary": "读取最近100条接入审计",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audits"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-preparations": {
+      "get": {
+        "operationId": "integration_23_get",
+        "summary": "管理员分页读取准备稿摘要",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparationsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "prepared",
+                "confirmed",
+                "submitted",
+                "revoked",
+                "expired"
+              ]
+            }
+          }
+        ],
+        "description": "当前列表清空snapshot.body和drafts；完整内容只在受保护详情返回。"
+      }
+    },
+    "/api/integration-preparations/{id}": {
+      "get": {
+        "operationId": "integration_24_get",
+        "summary": "管理员读取准备稿详情",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preparation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "integration_25_put",
+        "summary": "保存平台稿的新不可变修订",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preparation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreparationEdit"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "以当前revision及draft.id作并发校验；保存生成新revision和draft_revision_ids，取消旧确认。submitted稿不可编辑。"
+      }
+    },
+    "/api/integration-preparations/{id}/confirm": {
+      "post": {
+        "operationId": "integration_26_post",
+        "summary": "确认指定平台稿修订",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preparation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Revision"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "返回confirmed、confirmation_fingerprint及draft_revision_ids；外部调用方须重新读取后原样透传提交。"
+      }
+    },
+    "/api/integration-preparations/{id}/revoke": {
+      "post": {
+        "operationId": "integration_27_post",
+        "summary": "撤销未提交的准备稿",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preparation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-distributions": {
+      "get": {
+        "operationId": "integration_28_get",
+        "summary": "管理员分页读取父分发记录",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DistributionsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "in_progress",
+                "needs_attention",
+                "completed"
+              ]
+            },
+            "description": "按聚合状态筛选后分页，total为筛选结果数量。"
+          }
+        ]
+      }
+    },
+    "/api/integration-distributions/{id}": {
+      "get": {
+        "operationId": "integration_29_get",
+        "summary": "管理员读取父分发详情",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Distribution"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/integration-distributions/{id}/resume": {
+      "post": {
+        "operationId": "integration_30_post",
+        "summary": "重新确认来源授权并恢复原任务",
+        "tags": [
+          "管理员接入管理"
+        ],
+        "security": [
+          {
+            "AdminSession": [],
+            "AdminCSRF": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Distribution"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "description": "必须与管理员部署origin完全相同。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "提交原confirmation_fingerprint并重新核验来源、授权和租约。原冻结正文缺失返回410，需新prepare和确认；接入应用不可用对管理员返回409 client_unavailable，不能导致管理员会话退出。未知结果不能重建。"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "Invitation": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Integration-Invitation",
+        "description": "一次性邀请令牌，仅用于注册。"
+      },
+      "AdminSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "post_bridge_session",
+        "description": "独立管理员会话；不能使用外部应用签名代替。"
+      },
+      "AdminCSRF": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "管理员写操作同时要求会话CSRF令牌与匹配部署origin的Origin头。"
+      },
+      "SignatureInput": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Signature-Input",
+        "description": "RFC 9421固定HMAC-SHA256 profile的一部分；六个头各恰好一个，需整体校验。"
+      },
+      "Signature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Signature",
+        "description": "RFC 9421固定HMAC-SHA256 profile的一部分；六个头各恰好一个，需整体校验。"
+      },
+      "ContentDigest": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Content-Digest",
+        "description": "RFC 9421固定HMAC-SHA256 profile的一部分；六个头各恰好一个，需整体校验。"
+      },
+      "IntegrationClient": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Integration-Client",
+        "description": "RFC 9421固定HMAC-SHA256 profile的一部分；六个头各恰好一个，需整体校验。"
+      },
+      "IntegrationEnvironment": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Integration-Environment",
+        "description": "RFC 9421固定HMAC-SHA256 profile的一部分；六个头各恰好一个，需整体校验。"
+      },
+      "IntegrationService": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Integration-Service",
+        "description": "RFC 9421固定HMAC-SHA256 profile的一部分；六个头各恰好一个，需整体校验。"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Scope": {
+        "type": "string",
+        "enum": [
+          "targets:read",
+          "preparations:write",
+          "preparations:read",
+          "distributions:write",
+          "distributions:read",
+          "source-events:write"
+        ]
+      },
+      "GrantOperation": {
+        "type": "string",
+        "enum": [
+          "save_draft",
+          "publish"
+        ],
+        "description": "publish仅是注册权限数据允许的保留值；当前能力和执行接口不开放公开发布。调用方应仅申请save_draft。"
+      },
+      "Target": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "const": "csdn",
+            "type": "string"
+          },
+          "account_id": {
+            "const": "csdn-main",
+            "type": "string",
+            "description": "当前执行器固定目标的系统标识。应从targets读取，不代表真实平台用户名。"
+          },
+          "operation": {
+            "const": "save_draft",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "account_id",
+          "operation"
+        ],
+        "additionalProperties": false
+      },
+      "InvitationInput": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "environment": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 100,
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantOperation"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rate_limit_per_minute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          },
+          "client_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "source_id",
+          "environment",
+          "scopes",
+          "accounts",
+          "operations",
+          "expires_at",
+          "rate_limit_per_minute",
+          "client_expires_at"
+        ],
+        "additionalProperties": false,
+        "description": "expires_at必须晚于当前时刻且不超过24小时；client_expires_at必须晚于当前时刻且不超过366天；environment必须匹配接收服务。"
+      },
+      "InvitationIssued": {
+        "type": "object",
+        "properties": {
+          "invitation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "invitation_token": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "writeOnly": false,
+            "description": "仅创建响应返回一次，不得写入URL、日志或仓库。"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "invitation_token",
+          "expires_at"
+        ],
+        "additionalProperties": false
+      },
+      "Invitation": {
+        "type": "object",
+        "properties": {
+          "invitation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "environment": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantOperation"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rate_limit_per_minute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          },
+          "client_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "consumed",
+              "expired"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "invitation_id",
+          "source_id",
+          "environment",
+          "scopes",
+          "accounts",
+          "operations",
+          "expires_at",
+          "rate_limit_per_minute",
+          "client_expires_at",
+          "status",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "RegistrationInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "environment": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantOperation"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "仅HTTPS公网来源根地址，无用户信息、路径、查询和片段，仅默认HTTPS端口。"
+          }
+        },
+        "required": [
+          "name",
+          "environment",
+          "source_id",
+          "scopes",
+          "accounts",
+          "operations",
+          "source_url"
+        ],
+        "additionalProperties": false
+      },
+      "RegistrationIssued": {
+        "type": "object",
+        "properties": {
+          "registration_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "status": {
+            "type": "string",
+            "const": "pending"
+          }
+        },
+        "required": [
+          "registration_id",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "Registration": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "environment": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantOperation"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "仅HTTPS公网来源根地址，无用户信息、路径、查询和片段，仅默认HTTPS端口。"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "environment",
+          "source_id",
+          "scopes",
+          "accounts",
+          "operations",
+          "source_url",
+          "id",
+          "status",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "GrantInput": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "description": "更新时可指定来源；审批时不得超出邀请来源。"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantOperation"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rate_limit_per_minute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          },
+          "source_url": {
+            "type": "string",
+            "description": "来源HTTPS公网根地址；空值保留已有地址。"
+          },
+          "source_client_id": {
+            "type": "string",
+            "description": "反向调用来源服务使用的client_id。"
+          },
+          "source_key_id": {
+            "type": "string"
+          },
+          "source_service_id": {
+            "type": "string"
+          },
+          "source_environment": {
+            "type": "string"
+          },
+          "source_secret": {
+            "type": "string",
+            "writeOnly": true,
+            "description": "调用方来源服务签发的32字节密钥的标准Base64；仅写入，空值保留已有密钥。"
+          }
+        },
+        "required": [
+          "scopes",
+          "accounts",
+          "operations",
+          "expires_at",
+          "rate_limit_per_minute"
+        ],
+        "additionalProperties": false,
+        "description": "权限、账号、操作与到期时间不得超出邀请审批上限。来源身份四字段如任一非空，则四项均须为有效标识。应用有效期最多366天。"
+      },
+      "Client": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "environment": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "service_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_activation",
+              "active",
+              "suspended",
+              "revoked"
+            ]
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantOperation"
+            },
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rate_limit_per_minute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          },
+          "grant_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "source_url": {
+            "type": "string",
+            "description": "来源HTTPS公网根地址；空值保留已有地址。"
+          },
+          "source_client_id": {
+            "type": "string",
+            "description": "反向调用来源服务使用的client_id。"
+          },
+          "source_key_id": {
+            "type": "string"
+          },
+          "source_service_id": {
+            "type": "string"
+          },
+          "source_environment": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "source_id",
+          "environment",
+          "service_id",
+          "status",
+          "scopes",
+          "accounts",
+          "operations",
+          "expires_at",
+          "rate_limit_per_minute",
+          "grant_version",
+          "source_url",
+          "source_client_id",
+          "source_key_id",
+          "source_service_id",
+          "source_environment"
+        ],
+        "additionalProperties": false
+      },
+      "SecretIssued": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "key_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "仅此次响应返回，标准Base64编码的随机32字节HMAC密钥；签名使用解码后的字节。"
+          },
+          "status": {
+            "type": "string",
+            "const": "pending_activation"
+          }
+        },
+        "required": [
+          "client_id",
+          "key_id",
+          "client_secret",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "Audit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "client_id",
+          "action",
+          "actor",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "Capability": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string",
+            "const": "csdn"
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "last_checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "const": "save_draft"
+            }
+          },
+          "body_formats": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "const": "markdown"
+            }
+          },
+          "images": {
+            "type": "boolean",
+            "const": false
+          },
+          "title_min": {
+            "type": "integer",
+            "const": 5
+          },
+          "title_max": {
+            "type": "integer",
+            "const": 100
+          },
+          "body_max": {
+            "type": "integer",
+            "const": 200000
+          }
+        },
+        "required": [
+          "platform",
+          "account_id",
+          "display_name",
+          "status",
+          "last_checked_at",
+          "operations",
+          "body_formats",
+          "images",
+          "title_min",
+          "title_max",
+          "body_max"
+        ],
+        "additionalProperties": false
+      },
+      "Asset": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "checksum": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "checksum"
+        ],
+        "additionalProperties": false
+      },
+      "SnapshotInput": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 100,
+            "description": "标题先去除首尾空白再验证；按Unicode字符计数。"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 200000,
+            "description": "非空文字Markdown；围栏之外禁止图片、HTML、MDX/import/export及花括号。不得含NUL。"
+          },
+          "body_format": {
+            "type": "string",
+            "const": "markdown"
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "cover_image_url": {
+            "type": "string",
+            "const": ""
+          },
+          "assets": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            }
+          },
+          "original_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "可选展示链接；仅http/https且无用户信息；不参与内容指纹。"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "body_format"
+        ],
+        "additionalProperties": false
+      },
+      "Snapshot": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "body_format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              ""
+            ]
+          },
+          "tags": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "cover_image_url": {
+            "type": "string"
+          },
+          "assets": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Asset"
+            }
+          },
+          "original_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "summary",
+          "body",
+          "body_format",
+          "tags",
+          "cover_image_url",
+          "assets"
+        ],
+        "additionalProperties": false,
+        "description": "详情返回来源快照；失效、撤销或保留期清理后可为空字段，tags/assets可为null。管理员列表不返回正文。"
+      },
+      "Draft": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "platform": {
+            "type": "string",
+            "const": "csdn"
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "operation": {
+            "type": "string",
+            "const": "save_draft"
+          },
+          "title": {
+            "type": "string"
+          },
+          "markdown": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "platform",
+          "account_id",
+          "operation",
+          "title",
+          "markdown",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "DraftEdit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "platform": {
+            "type": "string",
+            "const": "csdn"
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "operation": {
+            "type": "string",
+            "const": "save_draft"
+          },
+          "title": {
+            "type": "string"
+          },
+          "markdown": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "platform",
+          "account_id",
+          "operation",
+          "title",
+          "markdown"
+        ],
+        "additionalProperties": false
+      },
+      "PreparationInput": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "article_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "state_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "authorization_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "authorization_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "content_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SnapshotInput"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            },
+            "minItems": 1,
+            "maxItems": 1
+          }
+        },
+        "required": [
+          "request_id",
+          "source_id",
+          "article_id",
+          "source_version",
+          "state_seq",
+          "authorization_id",
+          "authorization_expires_at",
+          "content_fingerprint",
+          "snapshot",
+          "targets"
+        ],
+        "additionalProperties": false
+      },
+      "Preparation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "client_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "article_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "state_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "authorization_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "authorization_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "content_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/Snapshot"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            },
+            "minItems": 1,
+            "maxItems": 1
+          },
+          "drafts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Draft"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "draft_revision_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          "confirmation_fingerprint": {
+            "type": "string",
+            "description": "确认后服务端生成；提交时原样透传，不由调用方重算。未确认时为空。"
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "prepared",
+              "confirmed",
+              "submitted",
+              "revoked",
+              "expired"
+            ]
+          },
+          "grant_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "preview_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "受管理员会话保护的预览页。签名身份不能代替管理员确认。"
+          }
+        },
+        "required": [
+          "id",
+          "client_id",
+          "request_id",
+          "source_id",
+          "article_id",
+          "source_version",
+          "state_seq",
+          "authorization_id",
+          "authorization_expires_at",
+          "content_fingerprint",
+          "snapshot",
+          "targets",
+          "drafts",
+          "revision",
+          "draft_revision_ids",
+          "confirmation_fingerprint",
+          "confirmed",
+          "status",
+          "grant_version",
+          "expires_at",
+          "created_at",
+          "preview_url"
+        ],
+        "additionalProperties": false
+      },
+      "PreparationEdit": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "drafts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftEdit"
+            },
+            "minItems": 1,
+            "maxItems": 1
+          }
+        },
+        "required": [
+          "revision",
+          "drafts"
+        ],
+        "additionalProperties": false
+      },
+      "Revision": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "DistributionInput": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "article_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "state_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "content_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "preparation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "draft_revision_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            },
+            "minItems": 1,
+            "maxItems": 1
+          },
+          "confirmation_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            },
+            "minItems": 1,
+            "maxItems": 1
+          }
+        },
+        "required": [
+          "request_id",
+          "source_id",
+          "article_id",
+          "source_version",
+          "state_seq",
+          "content_fingerprint",
+          "preparation_id",
+          "draft_revision_ids",
+          "confirmation_fingerprint",
+          "targets"
+        ],
+        "additionalProperties": false
+      },
+      "DistributionChild": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_user",
+              "reconciling",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "external_status": {
+            "type": "string",
+            "enum": [
+              "not_submitted",
+              "draft_saved",
+              "unknown"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "last_confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "remote_id": {
+            "type": "string"
+          },
+          "remote_url": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error_message": {
+            "type": "string"
+          },
+          "detail_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "id",
+          "platform",
+          "account_id",
+          "operation",
+          "status",
+          "external_status",
+          "outcome",
+          "last_confirmed_at",
+          "remote_id",
+          "remote_url",
+          "error_code",
+          "error_message",
+          "detail_url"
+        ],
+        "additionalProperties": false
+      },
+      "Distribution": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "client_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "article_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "preparation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "state_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "content_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "confirmation_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "grant_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            }
+          },
+          "job_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "in_progress",
+              "needs_attention"
+            ]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DistributionChild"
+            }
+          },
+          "completed_children": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "resume_allowed": {
+            "type": "boolean",
+            "description": "仅管理员根据此字段提供重新确认来源授权后恢复原任务的操作。"
+          },
+          "detail_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "id",
+          "client_id",
+          "source_id",
+          "article_id",
+          "request_id",
+          "preparation_id",
+          "source_version",
+          "state_seq",
+          "content_fingerprint",
+          "confirmation_fingerprint",
+          "grant_version",
+          "targets",
+          "job_ids",
+          "created_at",
+          "status",
+          "children",
+          "completed_children",
+          "resume_allowed",
+          "detail_url"
+        ],
+        "additionalProperties": false
+      },
+      "ResumeInput": {
+        "type": "object",
+        "properties": {
+          "confirmation_fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "confirmation_fingerprint"
+        ],
+        "additionalProperties": false
+      },
+      "SourceEvent": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "article_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "state_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "published",
+              "updated",
+              "unpublished",
+              "private",
+              "deleted",
+              "authorization_revoked"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "与type组合遵循手册中的来源事件表。"
+          },
+          "authorization_id": {
+            "type": "string"
+          },
+          "authorization_valid": {
+            "type": "boolean"
+          },
+          "content_fingerprint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "source_id",
+          "article_id",
+          "state_seq",
+          "source_version",
+          "type",
+          "status",
+          "authorization_valid"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "authorization_revoked"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "authorization_id"
+              ],
+              "properties": {
+                "authorization_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "authorization_valid": {
+                  "const": false
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "published"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "content_fingerprint"
+              ],
+              "properties": {
+                "status": {
+                  "const": "published"
+                },
+                "authorization_valid": {
+                  "const": true
+                },
+                "content_fingerprint": {
+                  "type": "string",
+                  "minLength": 64,
+                  "maxLength": 64
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "updated"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "content_fingerprint"
+              ],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "draft",
+                    "published"
+                  ]
+                },
+                "content_fingerprint": {
+                  "type": "string",
+                  "minLength": 64,
+                  "maxLength": 64
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "unpublished",
+                    "private",
+                    "deleted"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "authorization_valid": {
+                  "const": false
+                }
+              }
+            }
+          }
+        ],
+        "description": "authorization_revoked必须指定authorization_id，只撤销该授权且不可重用；unpublished/private/deleted作用整篇文章。同序列比较文章实际状态，不因不同event_id本身冲突。"
+      },
+      "EventReceipt": {
+        "type": "object",
+        "properties": {
+          "received": {
+            "type": "boolean",
+            "const": true
+          },
+          "applied": {
+            "type": "boolean",
+            "description": "重复或旧序列可返回false，仍表示已接收。"
+          }
+        },
+        "required": [
+          "received",
+          "applied"
+        ],
+        "additionalProperties": false
+      },
+      "SourceState": {
+        "type": "object",
+        "properties": {
+          "article_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "state_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "private",
+              "deleted"
+            ]
+          },
+          "content_fingerprint": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authorization_valid": {
+            "type": "boolean"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "article_id",
+          "source_version",
+          "state_seq",
+          "status",
+          "content_fingerprint",
+          "authorization_valid",
+          "allowed",
+          "accounts",
+          "operations"
+        ],
+        "additionalProperties": false,
+        "description": "由调用方实现的反向状态响应。所有九个字段必须出现、不能为null，不允许重复或未知字段，不允许多个JSON值。允许执行还需published、指纹相同、state_seq达到请求方所需序列、授权及目标允许。"
+      },
+      "Targets": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Invitations": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Invitation"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Registrations": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Registration"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Clients": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Client"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Audits": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Audit"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "PreparationsPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Preparation"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "additionalProperties": false
+      },
+      "DistributionsPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Distribution"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "Error400": {
+        "description": "invalid_request：字段、JSON或业务校验失败。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error401": {
+        "description": "unauthorized：签名、邀请、密钥、时钟、nonce或会话无效。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error403": {
+        "description": "forbidden / csrf_failed：权限、账号、操作或管理员请求验证不满足。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error404": {
+        "description": "not_found：对象不存在或不属于当前应用。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error409": {
+        "description": "conflict / source_changed / client_unavailable：业务标识、确认、来源状态或管理员操作的接入应用不可用；client_unavailable不表示管理员会话失效。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error410": {
+        "description": "preparation_expired：准备稿过期、撤销或不可修改。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error413": {
+        "description": "request_too_large：外部请求超过1MiB。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error422": {
+        "description": "unsupported_content：不支持的正文或目标操作。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error429": {
+        "description": "rate_limited：固定分钟窗口限流，Retry-After为60秒。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "string",
+              "const": "60"
+            }
+          }
+        }
+      },
+      "Error500": {
+        "description": "internal_error：内部错误。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Error503": {
+        "description": "source_unavailable / integration_disabled：来源核验不可用或接入未配置。",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-signature-profile": {
+    "standard": "RFC 9421固定profile",
+    "label": "sig1",
+    "algorithm": "hmac-sha256",
+    "components": [
+      "@method",
+      "@target-uri",
+      "content-digest",
+      "x-integration-client",
+      "x-integration-environment",
+      "x-integration-service"
+    ],
+    "parameters": [
+      "created",
+      "keyid",
+      "nonce",
+      "alg"
+    ],
+    "created_tolerance_seconds": 300,
+    "nonce_retention_seconds": 601,
+    "body_limit_bytes": 1048576,
+    "description": "Signature-Input严格固定字段及参数顺序。标准Base64编码摘要和HMAC。签名正文为原始请求字节，GET也摘要空正文。target-uri为部署HTTPS origin加原始RequestURI，查询顺序及编码不得重写。"
+  },
+  "x-caller-contract": {
+    "description": "以下接口由调用方CMS实现，不是本仓库提供的PostBridge路由。反向注册的具体HTTP路由由调用方自行定义；调用方签发独立身份与密钥，管理员写入source_*配置。",
+    "paths": {
+      "/api/v1/integrations/postbridge/articles/{article_id}/distribution-state": {
+        "get": {
+          "summary": "调用方提供的权威文章分发状态",
+          "security": [
+            {
+              "SignatureInput": [],
+              "Signature": [],
+              "ContentDigest": [],
+              "IntegrationClient": [],
+              "IntegrationEnvironment": [],
+              "IntegrationService": []
+            }
+          ],
+          "parameters": [
+            {
+              "name": "article_id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            {
+              "name": "authorization_id",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "preparation_id",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "account_id",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "operation",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "const": "save_draft"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "必须返回Content-Type application/json，完整且唯一的九个字段，无额外字段。",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SourceState"
+                  }
+                }
+              }
+            }
+          },
+          "description": "反向请求签名使用source_*身份和调用方签发的独立secret。禁止跳转；总时限3秒，响应上限64KiB；来源必须解析为可访问的公网HTTPS地址。"
+        }
+      }
+    }
+  },
+  "x-content-fingerprint-profile": {
+    "hash": "sha256-lowercase-hex",
+    "encoding": "UTF-8",
+    "serialization": "紧凑JSON，无尾随换行，不额外转义HTML字符；Go encoding/json 字符串转义语义",
+    "normalization": [
+      "title去首尾空白",
+      "body的CRLF和CR统一LF",
+      "nil tags和assets转为空数组",
+      "其余字符串和数组顺序不变，不做Unicode归一化"
+    ],
+    "array_fields_in_order": [
+      "固定字符串postbridge-content-v1",
+      "title",
+      "summary",
+      "body",
+      "body_format",
+      "tags",
+      "cover_image_url",
+      "assets"
+    ],
+    "asset_object_fields_in_order": [
+      "id",
+      "checksum"
+    ],
+    "excluded_fields": [
+      "original_url"
+    ]
+  },
+  "x-confirmation-fingerprint-profile": {
+    "producer": "PostBridge",
+    "caller_action": "从确认响应原样透传，调用方不重算",
+    "array_fields_in_order": [
+      "固定字符串postbridge-confirmation-v1",
+      "id",
+      "revision",
+      "content_fingerprint",
+      "targets",
+      "drafts",
+      "grant_version"
+    ],
+    "target_object_fields_in_order": [
+      "platform",
+      "account_id",
+      "operation"
+    ],
+    "draft_object_fields_in_order": [
+      "id",
+      "platform",
+      "account_id",
+      "operation",
+      "title",
+      "markdown",
+      "revision"
+    ]
+  },
+  "x-rate-limits": {
+    "window_seconds": 60,
+    "business_and_activation_preauth": {
+      "shared_global_per_minute": 2400,
+      "per_connection_source_ip_per_minute": 600,
+      "ip_source": "连接RemoteAddr，不信任X-Forwarded-For",
+      "shared_across_instances": true,
+      "denial_audit": "超过前置限流不逐请求写拒绝审计",
+      "counter_bound": "最多limit+1，全局饱和不新增IP维度"
+    },
+    "client_quota": {
+      "per_minute_minimum": 1,
+      "per_minute_maximum": 600,
+      "independent_of_preauth": true
+    },
+    "registration": {
+      "global_per_minute": 120,
+      "per_connection_source_ip_per_minute": 10,
+      "per_invitation_per_minute": 10
+    },
+    "retry_after_seconds": 60,
+    "reverse_proxy_note": "同一反向代理连接源地址可能共享每IP上限"
+  },
+  "x-conformance-vectors": {
+    "file": "../tests/fixtures/integration-contract.json",
+    "synthetic": true,
+    "go_test": "TestIntegrationSharedContractVectors",
+    "purpose": "调用方跨语言自测签名、Content-Digest和内容指纹；向量中的密钥仅供合成测试"
+  },
+  "x-copy-replacement-policy": {
+    "reject_if_any": [
+      "有效领取租约",
+      "已开始外站副作用",
+      "outcome=unknown",
+      "已有remote_id",
+      "普通queued/running等未取消任务"
+    ],
+    "allow_only_unwritten": [
+      "cancelled",
+      "来源守卫阻止的waiting_user"
+    ],
+    "requires": [
+      "当前有效授权",
+      "新的平台稿预览与确认",
+      "服务端事务核验所有旧任务"
+    ],
+    "effect": "安全取代的旧来源暂停任务改为cancelled，清正文与采集快照，保留父分发与关联记录",
+    "existing_remote_copy_recreate": false
+  }
+}

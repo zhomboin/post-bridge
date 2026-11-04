@@ -21,13 +21,16 @@ import (
 )
 
 type Config struct {
-	Store          *Store
-	AdminUsername  string
-	AdminPassword  string
-	WorkerToken    string
-	Origin         string
-	AdminDistDir   string
-	RemoteLoginURL string
+	Store                  *Store
+	AdminUsername          string
+	AdminPassword          string
+	WorkerToken            string
+	Origin                 string
+	AdminDistDir           string
+	RemoteLoginURL         string
+	IntegrationMasterKey   string
+	IntegrationEnvironment string
+	IntegrationServiceID   string
 }
 type handler struct {
 	store            *Store
@@ -38,6 +41,7 @@ type handler struct {
 	secure           bool
 	dist             string
 	mux              *http.ServeMux
+	integrations     *IntegrationService
 	remoteLoginProxy *remoteLoginProxy
 	attempts         map[string]loginWindow
 	mu               sync.Mutex
@@ -72,6 +76,17 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 	h.routes()
 	h.remoteLoginRoutes()
 	h.articleRoutes()
+	if cfg.IntegrationMasterKey != "" {
+		h.integrations, err = NewIntegrationService(cfg.Store, cfg.IntegrationMasterKey, cfg.IntegrationEnvironment, cfg.IntegrationServiceID, cfg.Origin)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Store.integrations = h.integrations
+		h.integrations.RegisterRoutes(h)
+	} else {
+		h.disabledIntegrationRoutes()
+	}
+	h.integrationRoutes()
 	return h, nil
 }
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

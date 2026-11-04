@@ -8,7 +8,7 @@
 
 ## B01：工程、契约与 CI 基础
 
-前置：A05。拟建：`package.json`、`package-lock.json`、`vitest.config.ts`、`.env.example`、`apps/api/go.mod`、`apps/api/cmd/server/main.go`、`apps/admin/package.json`、`apps/worker/package.json`、各锁文件、`contracts/cms.openapi.yaml`、`contracts/worker.openapi.yaml`、`deploy/compose.yaml`、`scripts/dev.ps1`、`scripts/test.ps1`、`scripts/stop.ps1`、`.github/workflows/ci.yml`、`docs/development.md`。
+前置：A05。当前已存在根 Node 工作区、[Go API](../../apps/api)、[后台](../../apps/admin)、[执行器](../../apps/worker)、[来源机器契约](../../contracts/cms.openapi.yaml)、[启动脚本](../../scripts/dev.ps1)、[停止脚本](../../scripts/stop.ps1)、[CI](../../.github/workflows/ci.yml)及[开发说明](../development.md)。内部 worker 机器契约和完整多平台工程关口继续按未完成范围推进，不使用拟建 internal 目录替代实际文件定位。
 
 - [ ] 核实并固定技术版本、镜像和依赖许可；确定 Go、前端和执行器测试工具及 PowerShell Core 运行方式。
 - [ ] 先写独立 API 健康检查、前端可加载、执行器心跳和非法配置启动失败的最小冒烟用例，确认失败。
@@ -45,44 +45,47 @@
 
 ## B04：来源登记与受限接口
 
-接口设计先由 D01 冻结，职责、拟定路径与 CMS 实际文件见[接入方案](../cms-integration.md)；D01 定义不依赖本项实现完成。实现完成后再做双方契约联调。
+当前 PostBridge 侧 CSDN 文字草稿子范围已实现，准确协议见[外部手册](../external-integration.md)及[OpenAPI](../../contracts/cms.openapi.yaml)。CMS 自身反向注册与来源状态服务仍由 CMS 项目实施。
 
-前置：B02、B03。拟建：`apps/api/internal/sources/service.go`、`sources/http.go`、`sources/status_client.go`、`tests/fixtures/source-server.ts`；维护来源契约。
+实际文件：[integration_auth.go](../../apps/api/integration_auth.go)、[integration_registry.go](../../apps/api/integration_registry.go)、[integration_signature.go](../../apps/api/integration_signature.go)、[integration_source.go](../../apps/api/integration_source.go)。
 
-- [ ] 测试未注册、邀请无效或重复、待审批、未激活、身份伪造、跨来源或环境、越权账号操作、重放、过期及撤销，所有业务读写均默认拒绝。
-- [ ] 实现受邀注册、管理员审批、凭据一次安全签发、持有证明激活、权限变更复审、轮换、暂停与撤销；双向、环境和接收服务分别登记授权，秘密受控加密保存。
-- [ ] 按接入方案固定 HTTP 消息签名和权限校验链，覆盖身份、接收服务、目标、正文与时间；防重放记录跨实例和重启有效，不可用拒绝访问；验证代理、时钟及轮换边界。
-- [ ] 接收及每次新增外站写入前，按冻结目标复查当前应用、凭据、接口、来源、账号和 operation 权限；失效或缩权暂停，重新授权后需用户确认并恢复原任务，已开始操作只核对；测试排队后缩权与正常轮换，不新建副本。
-- [ ] 出站地址须审批，不主动探测注册申请中的任意地址；权限、环境和地址变更不得由业务请求自报生效。
-- [ ] 固定获取目标、准备稿、提交、查询与状态通知的输入输出和错误约定；明确请求身份和内容冲突。
-- [ ] 实现执行前原稿状态检查客户端及可控模拟来源，验证状态、版本、指纹、state_seq 与授权；首次外站写入前和最终公开提交前实时检查，不读 CMS 数据库，不使用公开缓存代替。
-- [ ] 将接口说明写入 `docs/cms-integration.md`，仅引用契约文件，不复制接口实现代码。
+- [x] 实现受邀注册、审批、一次密钥签发、激活、权限更新、轮换、暂停和撤销；身份、环境与接收服务分别绑定。
+- [x] 固定签名与正文摘要、时间窗口、共享 nonce、前置及应用配额；认证和限流存储不可用时拒绝。
+- [x] 校验 scope、来源、账号、操作与资源归属；来源身份不能访问管理、执行器或浏览器接口。
+- [x] 来源根地址经管理员审批；反向 HTTPS 请求限制实际 DNS/连接地址、跳转、大小和时限。
+- [x] 草稿关键写入前实时复核来源与授权；来源暂停需重新确认后恢复原任务，未知结果只读核对。
+- [x] 用真实隔离数据库及合成来源测试重放、越权、轮换、缩权、失效、迟到状态与不可达边界。
+- [ ] CMS 实现反向身份与权威状态接口，双方完成实际 HTTPS 联通。
+- [ ] 图片、公开提交和其他平台能力完成后扩展对应授权与写入边界。
 
-测试定位：`apps/api/internal/sources/service_test.go`、`tests/integration/source-auth.test.ts`。通过：测试来源可独立接入，来源凭据不能管理账号、浏览器和日志。
+测试定位：[integration_auth_test.go](../../apps/api/integration_auth_test.go)、[integration_signature_test.go](../../apps/api/integration_signature_test.go)、[integration_source_test.go](../../apps/api/integration_source_test.go)。B04 当前草稿服务端子范围完成，双方完整关口仍依赖 D。
 
 ## B05：不可变快照与确认流程
 
-前置：B02、B04。拟建：`apps/api/internal/drafts/service.go`、`drafts/fingerprint.go`、`drafts/http.go`；平台转换先使用明确标注的模拟实现，C01 替换为真实转换。
+实际文件：[integration_content.go](../../apps/api/integration_content.go)、[integration_content_store.go](../../apps/api/integration_content_store.go)、[integration_content_http.go](../../apps/api/integration_content_http.go)、[IntegrationDraft.tsx](../../apps/admin/src/IntegrationDraft.tsx)。
 
-- [ ] 测试未经授权草稿、私有原稿、预览到期、撤销授权、跨页编辑、指纹不符及重复提交。
-- [ ] 存储来源快照和平台稿修订，确认绑定不可变修订、内容指纹、目标账号及 operation；修改内容或目标操作必须重新确认，草稿授权不得升级为公开发布。
-- [ ] 区分文章版本、事件序号和内容指纹，接受正式发布只改变状态版本但内容相同的合法情况。
-- [ ] 正式提交前验证来源发布成功、已确认稿和允许目标；在同一事务冻结内容并建立请求身份。
-- [ ] 实现预览到期及撤销清理，提交快照按保留策略管理；保留已发布副本必要关联并取消未提交任务。
+- [x] 保存来源快照与独立平台稿；编辑生成新修订和稿件标识，不覆盖旧确认。
+- [x] 确认绑定来源内容指纹、平台稿修订、目标账号、操作和授权版本；提交仅接受当前确认。
+- [x] 区分内容版本、状态序列和指纹，校验纯状态变化、指纹变化及同标识冲突。
+- [x] 来源已发布且当前允许时事务创建分发与子任务；已提交稿不可修改。
+- [x] 对未提交稿实行有效期与撤销清理，未知结果和活跃任务保留必要内容。
+- [ ] CMS 侧实现发布与待发送事务，联合验证私有/未授权内容不外传及确认一致性。
+- [ ] 图片、MDX 和其他平台的结构化转换及预览按 C01/C02 继续实施。
 
-测试定位：`apps/api/internal/drafts/service_test.go`、`tests/integration/draft-confirmation.test.ts`。通过：确认内容不能被另一页面或来源状态变化静默替换。
+测试定位：[integration_content_test.go](../../apps/api/integration_content_test.go)、[integration_content_http_test.go](../../apps/api/integration_content_http_test.go)、[Integrations.test.tsx](../../apps/admin/tests/Integrations.test.tsx)。已交付文字草稿修订确认子范围，不代表全部内容转换完成。
 
 ## B06：持久化调度与任务隔离
 
-前置：B02、B04、B05。拟建：`apps/api/internal/jobs/service.go`、`jobs/claim.go`、`jobs/lease.go`、`jobs/recovery.go`、`apps/api/internal/publications/service.go`。
+实际文件：[store.go](../../apps/api/store.go)、[model.go](../../apps/api/model.go)、[integration_content_store.go](../../apps/api/integration_content_store.go)、[integration_content_admin.go](../../apps/api/integration_content_admin.go)、[integration_guard.go](../../apps/api/integration_guard.go)。
 
-- [ ] 测试同请求重复与内容冲突、双执行器领取、同账号写冲突、部分成功及断进程恢复。
-- [ ] 通过数据库事务、跳过已锁行和账号租期领取子任务；持久化尝试、领取代次、心跳及退避时间。
-- [ ] 实现父任务聚合、有限网络重试、取消和独立子任务恢复；登录验证进入等待，不消耗网络重试次数。
-- [ ] 租期失效使旧领取代次无法写结果，先终止旧执行器再安排新任务；无法确认停止或提交阶段时进入核对。
-- [ ] 使用模拟来源在服务重启、前端断开后完成任务；已成功平台不重跑。
+- [x] CSDN 草稿任务使用事务领取、账号互斥、租期与领取代次，旧领取不能提交结果。
+- [x] 来源父分发与子任务同事务持久化；稳定请求去重；有副作用或活跃任务拒绝重建，确定未写入的取消/来源暂停任务经新确认可安全替代并保留记录。
+- [x] 草稿有限安全重试、取消、登录恢复及未知结果核对沿用原任务，不以换标识重发。
+- [x] 来源事件与实时守卫阻止后续写入；管理员恢复重查来源、授权、原确认与租约。
+- [ ] 完成真实 CMS、API 与执行器跨进程重启和断网联合验收。
+- [ ] 扩展多账号和多平台调度，验证部分成功保留及独立子任务恢复，不以单 CSDN 结果代替。
 
-测试定位：`apps/api/internal/jobs/service_test.go`、`jobs/recovery_test.go`、`tests/integration/job-concurrency.test.ts`。通过：持久化与账号串行约束由服务端保证，重启不盲目重发。
+测试定位：[integration_guard_test.go](../../apps/api/integration_guard_test.go)、[integration_test.go](../../apps/api/integration_test.go)、[auto_reconcile_test.go](../../apps/api/auto_reconcile_test.go)。当前草稿持久化与来源隔离子范围已验证，完整多平台验收未通过。
 
 ## B07：执行器协议、模拟适配与清理
 
@@ -127,7 +130,7 @@
 
 - [ ] 先阅读两个项目设计技能与后台规范，明确中文字体、六色基础方案、导航及列表布局，不复制示例图表。
 - [ ] 建立登录、受保护路由、会话失效、左侧导航与移动端导航的行为测试，确认缺失行为。
-- [ ] 实现主题规则、表单、焦点、错误与加载组件，前端不能获得来源或平台密钥。
+- [ ] 实现主题规则、表单、焦点、错误与加载组件，普通内容页面不持有来源或平台密钥；管理员一次签发只在临时内存展示并清理。
 - [ ] 验证键盘、减少动态效果、320／390／1440 像素布局、长标题和触摸交互。
 - [ ] 按两个技能审阅，用“调整前／调整后／原因”表格记录必要改动，脱敏截图放在 PR 验证附件，不保存真实账号截图。
 
@@ -146,6 +149,8 @@
 测试定位：各页面同目录 `*.test.tsx`、`tests/e2e/management.spec.ts`。通过：管理员能够由异常提醒定位平台任务与脱敏日志，退出后无轮询残留。
 
 ## B12：来源、账号、分发稿、验证与设置页面
+
+- [x] 当前来源工作台、CSDN 平台稿修订确认与父分发处理已接入实际 API，见 [Integrations.tsx](../../apps/admin/src/Integrations.tsx)、[IntegrationDraft.tsx](../../apps/admin/src/IntegrationDraft.tsx) 和 [界面审阅](../admin-ui.md)。其余完整平台和设置范围继续按下列未完成项推进。
 
 前置：B04、B05、B08、B09、B10。拟建：`apps/admin/src/features/sources/page.tsx`、`features/accounts/page.tsx`、`features/drafts/editor-page.tsx`、`features/verification/page.tsx`、`features/settings/page.tsx`。
 
