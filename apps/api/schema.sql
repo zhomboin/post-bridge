@@ -49,3 +49,31 @@ CREATE TABLE IF NOT EXISTS admin_decisions (
 );
 
 ALTER TABLE account ADD COLUMN IF NOT EXISTS remote_login_id text NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS account_article_snapshots (
+ account_id text PRIMARY KEY REFERENCES account(id),
+ username text NOT NULL,
+ record jsonb NOT NULL,
+ synced_at timestamptz NOT NULL
+);
+CREATE TABLE IF NOT EXISTS account_articles (
+ account_id text NOT NULL REFERENCES account(id),
+ username text NOT NULL,
+ id text NOT NULL,
+ record jsonb NOT NULL,
+ PRIMARY KEY(account_id,id)
+);
+CREATE TABLE IF NOT EXISTS account_article_bodies (
+ account_id text NOT NULL REFERENCES account(id),
+ username text NOT NULL,
+ id text NOT NULL,
+ record jsonb NOT NULL,
+ fetched_at timestamptz NOT NULL,
+ PRIMARY KEY(account_id,id)
+);
+
+CREATE TABLE IF NOT EXISTS article_read_requests (
+ request_id text PRIMARY KEY,
+ fingerprint text NOT NULL,
+ job_id text NOT NULL REFERENCES jobs(id)
+);

@@ -6,7 +6,7 @@ export type Job = {
   id: string; request_id: string; platform: string; account_id: string; kind: string;
   title: string; markdown?: string; status: string; outcome: string; stage: string;
   attempts: number; retry_count: number; max_retries: number; retry_allowed: boolean;
-  external_started: boolean; remote_id?: string; remote_url?: string; reconcile_candidate_id?: string;
+  external_started: boolean; article_id?: string; remote_id?: string; remote_url?: string; reconcile_candidate_id?: string;
   cancel_requested: boolean; manual_resolved?: boolean; error_code?: string; error_message?: string;
   reconcile_count?: number; auto_reconcile_started?: boolean; absence_checks?: number; available_at?: string;
   run_mode?: string; created_at: string; updated_at: string; started_at?: string; finished_at?: string;
@@ -32,6 +32,7 @@ export const statusLabels: Record<string, string> = {
 };
 export const stageLabels: Record<string, string> = {
   queued: '等待执行', checking_login: '检查登录', opening_editor: '打开编辑器',
+  syncing_articles: '读取文章列表', reading_article: '读取文章正文',
   draft_acquired: '已取得草稿', filling: '填写正文', saving: '保存草稿', verifying: '核对结果', finished: '处理结束',
 };
 export function Status({ value, cancelling = false }: { value: string; cancelling?: boolean }) {
