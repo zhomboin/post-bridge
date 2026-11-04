@@ -234,7 +234,7 @@ describe('管理员会话与任务闭环', () => {
   });
 
   it('账号检查创建后台任务并保留登录入口', async () => {
-    window.history.replaceState({}, '', '/account');
+    window.history.replaceState({}, '', '/account?tab=settings');
     const fallback = handler;
     handler = (url, init) => url === '/api/account/check' ? response({ ...job, kind: 'check_account' }, 202) : fallback(url, init);
     render(<App />);
@@ -305,7 +305,7 @@ describe('管理员会话与任务闭环', () => {
     const fallback = handler;
     handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'waiting_user' }) : url.endsWith('/resume') ? response({ ...job, status: 'queued' }) : fallback(url, init);
     render(<App />);
-    await screen.findByRole('link', { name: '登录 CSDN' });
+    expect((await screen.findByRole('link', { name: '登录 CSDN' })).getAttribute('href')).toBe('/account?tab=settings');
     fireEvent.click(screen.getByLabelText('我已完成指定账号登录'));
     fireEvent.click(screen.getByRole('button', { name: '登录完成，继续任务' }));
     await waitFor(() => expect(calls.some(c => c.url.endsWith('/resume'))).toBe(true));
@@ -366,7 +366,7 @@ describe('管理员会话与任务闭环', () => {
 
 describe('后台远程登录验证', () => {
   it('账号页可创建远程登录会话且请求防双击', async () => {
-    window.history.replaceState({}, '', '/account');
+    window.history.replaceState({}, '', '/account?tab=settings');
     const fallback=handler;
     handler=(url,init)=>url==='/api/account/login' ? response({id:init?.method==='POST'?'login-test':'',status:init?.method==='POST'?'pending':'idle',width:1280,height:800,expires_at:''}) : fallback(url,init);
     render(<App />);
@@ -379,7 +379,7 @@ describe('后台远程登录验证', () => {
     expect(new Headers(created[0].init?.headers).get('X-CSRF-Token')).toBe('csrf-test');
   });
   it('远程验证关闭后停止画面轮询并撤销会话', async () => {
-    window.history.replaceState({}, '', '/account');
+    window.history.replaceState({}, '', '/account?tab=settings');
     const fallback=handler;
     vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
     handler=(url,init)=>url==='/api/account/login' ? response({id:'login-test',status:'active',width:1280,height:800,expires_at:'2026-11-03T12:00:00Z'}) : url.endsWith('/frame') ? new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}) : url.endsWith('/login/login-test')&&init?.method==='DELETE' ? response({status:'cancelled'}) : fallback(url,init);
@@ -391,7 +391,7 @@ describe('后台远程登录验证', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalled();
   });
   it('服务未配置时说明原因，不显示可用登录入口', async () => {
-    window.history.replaceState({}, '', '/account');const fallback=handler;
+    window.history.replaceState({}, '', '/account?tab=settings');const fallback=handler;
     handler=(url,init)=>url==='/api/account/login'?response({code:'remote_login_disabled',message:'服务器尚未启用远程登录'},503):fallback(url,init);
     render(<App />);await screen.findByText('服务器尚未启用远程登录');
     expect((screen.getByRole('button',{name:'开始远程登录'}) as HTMLButtonElement).disabled).toBe(true);
@@ -400,7 +400,7 @@ describe('后台远程登录验证', () => {
 
 describe('远程登录输入',()=>{
  it('手机号和短信验证码直接填写指定输入框，清空本地值且不自动发短信或确认登录',async()=>{
-  window.history.replaceState({},'', '/account');const fallback=handler;
+  window.history.replaceState({},'', '/account?tab=settings');const fallback=handler;
   vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
   handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?response({ok:true}):fallback(url,init);
   render(<App/>);await screen.findByRole('img',{name:'CSDN 远程登录画面'});
@@ -419,7 +419,7 @@ describe('远程登录输入',()=>{
   expect(screen.queryByText(/13800000000|654321/)).toBeNull();
  });
  it('明确输入只接受指定长度的数字，失败时不显示成功提示并清空本地值',async()=>{
-  window.history.replaceState({},'', '/account');const fallback=handler;
+  window.history.replaceState({},'', '/account?tab=settings');const fallback=handler;
   vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
   handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?response({message:'登录输入框当前不可用'},409):fallback(url,init);
   render(<App/>);await screen.findByRole('img',{name:'CSDN 远程登录画面'});
@@ -436,7 +436,7 @@ describe('远程登录输入',()=>{
   expect(screen.queryByText('手机号已填入，请在画面获取验证码')).toBeNull();
  });
  it('短信或密码文字仅发送到输入接口并立即清空，键盘支持切换输入框',async()=>{
-  window.history.replaceState({},'', '/account');const fallback=handler;
+  window.history.replaceState({},'', '/account?tab=settings');const fallback=handler;
   vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
   handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?response({ok:true}):fallback(url,init);
   render(<App/>);const image=await screen.findByRole('img',{name:'CSDN 远程登录画面'});
@@ -452,7 +452,7 @@ describe('远程登录输入',()=>{
 
 describe('远程登录输入与销毁边界',()=>{
  it('画面快速输入逐字串行发送且Tab可离开画面',async()=>{
-  window.history.replaceState({},'', '/account');const fallback=handler;let finish:(r:Response)=>void=()=>{};let count=0;
+  window.history.replaceState({},'', '/account?tab=settings');const fallback=handler;let finish:(r:Response)=>void=()=>{};let count=0;
   vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=> 'blob:synthetic-frame'),revokeObjectURL:vi.fn()}));
   handler=(url,init)=>url==='/api/account/login'?response({id:'login-test',status:'active',width:1280,height:800,expires_at:''}):url.endsWith('/frame')?new Response('synthetic',{headers:{'Content-Type':'image/jpeg'}}):url.endsWith('/input')?(++count===1?new Promise<Response>(r=>{finish=r}):response({ok:true})):fallback(url,init);
   render(<App/>);const image=await screen.findByRole('img',{name:'CSDN 远程登录画面'});
@@ -462,7 +462,7 @@ describe('远程登录输入与销毁边界',()=>{
   expect(fireEvent.keyDown(image,{key:'Tab'})).toBe(true);
  });
  it('创建已提交但响应迟到时离开页面仍撤销新会话',async()=>{
-  window.history.replaceState({},'', '/account');const fallback=handler;let finish:(r:Response)=>void=()=>{};
+  window.history.replaceState({},'', '/account?tab=settings');const fallback=handler;let finish:(r:Response)=>void=()=>{};
   handler=(url,init)=>url==='/api/account/login'?(init?.method==='POST'?new Promise<Response>(r=>{finish=r}):response({id:'',status:'idle',width:1280,height:800,expires_at:''})):url==='/api/account/login/late-id'?response({status:'cancelled'}):fallback(url,init);
   render(<App/>);const start=await screen.findByRole('button',{name:'开始远程登录'});await waitFor(()=>expect((start as HTMLButtonElement).disabled).toBe(false));fireEvent.click(start);
   fireEvent.click(screen.getByRole('link',{name:'草稿任务'}));finish(response({id:'late-id',status:'pending',width:1280,height:800,expires_at:''},202));
@@ -473,7 +473,7 @@ describe('远程登录输入与销毁边界',()=>{
 
 describe('登录弹窗', () => {
   it('点击开始立即打开弹窗，关闭后恢复焦点并撤销等待会话', async () => {
-    window.history.replaceState({}, '', '/account');
+    window.history.replaceState({}, '', '/account?tab=settings');
     const fallback = handler;
     handler = (url, init) => url === '/api/account/login'
       ? response({ id: init?.method === 'POST' ? 'modal-test' : '', status: init?.method === 'POST' ? 'pending' : 'idle', width: 1280, height: 800, expires_at: '' })
@@ -494,7 +494,7 @@ describe('登录弹窗', () => {
   });
 
   it('创建响应迟到时关闭弹窗仍撤销会话，不重新打开', async () => {
-    window.history.replaceState({}, '', '/account'); const fallback = handler;
+    window.history.replaceState({}, '', '/account?tab=settings'); const fallback = handler;
     let finish: (value: Response) => void = () => {};
     handler = (url, init) => url === '/api/account/login' ? init?.method === 'POST'
       ? new Promise<Response>(resolve => { finish = resolve; })
@@ -518,7 +518,7 @@ describe('登录弹窗', () => {
 
 describe('弹窗终态清理', () => {
   it('输入未返回而轮询先成功时，关闭弹窗仍解锁入口并清理输入', async () => {
-    window.history.replaceState({}, '', '/account');
+    window.history.replaceState({}, '', '/account?tab=settings');
     const fallback = handler; let status = 'active';
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:synthetic-frame'), revokeObjectURL: vi.fn() }));
     handler = (url, init) => url === '/api/account/login'
@@ -551,4 +551,89 @@ it('从处理详情进入任务后返回原处理及筛选上下文', async () =
   render(<App />);
   const link = await screen.findByRole('link', { name: '返回处理详情' });
   expect(link.getAttribute('href')).toBe(back);
+});
+
+
+it('离开账号设置页签中止画面与输入并撤销登录，返回时不自动创建会话', async () => {
+  window.history.replaceState({}, '', '/account?tab=settings&q=保留&page=2');
+  const fallback = handler; let active = true;
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:synthetic-frame'), revokeObjectURL: vi.fn() }));
+  handler = (url, init) => url === '/api/account/login'
+    ? response({ id: active ? 'tab-login' : '', status: active ? 'active' : 'idle', width: 1280, height: 800, expires_at: '' })
+    : url.endsWith('/frame') ? new Response('synthetic', { headers: { 'Content-Type': 'image/jpeg' } })
+    : url.endsWith('/input') ? new Promise<Response>((_, reject) => { init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))); })
+    : url === '/api/account/login/tab-login' && init?.method === 'DELETE' ? (active = false, response({ status: 'cancelled' }))
+    : fallback(url, init);
+  render(<App />);
+  await screen.findByRole('img', { name: 'CSDN 远程登录画面' });
+  fireEvent.change(screen.getByLabelText('输入到页面的文字'), { target: { value: 'temporary-secret' } });
+  fireEvent.click(screen.getByRole('button', { name: '发送文字' }));
+  await waitFor(() => expect(calls.some(call => call.url.endsWith('/input'))).toBe(true));
+  act(() => { window.history.replaceState({}, '', '/account?tab=stats&q=保留&page=2'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await waitFor(() => expect(calls.some(call => call.url === '/api/account/login/tab-login' && call.init?.method === 'DELETE')).toBe(true));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(calls.filter(call => call.url.endsWith('/input')).every(call => call.init?.signal?.aborted)).toBe(true);
+  expect(URL.revokeObjectURL).toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('tab', { name: '账号设置' }));
+  await screen.findByRole('button', { name: '开始远程登录' });
+  expect(calls.some(call => call.url === '/api/account/login' && call.init?.method === 'POST')).toBe(false);
+  expect(screen.queryByDisplayValue('temporary-secret')).toBeNull();
+});
+
+
+it('创建响应迟到时切换页签仍补充撤销，不重新显示登录', async () => {
+  window.history.replaceState({}, '', '/account?tab=settings');
+  const fallback = handler; let finish: (value: Response) => void = () => {};
+  handler = (url, init) => url === '/api/account/login' ? init?.method === 'POST'
+    ? new Promise<Response>(resolve => { finish = resolve; })
+    : response({ id: '', status: 'idle', width: 1280, height: 800, expires_at: '' })
+    : url === '/api/account/login/tab-late' ? response({ status: 'cancelled' }) : fallback(url, init);
+  render(<App />);
+  const start = await screen.findByRole('button', { name: '开始远程登录' });
+  await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(start);
+  act(() => { window.history.replaceState({}, '', '/account?tab=stats'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await act(async () => finish(response({ id: 'tab-late', status: 'pending', width: 1280, height: 800, expires_at: '' })));
+  await waitFor(() => expect(calls.some(call => call.url === '/api/account/login/tab-late' && call.init?.method === 'DELETE')).toBe(true));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('tab', { name: '数据统计' }).getAttribute('aria-selected')).toBe('true');
+});
+
+it('登录画面请求未完成时离开设置会中止请求并释放页面锁定', async () => {
+  window.history.replaceState({}, '', '/account?tab=settings');
+  const fallback = handler;
+  handler = (url, init) => url === '/api/account/login'
+    ? response({ id: 'frame-pending', status: 'active', width: 1280, height: 800, expires_at: '' })
+    : url.endsWith('/frame') ? new Promise<Response>((_, reject) => { init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))); })
+    : url === '/api/account/login/frame-pending' ? response({ status: 'cancelled' }) : fallback(url, init);
+  render(<App />);
+  await screen.findByRole('dialog', { name: 'CSDN 登录' });
+  await waitFor(() => expect(calls.some(call => call.url.endsWith('/frame'))).toBe(true));
+  act(() => { window.history.replaceState({}, '', '/account'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await waitFor(() => expect(calls.some(call => call.url === '/api/account/login/frame-pending' && call.init?.method === 'DELETE')).toBe(true));
+  expect(calls.find(call => call.url.endsWith('/frame'))?.init?.signal?.aborted).toBe(true);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(document.body.style.overflow).toBe('');
+});
+
+it('检查任务返回保留完整设置页签及列表筛选上下文', async () => {
+  const back = '/account?tab=settings&q=保留&status=draft&page=2';
+  window.history.replaceState({}, '', back);
+  const fallback = handler;
+  handler = (url, init) => url === '/api/account/check' ? response({ ...job, kind: 'check_account' }, 202) : fallback(url, init);
+  render(<App />);
+  const check = await screen.findByRole('button', { name: '检查登录状态' });
+  await waitFor(() => expect((check as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(check);
+  expect(decodeURI((await screen.findByRole('link', { name: '返回账号设置' })).getAttribute('href')!)).toBe(back);
+  fireEvent.click(screen.getByRole('link', { name: '返回账号设置' }));
+  await screen.findByRole('button', { name: '检查登录状态' });
+  expect(screen.getByRole('tab', { name: '账号设置' }).getAttribute('aria-selected')).toBe('true');
+  expect(new URLSearchParams(window.location.search).get('q')).toBe('保留');
+});
+
+it('总览查看账号直接进入账号设置', async () => {
+  window.history.replaceState({}, '', '/');
+  render(<App />);
+  expect((await screen.findByRole('link', { name: '查看账号' })).getAttribute('href')).toBe('/account?tab=settings');
 });

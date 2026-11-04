@@ -110,7 +110,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
       onUpdate();
     }
   }
-  if (readOnlyJob(job)) return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">{job.status === 'waiting_user' && <><RouteLink className="button primary" href="/account">登录 CSDN</RouteLink><button disabled={action.pending} onClick={() => void perform('resume')}>登录完成，继续读取</button></>}{job.retry_allowed && <button disabled={action.pending} onClick={() => void perform('retry')}>重试读取</button>}{['queued', 'running'].includes(job.status) && !job.cancel_requested && <button disabled={action.pending} onClick={() => void perform('cancel')}>取消读取</button>}{job.cancel_requested && ['queued', 'running'].includes(job.status) && <p role="status">正在取消读取…</p>}{action.error && <div className="notice error" role="alert">{action.error}</div>}</div></section>;
+  if (readOnlyJob(job)) return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">{job.status === 'waiting_user' && <><RouteLink className="button primary" href="/account?tab=settings">登录 CSDN</RouteLink><button disabled={action.pending} onClick={() => void perform('resume')}>登录完成，继续读取</button></>}{job.retry_allowed && <button disabled={action.pending} onClick={() => void perform('retry')}>重试读取</button>}{['queued', 'running'].includes(job.status) && !job.cancel_requested && <button disabled={action.pending} onClick={() => void perform('cancel')}>取消读取</button>}{job.cancel_requested && ['queued', 'running'].includes(job.status) && <p role="status">正在取消读取…</p>}{action.error && <div className="notice error" role="alert">{action.error}</div>}</div></section>;
   function reconcile() {
     if (checking || action.pending) return;
     if (candidate.trim() && !/^\d{1,32}$/.test(candidate.trim())) { action.setError('候选草稿ID仅接受数字。'); return; }
@@ -118,7 +118,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   }
   return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">
     {job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status) && <div className="notice warning"><strong>取消中</strong><p>正在等待后台停止本任务。可能存在的草稿仍需核对，请勿重新创建。</p></div>}
-    {job.status === 'waiting_user' && <><RouteLink className="button primary" href="/account">登录 CSDN</RouteLink><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已完成指定账号登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
+    {job.status === 'waiting_user' && <><RouteLink className="button primary" href="/account?tab=settings">登录 CSDN</RouteLink><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已完成指定账号登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
     {uncertain && <><div className={'notice ' + (job.status === 'failed' ? 'error' : 'warning')}>
       <strong>{checking ? '后台正在自动查询草稿' : job.status === 'failed' ? conflict ? '草稿核对存在冲突' : '草稿查询未完成' : '等待草稿自动核对'}</strong>
 
@@ -143,8 +143,8 @@ export function JobDetail({ id }: { id: string }) {
   const { route } = useWorkspace();
   const resource = useResource<Job>('/api/jobs/' + encodeURIComponent(id));
   const back = new URLSearchParams(route.split('?')[1]).get('back');
-  const backHref = back && (/^\/jobs(?:\?|$)/.test(back) || /^\/logs(?:\/[A-Za-z0-9._:-]+)?(?:\?|$)/.test(back) || /^\/articles(?:\?|$)/.test(back) || back === '/account') ? back : '/jobs';
-  const backLabel = backHref.startsWith('/articles') ? '返回账号文章' : backHref.startsWith('/logs/') ? '返回处理详情' : backHref.startsWith('/logs') ? '返回处理记录' : backHref === '/account' ? '返回账号' : '返回任务列表';
+  const backHref = back && (/^\/jobs(?:\?|$)/.test(back) || /^\/logs(?:\/[A-Za-z0-9._:-]+)?(?:\?|$)/.test(back) || /^\/articles(?:\?|$)/.test(back) || /^\/account(?:\?|$)/.test(back)) ? back : '/jobs';
+  const backLabel = backHref.startsWith('/articles') ? '返回账号文章' : backHref.startsWith('/logs/') ? '返回处理详情' : backHref.startsWith('/logs') ? '返回处理记录' : backHref.startsWith('/account') ? '返回账号设置' : '返回任务列表';
   const job = resource.data;
   if (!job) return <div className="page"><RouteLink className="back-link" href={backHref}><ArrowLeft size={14} />{backLabel}</RouteLink><section className="surface"><ResourceError error={resource.error} /><Empty loading={resource.loading}>无法读取任务，请刷新或返回列表。</Empty><RefreshBar resource={resource} /></section></div>;
   const remote = readOnlyJob(job) ? undefined : draftURL(job.remote_url);

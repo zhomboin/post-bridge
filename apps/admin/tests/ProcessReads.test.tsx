@@ -28,7 +28,7 @@ it.each([
   render(<App />);
   const action = await screen.findByRole('option', { name: operation });
   expect(action.getAttribute('value')).toBe(value);
-  const row = (await screen.findByRole('link', { name: value === 'sync_articles' ? '平台账号' : '只读文章' })).closest('tr')!;
+  const row = (await within(await screen.findByRole('table')).findByRole('link', { name: value === 'sync_articles' ? '平台账号' : '只读文章' })).closest('tr')!;
   expect(within(row).getByText(operation)).toBeTruthy();
   expect(within(row).getByText(outcome)).toBeTruthy();
   expect(within(row).getByText(objectType)).toBeTruthy();

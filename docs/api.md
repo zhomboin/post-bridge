@@ -63,6 +63,12 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 
 内容快照字段包括 id、attempt、phase、object_type、captured_at 及适用的 title、markdown、status、remote_id、username、display_name。phase 为 before 或 after。内容不混入日志，读取必须登录并禁止缓存。未采集不返回虚假快照；空标题或正文仍显式返回空字符串。
 
+## 后台账号入口
+
+后台统一入口为 /account，默认文章页签；数据统计使用 tab=stats，账号设置使用 tab=settings。q、status、page 保留文章筛选与分页；页签切换、刷新及浏览器历史恢复这些参数。独立正文 /articles/{id} 的返回地址指向账号文章页。已有 /articles 查询入口保留条件并归一到平台账号。
+
+页签复用本文现有管理接口，不新增平台写入或服务端能力。远程登录仅在账号设置挂载，离开时撤销未完成会话并停止请求。
+
 ## 账号文章契约
 
 列表返回 items、total、page、page_size、snapshot 与 sync_job。状态参数为 published、draft、rejected、recycled、unknown，空值查询全部含草稿。snapshot 包含账号、profile、counts、stats、trend、synced_at；分页与筛选只操作持久化快照。
@@ -123,7 +129,7 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 
 ## 后台远程登录
 
-远程登录在账号页发起，输入和画面仅转发到固定 IPv4 回环执行器。管理员会话和写操作 CSRF 均需验证，会话绑定具体发起者；其他管理员会话只能看到忙碌提示。所有响应禁缓存，不转发管理员 Cookie、请求来源凭据或任何任意网址。
+远程登录在“平台账号”的“账号设置”页签发起，输入和画面仅转发到固定 IPv4 回环执行器。管理员会话和写操作 CSRF 均需验证，会话绑定具体发起者；其他管理员会话只能看到忙碌提示。所有响应禁缓存，不转发管理员 Cookie、请求来源凭据或任何任意网址。
 
 | 方法与路径 | 行为 |
 | --- | --- |

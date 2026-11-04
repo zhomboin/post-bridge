@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 
@@ -54,12 +54,14 @@ describe('CSDN 账号文章', () => {
     render(<App />);
     await screen.findByText('测试作者');
     expect(screen.getByText(/最近同步/).textContent).toContain('2026');
+    expect(screen.queryByText('昨日 +22')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: '数据统计' }));
     expect(screen.getByText('1,240')).toBeTruthy();
     expect(screen.getByText('昨日 +22')).toBeTruthy();
     failed = true;
     fireEvent.click(screen.getByRole('button', { name: '刷新本地状态' }));
     await screen.findByText(/连接中断.*数据可能已过期/);
-    expect(screen.getByRole('link', { name: article.title })).toBeTruthy();
+    expect(screen.getByText('1,240')).toBeTruthy();
     expect(calls.every(call => call.url.startsWith('/api/'))).toBe(true);
   });
 
@@ -111,7 +113,7 @@ describe('CSDN 账号文章', () => {
     render(<App />);
     expect((await screen.findByRole('link', { name: 'CSDN 原文' })).getAttribute('href')).toBe(article.blog_url);
     expect(screen.getByRole('link', { name: 'CSDN 编辑器' }).getAttribute('href')).toBe(article.editor_url);
-    expect(screen.getByRole('link', { name: '返回账号文章' }).getAttribute('href')).toBe('/articles');
+    expect(screen.getByRole('link', { name: '返回账号文章' }).getAttribute('href')).toBe('/account');
   });
 
   it.each(['sync_articles', 'read_article'])('任务列表正确标记%s读取类型与结果', async kind => {
@@ -130,6 +132,7 @@ describe('CSDN 账号文章', () => {
     render(<App />);
     await screen.findByText('同步未完成，显示上次快照。');
     expect(screen.getByRole('link', { name: article.title })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: '数据统计' }));
     expect(screen.getByText('—', { selector: 'dd' })).toBeTruthy();
     expect(screen.queryByText('昨日 +22')).toBeNull();
   });
@@ -189,5 +192,81 @@ describe('CSDN 账号文章', () => {
     await screen.findByRole('button', { name: '正在读取…' });
     expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(1);
     expect(screen.queryByText(/保存到CSDN|草稿已保存/)).toBeNull();
+  });
+});
+
+
+describe('平台账号工作台', () => {
+  it('默认文章且只保留一个平台账号导航，共享身份与统计分离', async () => {
+    window.history.replaceState({}, '', '/account');
+    render(<App />);
+    await screen.findByRole('link', { name: article.title });
+    const navigation = screen.getByRole('navigation', { name: '主导航' });
+    expect(within(navigation).getByRole('link', { name: '平台账号' }).getAttribute('href')).toBe('/account');
+    expect(within(navigation).queryByRole('link', { name: '账号文章' })).toBeNull();
+    expect(within(navigation).queryByRole('link', { name: 'CSDN 账号' })).toBeNull();
+    expect(screen.getByRole('tab', { name: '文章' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('测试作者')).toBeTruthy();
+    expect(screen.getByText('example')).toBeTruthy();
+    expect(screen.getByText('已连接')).toBeTruthy();
+    expect(screen.queryByText('昨日 +22')).toBeNull();
+    expect(calls.some(call => call.url === '/api/account/login')).toBe(false);
+    fireEvent.click(screen.getByRole('tab', { name: '数据统计' }));
+    expect(screen.getByText('昨日 +22')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: article.title })).toBeNull();
+    expect(screen.queryByLabelText('搜索文章')).toBeNull();
+    expect(calls.filter(call => call.url.startsWith('/api/account/articles?'))).toHaveLength(1);
+  });
+
+  it('三页签保留筛选分页，键盘与浏览器历史恢复当前页签', async () => {
+    window.history.replaceState({}, '', '/account?q=账号&status=draft&page=2');
+    render(<App />);
+    await screen.findByRole('link', { name: article.title });
+    fireEvent.click(screen.getByRole('tab', { name: '数据统计' }));
+    expect(window.location.search).toBe('?q=%E8%B4%A6%E5%8F%B7&status=draft&page=2&tab=stats');
+    fireEvent.keyDown(screen.getByRole('tab', { name: '数据统计' }), { key: 'End' });
+    expect(screen.getByRole('tab', { name: '账号设置' }).getAttribute('aria-selected')).toBe('true');
+    expect(new URLSearchParams(window.location.search).get('page')).toBe('2');
+    fireEvent.keyDown(screen.getByRole('tab', { name: '账号设置' }), { key: 'Home' });
+    expect(screen.getByRole('tab', { name: '文章' }).getAttribute('aria-selected')).toBe('true');
+    expect((screen.getByLabelText('搜索文章') as HTMLInputElement).value).toBe('账号');
+    act(() => { window.history.replaceState({}, '', '/account?tab=stats&q=账号&status=draft&page=2'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    expect(screen.getByRole('tab', { name: '数据统计' }).getAttribute('aria-selected')).toBe('true');
+    act(() => { window.history.replaceState({}, '', '/account?q=账号&status=draft&page=2'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    expect(screen.getByRole('tab', { name: '文章' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it.each(['stats', 'settings'])('直接刷新 %s 页签由地址恢复', async tab => {
+    window.history.replaceState({}, '', '/account?tab=' + tab + '&q=账号&status=draft&page=2');
+    render(<App />);
+    await screen.findByText('测试作者');
+    expect(screen.getByRole('tab', { name: tab === 'stats' ? '数据统计' : '账号设置' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByLabelText('搜索文章')).toBeNull();
+  });
+
+  it('旧文章入口替换为平台账号地址并保留筛选', async () => {
+    window.history.replaceState({}, '', '/articles?q=账号&status=draft&page=2');
+    const replace = vi.spyOn(window.history, 'replaceState');
+    render(<App />);
+    await screen.findByRole('link', { name: article.title });
+    expect(window.location.pathname).toBe('/account');
+    expect(new URLSearchParams(window.location.search).get('q')).toBe('账号');
+    expect(replace).toHaveBeenCalled();
+    replace.mockRestore();
+  });
+
+  it.each(['/account?tab=settings&q=账号&status=draft&page=2', '/articles?q=账号&status=draft&page=2'])('正文返回 %s 归一为账号文章筛选', async back => {
+    window.history.replaceState({}, '', '/articles/12345?back=' + encodeURIComponent(back));
+    render(<App />);
+    await screen.findByRole('button', { name: '读取正文' });
+    const link = screen.getByRole('link', { name: '返回账号文章' });
+    expect(link.getAttribute('href')).toBe('/account?q=%E8%B4%A6%E5%8F%B7&status=draft&page=2');
+    expect(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('link', { name: '平台账号' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it.each(['//evil.test', '/account/../jobs', '/account#evil', '/account?token=private', '/articles/123'])('正文拒绝异常返回地址 %s', async back => {
+    window.history.replaceState({}, '', '/articles/12345?back=' + encodeURIComponent(back));
+    render(<App />);
+    expect((await screen.findByRole('link', { name: '返回账号文章' })).getAttribute('href')).toBe('/account');
   });
 });
