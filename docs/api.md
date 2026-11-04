@@ -142,3 +142,9 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 会话最长十分钟，活动期间六十秒无画面或输入后关闭。状态为 idle、pending、active、succeeded、failed、expired、cancelled；他人占用时返回 busy。输入大小至多 16 KiB，文字至多 2000 字、拖动 2—128 个点、坐标限制在视口内。手机号和验证码填写分别只接受 5—20 位与 4—8 位数字，按字段匹配固定认证来源内唯一可用输入，不自动获取短信或提交登录。认证页面未就绪时保持 pending；最多三次页面加载仍失败后返回 failed 及固定加载失败提示，关闭浏览器。其他执行器错误继续脱敏。停止与过期拒绝迟到输入。远端 Tab 和 Shift+Tab 仅在固定认证来源的可用文字输入间循环，不在后台账号页背景导航。指定身份成功确认采用幂等事务，只恢复本账号因 needs_login 等待且未取消的任务；未知外站结果仍进入核对，预算不重置。
 
 公开来源 PUBLIC_ORIGIN 与内部 API_BASE_URL 分离。REMOTE_LOGIN_URL 仅支持固定回环地址；执行器通过 LOGIN_CONTROL_ADDR 启用控制服务，内部鉴权沿用私有执行器密钥。部署与配置入口见[Ubuntu 部署说明](ubuntu-deployment.md)。
+
+## 账号内容展示
+
+账号快照的 profile.avatar_url 用于头部头像，后台只允许 HTTPS 的固定头像域 profile-avatar.csdnimg.cn，不接收带凭据、端口或片段的地址，失败显示占位。CSP 只为图片追加此域，不开放其他外站资源。
+
+统计中的六项日趋势默认使用图表，缺失值保留未知。详情 GET 保持只读查询；前端首次打开无缓存详情时调用现有正文读取接口一次，活动、失败或取消任务不自动重复。读取结果优先直接显示 Markdown 源文，无 Markdown 时显示 HTML 源文；平台标签和脚本不执行。

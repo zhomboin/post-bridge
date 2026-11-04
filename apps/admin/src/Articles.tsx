@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, RefreshCw } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import AccountTrend from './AccountTrend';
 import { accountArticlesHref } from './accountRoutes';
 import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, queryPage, time, useAction, useResource, useWorkspace, type Account, type Job, type PageData } from './runtime';
 
@@ -35,7 +35,7 @@ export function AccountStats({ snapshot }: { snapshot: ArticleSnapshot }) {
   const { profile, stats } = snapshot;
   return <section className="surface article-overview"><div className="surface-header"><h2>数据统计</h2><div className="article-profile-facts">{profile.level != null && <span>等级 {profile.level}</span>}{profile.points != null && <span>积分 {numberText(profile.points)}</span>}{profile.original_articles != null && <span>原创 {numberText(profile.original_articles)}</span>}</div></div>
     <dl className="article-metrics">{metrics.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{numberText(stats[key])}</dd>{stats['yesterday_' + key] != null && <span>昨日 {stats['yesterday_' + key]! >= 0 ? '+' : ''}{numberText(stats['yesterday_' + key])}</span>}</div>)}</dl>
-    {!!snapshot.trend?.length && <details className="article-trend"><summary>近期趋势</summary><div className="article-trend-scroll" tabIndex={0} role="region" aria-label="近期趋势数据"><table><thead><tr>{['日期', '阅读', '评论', '收藏', '粉丝', '推广点击', '外链点击'].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{snapshot.trend.map(row => <tr key={row.date}><th scope="row">{row.date}</th>{['views', 'comments', 'favorites', 'followers', 'promotion_clicks', 'outlink_clicks'].map(key => <td key={key}>{numberText(row[key as keyof Omit<typeof row, 'date'>])}</td>)}</tr>)}</tbody></table></div></details>}
+    <AccountTrend trend={snapshot.trend || []} />
   </section>;
 }
 export function Articles({ resource }: { resource: ReturnType<typeof useResource<ArticlePage>> }) {
@@ -91,7 +91,7 @@ export function ArticleDetail({ id }: { id: string }) {
   const resource = useResource<ArticleDetailData>('/api/account/articles/' + encodeURIComponent(id));
   const account = useResource<Account>('/api/account');
   const action = useAction();
-  const [source, setSource] = useState(false);
+  const autoAttempted = useRef(false);
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const requestId = useRef<string | undefined>(undefined);
   const remoteJob = resource.data?.read_job;
@@ -101,10 +101,17 @@ export function ArticleDetail({ id }: { id: string }) {
   const back = accountArticlesHref(rawBack);
   async function read() {
     if (activeJob(job)) return;
+    autoAttempted.current = true;
     requestId.current ??= crypto.randomUUID();
     const result = await action.run(signal => api<Job>('/api/account/articles/' + encodeURIComponent(id) + '/read', { method: 'POST', body: JSON.stringify({ request_id: requestId.current }), signal }));
     if (result) { requestId.current = undefined; setSubmitted(result); resource.refresh(); }
   }
+  useEffect(() => {
+    const data = resource.data;
+    if (autoAttempted.current || !data || resource.error || data.body || activeJob(data.read_job) || ['failed', 'cancelled'].includes(data.read_job?.status || '')) return;
+    autoAttempted.current = true;
+    void read();
+  }, [resource.data, resource.error]);
   const data = resource.data;
   const article = data?.article;
   const body = data?.body;
@@ -116,7 +123,7 @@ export function ArticleDetail({ id }: { id: string }) {
     {article && <section className="surface article-overview"><dl className="article-metrics article-detail-metrics">{[...metrics.filter(([key]) => key !== 'followers'), ['gained_fans', '涨粉'], ['quality_score', '质量分']].map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{numberText(article[key as 'views' | 'likes' | 'comments' | 'favorites' | 'exposures' | 'gained_fans' | 'quality_score'])}</dd></div>)}</dl>{!!article.cover_urls?.some(url => safeBodyLink(url)) && <div className="article-covers">{article.cover_urls.map((url, index) => safeBodyLink(url) && <a key={index} href={safeBodyLink(url)} target="_blank" rel="noopener noreferrer">封面 {index + 1}</a>)}</div>}</section>}
     <section className="surface"><RefreshBar resource={resource} name="刷新本地状态" /><ResourceError error={resource.error} stale={!!data} />
       {body ? <div className="surface-body"><div className="article-body-header"><h2>文章正文</h2>{data?.fetched_at && <span className="muted">正文缓存于 {time(data.fetched_at)}</span>}</div><dl className="article-body-facts">{body.description && <><dt>摘要</dt><dd>{body.description}</dd></>}{!!body.tags?.length && <><dt>标签</dt><dd>{body.tags.join('、')}</dd></>}{!!body.categories?.length && <><dt>分类</dt><dd>{body.categories.join('、')}</dd></>}{body.type && <><dt>类型</dt><dd>{types[body.type] || body.type}</dd></>}{body.visibility && <><dt>可见范围</dt><dd>{({ public: '公开', private: '私密', fans: '粉丝可见', vip: '会员可见' } as Record<string, string>)[body.visibility] || body.visibility}</dd></>}{body.reason && <><dt>平台原因</dt><dd>{body.reason}</dd></>}</dl>
-        {body.markdown ? <><div className="editor-tabs"><button aria-pressed={!source} onClick={() => setSource(false)}>正文预览</button><button aria-pressed={source} onClick={() => setSource(true)}>Markdown 源文</button></div>{source ? <pre className="article-source" aria-label="Markdown 源文">{body.markdown}</pre> : <div className="markdown-preview article-preview" aria-label="正文预览"><ReactMarkdown skipHtml disallowedElements={['img']} urlTransform={value => safeBodyLink(value) || ''} components={{ a: ({ href, children }) => href && safeBodyLink(href) ? <a href={href} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span> }}>{body.markdown}</ReactMarkdown></div>}</> : body.html ? <pre className="article-source" aria-label="HTML 源文">{body.html}</pre> : <Empty>正文为空</Empty>}
+        {body.markdown ? <pre className="article-source" tabIndex={0} aria-label="Markdown 源文">{body.markdown}</pre> : body.html ? <pre className="article-source" tabIndex={0} aria-label="HTML 源文">{body.html}</pre> : <Empty>正文为空</Empty>}
       </div> : <Empty loading={resource.loading}>{article ? '尚未读取正文' : resource.error ? '无法读取文章' : '正在加载文章…'}</Empty>}
     </section>
   </div>;

@@ -37,7 +37,7 @@ describe('CSDN 账号文章', () => {
     expect(new URL(url, 'http://local').searchParams.get('page_size')).toBe('20');
     expect(new URL(url, 'http://local').searchParams.get('page')).toBe('2');
     fireEvent.click(screen.getByRole('link', { name: article.title }));
-    await screen.findByRole('button', { name: '读取正文' });
+    await screen.findByRole('heading', { name: article.title });
     fireEvent.click(screen.getByRole('link', { name: '返回账号文章' }));
     await screen.findByLabelText('搜索文章');
     expect(decodeURI(window.location.search)).toBe('?q=账号&status=draft&page=2');
@@ -79,20 +79,21 @@ describe('CSDN 账号文章', () => {
     expect(screen.getByText('排队中')).toBeTruthy();
   });
 
-  it('正文预览禁用脚本、外部图片与危险链接，外链校验固定账号', async () => {
+  it('Markdown源文直接显示且不执行脚本、图片与链接，外链校验固定账号', async () => {
     window.history.replaceState({}, '', '/articles/12345');
     const base = handler;
     handler = (url, init) => url === '/api/account/articles/12345' ? response({ ...detail({ id: '12345', title: article.title, markdown: '# 安全正文\n\n<script>window.injected=1</script>\n\n![私密图片](https://evil.test/pixel)\n\n[危险](javascript:alert%281%29) [安全](https://example.com/read) [相对](/api/logout)', html: '', description: '摘要', tags: ['Go'], categories: ['笔记'], type: 'original', visibility: 'public', platform_status: 'enable', reason: '' }), article: { ...article, blog_url: 'https://blog.csdn.net/other/article/details/12345', editor_url: 'https://evil.test/editor' } }) : base(url, init);
     const { container } = render(<App />);
-    await screen.findByRole('heading', { name: '安全正文' });
+    await screen.findByLabelText('Markdown 源文');
     expect(container.querySelector('script')).toBeNull();
     expect(container.querySelector('img')).toBeNull();
     expect(screen.queryByRole('link', { name: '危险' })).toBeNull();
     expect(screen.queryByRole('link', { name: '相对' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'CSDN 原文' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'CSDN 编辑器' })).toBeNull();
-    expect(screen.getByRole('link', { name: '安全' }).getAttribute('rel')).toBe('noopener noreferrer');
-    fireEvent.click(screen.getByRole('button', { name: 'Markdown 源文' }));
+    expect(screen.queryByRole('link', { name: '安全' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '正文预览' })).toBeNull();
+    expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(0);
     expect(screen.getByLabelText('Markdown 源文').textContent).toContain('<script>');
   });
 
@@ -143,7 +144,6 @@ describe('CSDN 账号文章', () => {
     let attempts = 0;
     handler = (url, init) => url.endsWith('/read') ? (++attempts === 1 ? response({ message: '网络中断' }, 503) : new Promise((_resolve, reject) => { init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))); })) : base(url, init);
     render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '读取正文' }));
     await screen.findByText('网络中断');
     fireEvent.click(screen.getByRole('button', { name: '读取正文' }));
     await screen.findByRole('button', { name: '正在读取…' });
@@ -180,16 +180,15 @@ describe('CSDN 账号文章', () => {
     expect(container.querySelector('img')).toBeNull();
   });
 
-  it('正文读取主动排队并阻止重复，状态错误不显示草稿保存结果', async () => {
+  it('首次打开正文自动排队一次，刷新轮询不重复提交', async () => {
     window.history.replaceState({}, '', '/articles/12345');
     const base = handler;
     let queued = false;
     handler = (url, init) => url.endsWith('/read') ? (queued = true, response(readJob)) : url === '/api/account/articles/12345' ? response(detail(null, queued ? readJob : null)) : base(url, init);
     render(<App />);
-    const button = await screen.findByRole('button', { name: '读取正文' });
-    expect(calls.some(call => call.url.endsWith('/read'))).toBe(false);
-    fireEvent.click(button);
     await screen.findByRole('button', { name: '正在读取…' });
+    fireEvent.click(screen.getByRole('button', { name: '刷新本地状态' }));
+    await waitFor(() => expect(calls.filter(call => call.url === '/api/account/articles/12345').length).toBeGreaterThan(1));
     expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(1);
     expect(screen.queryByText(/保存到CSDN|草稿已保存/)).toBeNull();
   });
@@ -258,7 +257,7 @@ describe('平台账号工作台', () => {
   it.each(['/account?tab=settings&q=账号&status=draft&page=2', '/articles?q=账号&status=draft&page=2'])('正文返回 %s 归一为账号文章筛选', async back => {
     window.history.replaceState({}, '', '/articles/12345?back=' + encodeURIComponent(back));
     render(<App />);
-    await screen.findByRole('button', { name: '读取正文' });
+    await screen.findByRole('heading', { name: article.title });
     const link = screen.getByRole('link', { name: '返回账号文章' });
     expect(link.getAttribute('href')).toBe('/account?q=%E8%B4%A6%E5%8F%B7&status=draft&page=2');
     expect(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('link', { name: '平台账号' }).getAttribute('aria-current')).toBe('page');
@@ -268,5 +267,86 @@ describe('平台账号工作台', () => {
     window.history.replaceState({}, '', '/articles/12345?back=' + encodeURIComponent(back));
     render(<App />);
     expect((await screen.findByRole('link', { name: '返回账号文章' })).getAttribute('href')).toBe('/account');
+  });
+});
+
+
+describe('正文自动读取边界', () => {
+  it.each(['queued', 'running', 'waiting_user', 'reconciling', 'failed', 'cancelled'])('已有%s任务不自动提交', async status => {
+    window.history.replaceState({}, '', '/articles/12345');
+    const base = handler;
+    handler = (url, init) => url === '/api/account/articles/12345' ? response(detail(null, { ...readJob, status })) : url.endsWith('/read') ? response(readJob) : base(url, init);
+    render(<App />);
+    await screen.findByRole('heading', { name: article.title });
+    expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(0);
+    if (['failed', 'cancelled'].includes(status)) {
+      fireEvent.click(screen.getByRole('button', { name: '读取正文' }));
+      await screen.findByRole('button', { name: '正在读取…' });
+      expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(1);
+    }
+  });
+
+  it('自动读取请求失败后刷新不循环，可手动重试', async () => {
+    window.history.replaceState({}, '', '/articles/12345');
+    const base = handler;
+    handler = (url, init) => url.endsWith('/read') ? response({ message: '自动读取失败' }, 503) : base(url, init);
+    render(<App />);
+    await screen.findByText('自动读取失败');
+    fireEvent.click(screen.getByRole('button', { name: '刷新本地状态' }));
+    await waitFor(() => expect(calls.filter(call => call.url === '/api/account/articles/12345').length).toBeGreaterThan(1));
+    expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '读取正文' }));
+    await waitFor(() => expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(2));
+  });
+
+  it('文章切换取消旧请求，延迟响应不污染新文章', async () => {
+    window.history.replaceState({}, '', '/articles/12345');
+    const base = handler;
+    let finish: (value: Response) => void = () => {};
+    handler = (url, init) => url === '/api/account/articles/12345/read' ? new Promise(resolve => { finish = resolve; }) : url === '/api/account/articles/67890' ? response({ ...detail({ id: '67890', markdown: '新文章源文', html: '', tags: [], categories: [] }), article: { ...article, id: '67890', title: '新文章' } }) : base(url, init);
+    render(<App />);
+    await waitFor(() => expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(1));
+    const old = calls.find(call => call.url.endsWith('/read'))!;
+    act(() => { window.history.pushState({}, '', '/articles/67890'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await screen.findByLabelText('Markdown 源文');
+    expect(old.init?.signal?.aborted).toBe(true);
+    await act(async () => finish(response(readJob)));
+    expect(screen.getByLabelText('Markdown 源文').textContent).toBe('新文章源文');
+    expect(screen.queryByText('排队中')).toBeNull();
+    expect(calls.filter(call => call.url === '/api/account/articles/67890/read')).toHaveLength(0);
+  });
+});
+
+
+describe('正文异步状态隔离', () => {
+  it.each(['failed', 'cancelled'])('首次读取转为%s后不自动循环', async status => {
+    window.history.replaceState({}, '', '/articles/12345');
+    const base = handler;
+    let queued = false;
+    let finished = false;
+    handler = (url, init) => url.endsWith('/read') ? (queued = true, response(readJob)) : url === '/api/account/articles/12345' ? response(detail(null, queued ? { ...readJob, status: finished ? status : 'queued', error_message: finished ? '读取结束' : '' } : null)) : base(url, init);
+    render(<App />);
+    await screen.findByText('排队中');
+    finished = true;
+    fireEvent.click(screen.getByRole('button', { name: '刷新本地状态' }));
+    await screen.findByText('读取结束');
+    expect(screen.getByRole('button', { name: '读取正文' })).toBeTruthy();
+    expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(1);
+  });
+
+  it('文章详情旧GET在切换后返回不会触发读取或替换正文', async () => {
+    window.history.replaceState({}, '', '/articles/12345');
+    const base = handler;
+    let finish: (value: Response) => void = () => {};
+    handler = (url, init) => url === '/api/account/articles/12345' ? new Promise(resolve => { finish = resolve; }) : url === '/api/account/articles/67890' ? response({ ...detail({ markdown: '新缓存', html: '', tags: [], categories: [] }), article: { ...article, id: '67890', title: '新文章' } }) : base(url, init);
+    render(<App />);
+    await waitFor(() => expect(calls.filter(call => call.url === '/api/account/articles/12345')).toHaveLength(1));
+    const old = calls.find(call => call.url === '/api/account/articles/12345')!;
+    act(() => { window.history.pushState({}, '', '/articles/67890'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await screen.findByLabelText('Markdown 源文');
+    await act(async () => finish(response(detail())));
+    expect(old.init?.signal?.aborted).toBe(true);
+    expect(screen.getByLabelText('Markdown 源文').textContent).toBe('新缓存');
+    expect(calls.filter(call => call.url.endsWith('/read'))).toHaveLength(0);
   });
 });
