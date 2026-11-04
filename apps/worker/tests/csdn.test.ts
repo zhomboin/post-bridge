@@ -61,10 +61,11 @@ beforeAll(async () => {
       const existing = url.searchParams.get('articleId');
       res.end(`<!doctype html><meta charset="utf-8">${mode === 'icon' ? '<style>button[data-save]::after{content:" "}</style>' : ''}<div class="article-bar__title-display">${existing ? title : '【无标题】'}</div><input class="article-bar__title" style="display:none"><pre contenteditable="true" class="editor__inner"></pre>${mode === 'changed' ? '' : '<button data-save>保存草稿</button>'}<button>保存并预览</button><button>发布</button><script>
       ${mode === 'auto-reconcile' ? `fetch('/save',{method:'POST',body:JSON.stringify({title:'错误自动保存',markdown:'不能写入'})}).catch(()=>{});` : ''}
-      const input=document.querySelector('input'); const body=document.querySelector('pre');
+      const input=document.querySelector('input'); const body=document.querySelector('pre'); let committedTitle=${JSON.stringify(existing ? title : '【无标题】')};
+      ${mode === 'deferred-title' ? `input.oninput=()=>{setTimeout(()=>{committedTitle=input.value},100)};` : ''}
       document.querySelector('div').onclick=()=>{input.style.display='block'};
       input.value=${JSON.stringify(existing ? title : '【无标题】')};body.textContent=${JSON.stringify(existing ? markdown : '# 欢迎使用官方Markdown编辑器\n\n这是默认模板，不是已有文章。')};
-      document.querySelector('button').onclick=async()=>{await fetch('/save',{method:'POST',body:JSON.stringify({title:input.value,markdown:body.textContent})});history.replaceState({},'', '/md/?articleId=123')};
+      document.querySelector('button').onclick=async()=>{await fetch('/save',{method:'POST',body:JSON.stringify({title:${['deferred-title','unsynced-title'].includes(mode) ? 'committedTitle' : 'input.value'},markdown:body.textContent})});history.replaceState({},'', '/md/?articleId=123')};
       ${existing ? `fetch('/blog-console-api/v3/editor/getArticle?articleId=${existing}',{method:'POST'}).then(r=>r.json()).then(r=>{input.value=r.data.title;body.textContent=r.data.markdowncontent})` : mode === 'late-id' ? '' : `setTimeout(()=>{history.replaceState({},'', '/md/?articleId=123');fetch('/acquired')}, 20)`}
       </script>`);
     } else if (url.pathname === '/save') {
@@ -104,6 +105,17 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     await checkPage.goto(origin + '/account');
     expect(await checkPage.evaluate(() => navigator.clipboard.readText())).toBe('');
     await checkPage.close();
+  });
+  it('标题显示已更新但平台延迟同步保存状态时，等待同步后完整保存', async () => {
+    await reset('deferred-title');
+    const result = await adapter().run(job, hooks, new AbortController().signal);
+    expect(result).toMatchObject({ status: 'succeeded', remote_id: '123' });
+    expect(title).toBe(job.title); expect(markdown).toBe(job.markdown); expect(writes).toBe(1);
+  });
+  it('标题同步仍未完成时阻断错误保存请求，不把无标题发送给平台', async () => {
+    await reset('unsynced-title');
+    const result = await adapter().run(job, hooks, new AbortController().signal);
+    expect(result.status).toBe('reconciling'); expect(writes).toBe(0);
   });
   it('保存按钮CSS伪元素图标改变可访问名称时，仍只点击精确文本保存草稿', async () => {
     await reset('icon');
