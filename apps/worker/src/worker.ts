@@ -54,6 +54,8 @@ export async function executeClaim(api: JobAPI, claim: Claim, open: () => Promis
   if (controller.signal.aborted) result = { status: external ? 'reconciling' : 'cancelled', error_code: 'cancelled', error_message: '浏览器操作已停止', retryable: false };
   if (external && ['failed', 'cancelled'].includes(result.status)) result = { ...result, status: 'reconciling', retryable: false };
   if (remoteID && claim.job.run_mode !== 'reconcile') result.remote_id = remoteID;
+  if (result.status !== 'succeeded' || claim.job.kind !== 'sync_articles') delete result.articles;
+  if (result.status !== 'succeeded' || claim.job.kind !== 'read_article') delete result.article;
   await api.complete(claim.job.id, claim.lease_token, result);
 }
 

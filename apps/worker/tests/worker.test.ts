@@ -13,6 +13,21 @@ function api(heartbeat: () => Promise<{cancel_requested:boolean}>) {
 }
 
 describe('领取的停止与清理', () => {
+  it('只读任务完成前取消时清除正文载荷并关闭浏览器', async () => {
+    let closed = false; const fake = api(async () => ({ cancel_requested: true }));
+    await executeClaim(fake, { ...claim, job: { ...claim.job, kind: 'read_article', article_id: '100', account_username: 'expected-user' } }, async () => ({ close: async () => { closed = true; }, run: async () => ({ status: 'succeeded', article: { id: '100' } as never }) }), new AbortController().signal);
+    expect(closed).toBe(true); expect(fake.completed[0]).toMatchObject({ status: 'cancelled' }); expect(fake.completed[0]?.article).toBeUndefined();
+  });
+  it('只读任务失租时关闭浏览器且不提交快照', async () => {
+    let closed = false; const fake = api(async () => { throw new Error('lost lease'); });
+    await executeClaim(fake, { ...claim, job: { ...claim.job, kind: 'sync_articles', account_username: 'expected-user' } }, async () => ({ close: async () => { closed = true; }, run: async (_job, _hooks, signal) => { await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); return { status: 'succeeded', articles: {} as never }; } }), new AbortController().signal, 10);
+    expect(closed).toBe(true); expect(fake.completed).toEqual([]);
+  });
+  it('失败或不匹配任务种类的读取载荷不发送到完成接口', async () => {
+    const fake = api(async () => ({ cancel_requested: false }));
+    await executeClaim(fake, { ...claim, job: { ...claim.job, kind: 'read_article', article_id: '100' } }, async () => ({ close: async () => {}, run: async () => ({ status: 'failed', article: { id: '100' } as never, articles: {} as never }) }), new AbortController().signal);
+    expect(fake.completed[0]?.article).toBeUndefined(); expect(fake.completed[0]?.articles).toBeUndefined();
+  });
   it('租约心跳失败立即关闭浏览器，不再写入完成状态', async () => {
     let closed = false;
     const fake = api(async () => { throw new Error('lost lease'); });

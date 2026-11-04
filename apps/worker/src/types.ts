@@ -1,8 +1,80 @@
-export interface Job {
+export interface Article {
   id: string;
-  kind: 'save_draft' | 'check_account';
+  title: string;
+  status: 'published' | 'draft' | 'rejected' | 'recycled' | 'unknown';
+  platform_status: string;
+  posted_at: string;
+  type: 'original' | 'repost' | 'translated' | 'unknown';
+  views: number;
+  likes: number;
+  comments: number;
+  favorites: number;
+  exposures: number;
+  gained_fans: number | null;
+  quality_score: number | null;
+  is_top: boolean;
+  fans_only: boolean;
+  vip_only: boolean;
+  editor_type: number;
+  cover_urls: string[];
+}
+export interface ArticleProfile {
+  nickname: string;
+  avatar_url: string;
+  level: number | null;
+  points: number | null;
+  original_articles: number | null;
+  followers: number | null;
+}
+export interface ArticleStats {
+  articles: number | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  favorites: number | null;
+  exposures: number | null;
+  followers: number | null;
+  yesterday_views: number | null;
+  yesterday_followers: number | null;
+  yesterday_favorites: number | null;
+}
+export interface ArticleTrend {
+  date: string;
+  views: number | null;
+  comments: number | null;
+  favorites: number | null;
+  followers: number | null;
+  promotion_clicks: number | null;
+  outlink_clicks: number | null;
+}
+export interface ArticleSnapshot {
+  username: string;
+  profile: ArticleProfile;
+  counts: { total: number; published: number; draft: number; rejected: number; recycled: number; unknown: number };
+  stats: ArticleStats;
+  trend: ArticleTrend[];
+  items: Article[];
+}
+export interface ArticleBody {
+  id: string;
   title: string;
   markdown: string;
+  html: string;
+  description: string;
+  tags: string[];
+  categories: string[];
+  type: string;
+  visibility: string;
+  platform_status: string;
+  reason: string;
+}
+export interface Job {
+  id: string;
+  kind: 'save_draft' | 'check_account' | 'sync_articles' | 'read_article';
+  title: string;
+  markdown: string;
+  article_id?: string;
+  account_username?: string;
   run_mode: 'execute' | 'reconcile';
   external_started: boolean;
   remote_id: string | null;
@@ -16,6 +88,8 @@ export interface JobResult {
   error_code?: string;
   error_message?: string;
   retryable?: boolean;
+  articles?: ArticleSnapshot;
+  article?: ArticleBody;
 }
 export interface Hooks { progress(value: Progress): Promise<void> }
 export interface Session { run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult>; close(): Promise<void> }
