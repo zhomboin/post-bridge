@@ -637,3 +637,43 @@ it('总览查看账号直接进入账号设置', async () => {
   render(<App />);
   expect((await screen.findByRole('link', { name: '查看账号' })).getAttribute('href')).toBe('/account?tab=settings');
 });
+
+it.each(['source_guard_failed', 'source_changed'])('来源暂停%s只提供来源授权入口，不引导登录或普通恢复', async error_code => {
+  window.history.replaceState({}, '', '/jobs/job-1');
+  const fallback = handler;
+  handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'waiting_user', error_code, error_message: '来源授权检查未通过，需要重新确认', integration_distribution_id: 'distribution-one' }) : fallback(url, init);
+  render(<App />);
+  const link = await screen.findByRole('link', { name: '处理来源授权' });
+  expect(link.getAttribute('href')).toBe('/integrations?tab=distributions&distribution_id=distribution-one');
+  expect(screen.getByText('来源待处理')).toBeTruthy();
+  expect(screen.queryByRole('link', { name: '登录 CSDN' })).toBeNull();
+  expect(screen.queryByLabelText('我已完成指定账号登录')).toBeNull();
+  expect(screen.queryByRole('button', { name: /登录完成/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: '重试任务' })).toBeNull();
+  expect(calls.some(call => call.url.endsWith('/resume'))).toBe(false);
+});
+it('任务列表对来源暂停显示来源待处理，实际账号等待仍保留登录流程', async () => {
+  const fallback = handler;
+  handler = (url, init) => url.startsWith('/api/jobs?') ? response({ items: [{ ...job, status: 'waiting_user', error_code: 'source_changed', integration_distribution_id: 'distribution-one' }], total: 1, page: 1, page_size: 50 }) : fallback(url, init);
+  render(<App />);
+  expect(await screen.findByText('来源待处理')).toBeTruthy();
+  expect(screen.queryByText('等待登录')).toBeNull();
+});
+it('来源异常后的未知外站结果仅核对，不提供普通恢复', async () => {
+  window.history.replaceState({}, '', '/jobs/job-1');
+  const fallback = handler;
+  handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'reconciling', outcome: 'unknown', external_started: true, error_code: 'source_guard_failed', integration_distribution_id: 'distribution-one' }) : fallback(url, init);
+  render(<App />);
+  expect(await screen.findByRole('button', { name: '重新自动核对' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: '登录 CSDN' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /继续任务|恢复原任务/ })).toBeNull();
+});
+it('外部分发的实际账号登录等待仍允许登录后继续', async () => {
+  window.history.replaceState({}, '', '/jobs/job-1');
+  const fallback = handler;
+  handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'waiting_user', error_code: 'needs_login', integration_distribution_id: 'distribution-one' }) : fallback(url, init);
+  render(<App />);
+  expect(await screen.findByRole('link', { name: '登录 CSDN' })).toBeTruthy();
+  expect(screen.getByLabelText('我已完成指定账号登录')).toBeTruthy();
+  expect(screen.queryByRole('link', { name: '处理来源授权' })).toBeNull();
+});

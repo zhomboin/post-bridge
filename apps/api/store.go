@@ -16,9 +16,13 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+//go:embed integration_content_schema.sql
+var integrationContentSchemaSQL string
+
 type Store struct {
-	pool *pgxpool.Pool
-	now  func() time.Time
+	pool         *pgxpool.Pool
+	now          func() time.Time
+	integrations *IntegrationService
 }
 type Claim struct {
 	Job            Job       `json:"job"`
@@ -59,6 +63,12 @@ func NewStore(ctx context.Context, pool *pgxpool.Pool, username, display string)
 		return nil, err
 	}
 	if _, err = tx.Exec(ctx, schemaSQL); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, integrationSchemaSQL); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, integrationContentSchemaSQL); err != nil {
 		return nil, err
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO account(id,username,display_name) VALUES('csdn-main',$1,$2) ON CONFLICT(id) DO UPDATE SET username=excluded.username,display_name=excluded.display_name", username, display); err != nil {
@@ -296,7 +306,7 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 					return err
 				}
 			}
-			if r.Status == "running" {
+			if r.Status == "running" || r.LeaseToken != "" && r.LeaseExpiresAt.After(now) {
 				active = true
 			}
 			if r.ExternalStarted && r.Outcome == "unknown" && !r.ManualResolved {
@@ -314,6 +324,13 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 				continue
 			}
 
+			allowed, guardErr := s.integrationClaimAllowed(ctx, tx, r, now)
+			if guardErr != nil {
+				return guardErr
+			}
+			if !allowed {
+				continue
+			}
 			r.Status = "running"
 			r.Attempts++
 			r.LeaseToken = randomToken()
@@ -388,6 +405,9 @@ func (s *Store) Heartbeat(ctx context.Context, id, token string) (bool, error) {
 	return cancel, err
 }
 func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error {
+	if handled, err := s.integrationProgress(ctx, id, in); handled || err != nil {
+		return err
+	}
 	return s.mutateLease(ctx, id, in.LeaseToken, func(tx pgx.Tx, r *record, now time.Time) error {
 		if r.CancelRequested && r.RunMode != "reconcile" {
 			return ErrConflict
@@ -496,6 +516,9 @@ func (s *Store) Action(ctx context.Context, id, action string, in ActionInput) (
 			if active {
 				return ErrConflict
 			}
+		}
+		if err = s.integrationActionAllowed(ctx, tx, r, action, now); err != nil {
+			return err
 		}
 		if err = r.action(action, in, now, p); err != nil {
 			return err
@@ -661,6 +684,9 @@ func (s *Store) Maintain(ctx context.Context) error {
 			return err
 		}
 		if _, err = tx.Exec(ctx, "DELETE FROM process_snapshots WHERE job_id IN (SELECT id FROM jobs WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome'<>'unknown' AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1)", now.Add(-30*24*time.Hour)); err != nil {
+			return err
+		}
+		if err = s.maintainIntegrations(ctx, tx, now); err != nil {
 			return err
 		}
 		// 仅清理不可重试终结记录的正文，未决和仍可重试的快照始终保留。

@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import ProcessTimeline from './ProcessTimeline';
 import ContentComparison from './ContentComparison';
-import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, jobHref, jobOutcome, queryPage, stageLabels, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
+import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, isSourcePaused, jobHref, jobOutcome, queryPage, stageLabels, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
 
 const readOnlyJob = (job: Job) => job.kind === 'sync_articles' || job.kind === 'read_article';
 const kindText = (job: Job) => ({ sync_articles: '文章同步', read_article: '正文读取', check_account: '账号检查' } as Record<string, string>)[job.kind] || '文字草稿';
@@ -40,7 +40,7 @@ export function Jobs() {
       <ResourceError error={resource.error} stale={!!resource.data} />
       {resource.data?.items.length ? <table className="data-table"><thead><tr><th className="title-cell">文章 / 任务</th><th>执行状态</th><th>执行结果</th><th>最近更新</th></tr></thead><tbody>{resource.data.items.map(job => <tr key={job.id}>
         <td className="title-cell"><RouteLink className="title-link" href={jobHref(job.id, route)}>{job.title || (readOnlyJob(job) ? 'CSDN ' + kindText(job) : 'CSDN 登录状态检查')}</RouteLink><div className="job-subline"><span>CSDN</span><span>{kindText(job)}</span><span className="mono">{job.id}</span></div></td>
-        <td><Status value={job.status} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /><div className="table-title-note">{stageLabels[job.stage] || '步骤待确认'}</div></td>
+        <td><Status value={job.status} label={isSourcePaused(job) ? '来源待处理' : undefined} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /><div className="table-title-note">{stageLabels[job.stage] || '步骤待确认'}</div></td>
         <td>{jobOutcome(job)}</td><td><time dateTime={job.updated_at}>{time(job.updated_at)}</time></td>
       </tr>)}</tbody></table> : <Empty loading={resource.loading}><strong>{params.size ? '暂无符合条件的任务' : '还没有草稿任务'}</strong></Empty>}
       {resource.data && <Pagination total={resource.data.total} page={page} pageSize={50} onPage={value => { params.set('page', String(value)); navigate('/jobs?' + params); }} />}
@@ -100,17 +100,19 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   const [note, setNote] = useState('');
   const [reconcileAccepted, setReconcileAccepted] = useState(false);
   useEffect(() => { setReconcileAccepted(false); }, [job]);
+  const sourcePaused = isSourcePaused(job);
   const uncertain = !job.manual_resolved && (job.status === 'reconciling' || job.outcome === 'unknown');
   const checking = autoReconcileActive(job) || reconcileAccepted;
   const conflict = /conflict|mismatch/.test(job.error_code || '');
   async function perform(name: string, body: object = {}) {
+    if (sourcePaused && ['resume', 'retry'].includes(name)) return;
     const result = await action.run(signal => api<Job>('/api/jobs/' + encodeURIComponent(job.id) + '/' + name, { method: 'POST', body: JSON.stringify(body), signal }), name === 'resolve' ? '请先刷新当前状态；任务仍在执行，或服务尚未确认最近 45 秒内的浏览器空闲状态。' : undefined);
     if (result) {
       if (name === 'reconcile') setReconcileAccepted(true);
       onUpdate();
     }
   }
-  if (readOnlyJob(job)) return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">{job.status === 'waiting_user' && <><RouteLink className="button primary" href="/account?tab=settings">登录 CSDN</RouteLink><button disabled={action.pending} onClick={() => void perform('resume')}>登录完成，继续读取</button></>}{job.retry_allowed && <button disabled={action.pending} onClick={() => void perform('retry')}>重试读取</button>}{['queued', 'running'].includes(job.status) && !job.cancel_requested && <button disabled={action.pending} onClick={() => void perform('cancel')}>取消读取</button>}{job.cancel_requested && ['queued', 'running'].includes(job.status) && <p role="status">正在取消读取…</p>}{action.error && <div className="notice error" role="alert">{action.error}</div>}</div></section>;
+  if (readOnlyJob(job)) return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">{job.status === 'waiting_user' && !sourcePaused && <><RouteLink className="button primary" href="/account?tab=settings">登录 CSDN</RouteLink><button disabled={action.pending} onClick={() => void perform('resume')}>登录完成，继续读取</button></>}{job.retry_allowed && <button disabled={action.pending} onClick={() => void perform('retry')}>重试读取</button>}{['queued', 'running'].includes(job.status) && !job.cancel_requested && <button disabled={action.pending} onClick={() => void perform('cancel')}>取消读取</button>}{job.cancel_requested && ['queued', 'running'].includes(job.status) && <p role="status">正在取消读取…</p>}{action.error && <div className="notice error" role="alert">{action.error}</div>}</div></section>;
   function reconcile() {
     if (checking || action.pending) return;
     if (candidate.trim() && !/^\d{1,32}$/.test(candidate.trim())) { action.setError('候选草稿ID仅接受数字。'); return; }
@@ -118,7 +120,8 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   }
   return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">
     {job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status) && <div className="notice warning"><strong>取消中</strong><p>正在等待后台停止本任务。可能存在的草稿仍需核对，请勿重新创建。</p></div>}
-    {job.status === 'waiting_user' && <><RouteLink className="button primary" href="/account?tab=settings">登录 CSDN</RouteLink><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已完成指定账号登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
+    {job.status === 'waiting_user' && !sourcePaused && <><RouteLink className="button primary" href="/account?tab=settings">登录 CSDN</RouteLink><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已完成指定账号登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
+    {sourcePaused && <RouteLink className="button primary" href={'/integrations?tab=distributions&distribution_id=' + encodeURIComponent(job.integration_distribution_id!)}>处理来源授权</RouteLink>}
     {uncertain && <><div className={'notice ' + (job.status === 'failed' ? 'error' : 'warning')}>
       <strong>{checking ? '后台正在自动查询草稿' : job.status === 'failed' ? conflict ? '草稿核对存在冲突' : '草稿查询未完成' : '等待草稿自动核对'}</strong>
 
@@ -132,7 +135,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
         <label>人工结束原因<textarea rows={3} maxLength={500} value={note} onChange={event => setNote(event.target.value)} disabled={action.pending || checking} placeholder="说明保留草稿和结束任务的原因" /></label>
         <button className="danger" disabled={!stopped || !note.trim() || action.pending || checking} onClick={() => void perform('resolve', { confirmed_browser_stopped: true, note: note.trim() })}>保留草稿并结束任务</button>
       </details></>}
-    {job.retry_allowed && !uncertain && <><button disabled={action.pending} onClick={() => void perform('retry')}>重试任务</button></>}
+    {job.retry_allowed && !uncertain && !sourcePaused && <><button disabled={action.pending} onClick={() => void perform('retry')}>重试任务</button></>}
     {['queued', 'running'].includes(job.status) && !job.cancel_requested && <details><summary>取消此任务</summary><label className="checkbox"><input type="checkbox" checked={cancelConfirmed} onChange={event => setCancelConfirmed(event.target.checked)} />确认取消并保留可能已保存的草稿</label><button className="danger" disabled={!cancelConfirmed || action.pending} onClick={() => void perform('cancel')}>确认取消任务</button></details>}
     {action.pending && <p role="status">正在提交操作，请等待服务端确认…</p>}
     {action.error && <div className="notice error" role="alert">{action.error}</div>}
@@ -150,7 +153,7 @@ export function JobDetail({ id }: { id: string }) {
   const remote = readOnlyJob(job) ? undefined : draftURL(job.remote_url);
   return <div className="page">
     <RouteLink className="back-link" href={backHref}><ArrowLeft size={14} aria-hidden="true" />{backLabel}</RouteLink>
-    <div className="page-heading"><div><h1 className="detail-title">{job.title || (readOnlyJob(job) ? 'CSDN ' + kindText(job) : 'CSDN 登录状态检查')}</h1><p><span className="mono">{job.id}</span></p></div><Status value={job.status} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /></div>
+    <div className="page-heading"><div><h1 className="detail-title">{job.title || (readOnlyJob(job) ? 'CSDN ' + kindText(job) : 'CSDN 登录状态检查')}</h1><p><span className="mono">{job.id}</span></p></div><Status value={job.status} label={isSourcePaused(job) ? '来源待处理' : undefined} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /></div>
     <ResourceError error={resource.error} stale />
     <div className="detail-layout">
       <section className="surface detail-result"><div className="surface-header"><h2>执行结果</h2><span className="muted" style={{ fontSize: 12 }}>CSDN</span></div><RefreshBar resource={resource} /><div className="surface-body">

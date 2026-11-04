@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,7 +15,10 @@ import (
 	"time"
 )
 
-type RuntimeConfig struct{ DatabaseURL, Address, Origin, Username, Password, WorkerToken, CSDNUsername, CSDNDisplayName, AdminDistDir, RemoteLoginURL string }
+type RuntimeConfig struct {
+	DatabaseURL, Address, Origin, Username, Password, WorkerToken, CSDNUsername, CSDNDisplayName, AdminDistDir, RemoteLoginURL string
+	IntegrationMasterKey, IntegrationEnvironment, IntegrationServiceID                                                         string
+}
 
 func privateSecret(path string) (string, error) {
 	if path == "" {
@@ -69,6 +73,17 @@ func LoadRuntimeConfig() (RuntimeConfig, error) {
 	if len(c.Password) < 12 || len(c.Password) > 72 || len(c.WorkerToken) < 32 || strings.ContainsAny(c.WorkerToken, " \t\n\r") {
 		return c, fmt.Errorf("私有凭据强度或格式不符合要求")
 	}
+	if path := os.Getenv("INTEGRATION_MASTER_KEY_FILE"); path != "" {
+		if c.IntegrationMasterKey, err = privateSecret(path); err != nil {
+			return c, err
+		}
+		c.IntegrationEnvironment = os.Getenv("INTEGRATION_ENVIRONMENT")
+		c.IntegrationServiceID = os.Getenv("INTEGRATION_SERVICE_ID")
+		keyBytes, keyErr := hex.DecodeString(c.IntegrationMasterKey)
+		if keyErr != nil || len(keyBytes) != 32 || u.Scheme != "https" || !validKey(c.IntegrationEnvironment) || !validKey(c.IntegrationServiceID) {
+			return c, fmt.Errorf("外部平台认证配置无效")
+		}
+	}
 	return c, nil
 }
 func Run(ctx context.Context, c RuntimeConfig) error {
@@ -89,7 +104,7 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 		cancel()
 		return fmt.Errorf("数据库初始化失败")
 	}
-	h, err := NewHandler(startup, Config{Store: store, AdminUsername: c.Username, AdminPassword: c.Password, WorkerToken: c.WorkerToken, Origin: c.Origin, AdminDistDir: c.AdminDistDir, RemoteLoginURL: c.RemoteLoginURL})
+	h, err := NewHandler(startup, Config{Store: store, AdminUsername: c.Username, AdminPassword: c.Password, WorkerToken: c.WorkerToken, Origin: c.Origin, AdminDistDir: c.AdminDistDir, RemoteLoginURL: c.RemoteLoginURL, IntegrationMasterKey: c.IntegrationMasterKey, IntegrationEnvironment: c.IntegrationEnvironment, IntegrationServiceID: c.IntegrationServiceID})
 	cancel()
 	if err != nil {
 		return fmt.Errorf("管理接口初始化失败")

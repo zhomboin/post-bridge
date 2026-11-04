@@ -1,19 +1,19 @@
-# CSDN 后台接口
+# 后台与内部接口
 
 ## 本轮交付边界
 
-实现独立管理员登录、CSDN 登录状态检查、文字 Markdown 草稿任务、账号文章只读快照与正文、持久队列、任务详情和日志。仅支持一个 CSDN 账号，公开发布和其他平台均不开放；CMS 连接与图片上传继续待实施，生产远程登录仍待实际环境验收。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
+实现独立管理员登录、CSDN 登录状态检查、文字 Markdown 草稿任务、账号文章只读快照与正文、持久队列、任务详情和日志。仅支持一个 CSDN 账号，公开发布和其他平台均不开放；PostBridge 侧来源接入已实现，实际 CMS 连接、图片上传及生产验收仍待。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
 
 API 管理数据库，执行器通过受限内部接口领取和上报，不直接访问数据库。管理界面只操作管理接口。本文为三单元共享契约，字段变化需同时更新实现与用例。
 
-调用平台受邀注册、审批、凭据签发与激活、CMS 来源接口、逐请求签名及执行前检查均为拟新增能力，见[CMS 主入口接入方案](cms-integration.md)。跨网络业务读写只对已注册且有效授权的应用开放；注册入口也须持有效邀请。本文管理接口不能作为 CMS 接口复用，执行器密钥不授予 CMS。
+PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活、逐请求签名、平台稿修订确认、分发查询及来源守卫。准确外部协议统一见[外部接入手册](external-integration.md)和[OpenAPI](../contracts/cms.openapi.yaml)，双方职责见[总体方案](cms-integration.md)；不在本文复制第二套协议。跨网络业务读写只对已注册且有效授权的应用开放；注册入口也须持有效邀请。本文管理接口不能作为 CMS 接口复用，执行器密钥不授予 CMS。
 
 ## 响应与权限
 
 - 管理 API 使用 HttpOnly、SameSite=Strict 的服务端会话 Cookie；生产 HTTPS 下加 Secure。登录和会话查询返回用户及 csrf_token，其他管理写请求带 X-CSRF-Token，并校验 Origin。
 - 内部接口使用单独的 Bearer 执行器密钥，不接受管理员 Cookie 替代。管理登录不能调用内部领取接口。
 - 错误响应含 code、message；不得返回密钥、Cookie、完整页面、原始网络响应或文章正文作为错误详情。
-- 列表响应统一含 items、total、page、page_size，默认每页 50、最大 100；日志默认最近 24 小时，单次最多 31 天。时间字段为带时区的 ISO 8601，界面按本地时区显示。
+- 分页列表含 items、total、page、page_size，默认每页 50、最大 100；来源应用、邀请、申请和审计仅返回最近 100 条 items。日志默认最近 24 小时，单次最多 31 天。时间字段为带时区的 ISO 8601，界面按本地时区显示。
 - 创建任务请求上限 1 MiB；标题 5—100 个字符，Markdown 非空且最多 200000 个字符。当前拒绝图片、MDX 和可执行 HTML，代码围栏中的代码样例正常保留。界面预览不执行 HTML。
 
 ## 管理接口
@@ -36,7 +36,7 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 | GET /api/jobs/{id} | 会话 | 完整任务，含不可变 Markdown 正文和结果 |
 | POST /api/jobs/{id}/cancel | 会话及 CSRF | 排队任务可取消；执行中设置 cancel_requested，待执行器确认停止后转换状态 |
 | POST /api/jobs/{id}/retry | 会话及 CSRF | 仅失败、尚无外站副作用且未达安全重试上限时允许，返回任务 |
-| POST /api/jobs/{id}/resume | 会话及 CSRF | 登录完成后继续等待任务；已开始外站操作则只进入核对 |
+| POST /api/jobs/{id}/resume | 会话及 CSRF | 仅处理平台登录等待；来源暂停必须经父分发重新确认，普通恢复被拒绝；已开始外站操作只核对 |
 | POST /api/jobs/{id}/reconcile | 可选 remote_id | 仅核对既有草稿；管理员输入仅作候选，匹配后才绑定；无 ID 时自动查询草稿列表；数字 ID 为可选候选，不创建或改写草稿 |
 | POST /api/jobs/{id}/resolve | confirmed_browser_stopped、note | 明确保留已有或可能存在的草稿并结束任务；无有效领取且执行器近期确认浏览器空闲后才允许，不删除或改写草稿，不再自动重试，记录管理员决定 |
 | GET /api/processes | q、status、platform、kind、job_id、level、from、to、page、page_size | 按任务分页的对象处理记录，含平台、对象、账号、步骤、结果和事件统计，不含正文 |
@@ -49,10 +49,10 @@ API 管理数据库，执行器通过受限内部接口领取和上报，不直�
 
 ## 任务字段与状态
 
-任务对象：id、request_id、platform、account_id、account_username、kind、article_id、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
+任务对象另含可选 integration_distribution_id，用于定位外部来源父分发。任务对象：id、request_id、platform、account_id、account_username、kind、article_id、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
 
 - kind 为 save_draft、check_account、sync_articles 或 read_article；读取任务由文章专用接口创建，使用 account_username 绑定账号，正文读取另含 article_id。读取任务不设置 external_started 和 remote_id，成功仍为 not_submitted，不表示外站保存或发布。
-- status 为 queued、running、waiting_user、reconciling、succeeded、failed、cancelled。
+- status 为 queued、running、waiting_user、reconciling、succeeded、failed、cancelled。waiting_user 表示等待处理；有 integration_distribution_id 且 error_code 为 source_guard_failed 或 source_changed 时显示“来源待处理”，进入原父分发处理来源授权，不引导平台登录或普通恢复。
 - outcome 为 not_submitted、draft_saved 或 unknown；任务成功不表示文章已公开。
 - run_mode 为 execute 或 reconcile；核对只读，不调用填稿或新建。
 - stage 使用 queued、checking_login、opening_editor、draft_acquired、filling、saving、verifying、finished 等稳定英文标识，界面显示中文。
@@ -126,6 +126,8 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 | PLAYWRIGHT_EXECUTABLE_PATH | 可选开发浏览器路径；部署时使用匹配的固定浏览器版本 |
 | WORKER_HEADLESS | 默认 true；账号页提供无桌面远程验证，本地助手为可选入口 |
 | ADMIN_DIST_DIR | 可选后台构建产物目录，由 API 提供同站点访问 |
+| INTEGRATION_MASTER_KEY_FILE | 可选 API 私有存储密钥文件，32 字节十六进制，不是调用方 secret |
+| INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID | 来源接入环境和接收服务标识，启用时分别配置，PUBLIC_ORIGIN 必须为 HTTPS |
 
 本轮提供独立本地数据库、初始化、启动、测试和停止入口。运行数据、密钥、登录状态和诊断文件不写入 Git。数据库日志保留和任务内容清理遵循有限期限，不清理正在执行或待核对任务所需的内容。
 

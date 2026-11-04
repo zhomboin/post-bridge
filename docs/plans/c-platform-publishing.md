@@ -4,6 +4,8 @@
 
 ## C01：结构化内容转换与真实预览
 
+当前 CSDN 文字 Markdown 平台稿预览、修订保存和确认绑定已实现于 [IntegrationDraft.tsx](../../apps/admin/src/IntegrationDraft.tsx) 与 [integration_content_store.go](../../apps/api/integration_content_store.go)。通用结构化转换、图片和其他平台仍按下列未完成项推进。
+
 前置：B05、B07、B12。拟建：`apps/worker/src/content/parse.ts`、`content/transform.ts`、`content/validate.ts`、`tests/fixtures/content/`；维护：`apps/api/internal/drafts/service.go`、分发稿页面及 `docs/platform-capabilities.md`。
 
 - [ ] 针对段落、标题、列表、链接、代码、图片、表格、公式和自定义 MDX 组件建立输入输出样例，先验证转换及拒绝行为。
@@ -28,12 +30,16 @@
 
 ## C03：平台协议、提交边界与结果核对
 
+- [x] 当前 CSDN save_draft 的关键写入阶段已接入实时来源守卫、权限复查和来源暂停；未知结果保持核对，见 [integration_guard.go](../../apps/api/integration_guard.go)、[integration_guard_test.go](../../apps/api/integration_guard_test.go)。此项仅为文字草稿子范围。
+
+公开提交仍未开放，C03 整体及最终公开提交边界未验收。
+
 前置：B06—B08、C01、C02。拟建：`apps/worker/src/adapters/types.ts`、`adapters/registry.ts`、`runtime/publish.ts`、`runtime/reconcile.ts`、`apps/api/internal/publications/reconcile.go`。
 
 - [ ] 使用模拟平台写出提交前失败、点击后断网、平台已接受但响应丢失、进程崩溃和失租的行为测试。
 - [ ] 固定适配器职责：能力、会话检查、字段校验、素材上传、填稿、提交、结果核对和审核查询；不提供任意脚本接口。
 - [ ] 将验证过的 UI 路径写为普通程序和明确的状态判断；页面不匹配时停止，不在线请求模型猜测控件或生成操作。验证真实适配器可由后台独立调用，无需 AI Agent 参与。
-- [ ] 首次外站写入前检查来源授权；点击公开提交前持久化提交意图、领取代次与步骤，并重新检查发布状态、版本、指纹和授权，失败则暂停。CMS 真实任务须先通过 D02/D03，接口依据[接入方案](../cms-integration.md)。
+- [ ] 公开提交能力完成后，点击提交前持久化提交意图、领取代次与步骤，并实时复查来源发布状态、版本、指纹和授权。当前草稿守卫不替代该验收；实际 CMS 任务仍须双方通过 D02/D03，协议见[外部手册](../external-integration.md)。
 - [ ] 明确未提交可安全重试、已确认提交可查询、提交不确定只可核对三类恢复；优先检查平台创作记录和已有外站关联，记录证据和时间。
 - [ ] 人工确认需管理员权限、外站记录依据和操作审计；无法判断继续保持未知，不以按钮点击作为成功依据。
 - [ ] 确认旧执行器停止后才允许同账号重新操作，验证并发核对、重复结果上报及状态幂等。

@@ -34,8 +34,17 @@
 | ADMIN_USERNAME | 后台管理员账号，密码由安装器单独生成 |
 | CSDN_USERNAME | 指定平台账号的稳定用户名 |
 | CSDN_DISPLAY_NAME | 指定账号显示名，用于身份核对 |
+| INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID | 可选外部来源环境与接收服务标识，必须同时提供；省略则不启用来源接入 |
 
 API 和远程登录控制使用仅本机可访问的内部地址，具体以部署配置为准。PUBLIC_ORIGIN 用于校验公网来源，与执行器的回环 API_BASE_URL 分开。后台登录画面只通过已认证 API 转发，不直接暴露执行器控制接口。
+
+## 可选外部来源接入
+
+启用时在私有安装配置同时填写 INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID，并保持 HTTPS PUBLIC_ORIGIN。安装器在 API 私有状态中生成 32 字节十六进制存储密钥，文件权限 0600；API 环境接收 INTEGRATION_MASTER_KEY_FILE、环境与服务标识，worker 不接收这些配置。
+
+升级复用原存储密钥，不能用重新生成替代受控恢复。首次启用同时保存私有初始化标记，升级和临时禁用均保留；密钥与标记一同受控备份恢复，不删除标记来绕过缺钥检查。已启用接入后缺少原密钥应停止启用或升级并报错；禁用再启用同样需要保留原密钥。该密钥不等于签发给调用方的 secret，需独立受限备份。具体守卫与测试见[安装器](../scripts/ubuntu_deploy.py)及[部署用例](../tests/runtime/test_ubuntu.py)。
+
+完成配置后由管理员在“内容来源”创建邀请、审批并配置反向来源，准确步骤见[外部手册](external-integration.md)。配置代码和本地用例不代表目标服务器、外部 CMS 或跨网络生产已验收。数据库恢复后的应用停用与撤销核对按[运维流程](operations.md)实施，系统尚未自动完成该处置。
 
 ## 代码与私有状态
 
@@ -49,7 +58,7 @@ API 和远程登录控制使用仅本机可访问的内部地址，具体以部�
 | /var/lib/post-bridge/worker | 独立执行器用户的 0700 状态目录；仅持有自己的内部密钥和构建缓存 |
 | /var/cache/post-bridge/ms-playwright | 固定浏览器下载位置；由锁文件中的 Playwright 1.64.1 安装对应 Chromium |
 
-API 用户为 post-bridge-api，执行器用户为 post-bridge-worker，均禁止交互登录。执行器不接收数据库连接或后台密码。运行单元清除 DISPLAY 与 WAYLAND_DISPLAY，并固定 WORKER_HEADLESS。源码、私有配置、数据库和浏览器目录互相分开。
+API 用户为 post-bridge-api，执行器用户为 post-bridge-worker，均禁止交互登录。执行器不接收数据库连接、后台密码或接入 master key/环境/服务配置。运行单元清除 DISPLAY 与 WAYLAND_DISPLAY，并固定 WORKER_HEADLESS。源码、私有配置、数据库和浏览器目录互相分开。
 
 [API 单元](../deploy/systemd/post-bridge-api.service)与[执行器单元](../deploy/systemd/post-bridge-worker.service)直接前台运行构建产物，异常退出自动重启。API 重启会带动执行器重新启动；停止给出最多 90 秒清理时间，剩余子进程仅在所属 systemd 控制组内清理，不按进程名批量停止。两个单元随系统启动。
 
