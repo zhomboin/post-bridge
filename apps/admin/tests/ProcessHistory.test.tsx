@@ -29,6 +29,7 @@ beforeEach(() => {
       : path.startsWith('/api/jobs/process-1/history?') ? { items: [events[0]], transitions: events, total: 3, page: 1, page_size: 50 }
       : path.startsWith('/api/jobs/process-1/changes') ? { submitted: { title: job.title, markdown: job.markdown }, snapshots, attempts: [1, 2], content_retained: snapshots.length > 0 }
       : path.startsWith('/api/logs?') ? { items: [], total: 0, page: 1, page_size: 50 } : {};
+    if (path.includes('/history?')) await new Promise(resolve => setTimeout(resolve, 20));
     return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
   }));
 });
@@ -51,7 +52,8 @@ it('处理详情状态图使用完整流转而非当前日志分页，并保留�
   window.history.replaceState({}, '', '/logs/process-1?back=%2Flogs%3Fstatus%3Dfailed');
   render(<App />);
   const graph = await screen.findByRole('region', { name: '状态流转' });
-  expect(within(graph).getByText('待核对')).toBeTruthy();
+  expect(within(graph).queryByText('状态未采集')).toBeNull();
+  await within(graph).findByText('待核对');
   expect(within(graph).getAllByText('执行完成').length).toBeGreaterThan(0);
   expect(within(graph).getByText('只读核对')).toBeTruthy();
   expect(screen.getByRole('link', { name: '返回处理记录' }).getAttribute('href')).toBe('/logs?status=failed');

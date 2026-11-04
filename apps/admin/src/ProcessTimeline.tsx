@@ -6,7 +6,7 @@ const levelNames: Record<string, string> = { info: '信息', warning: '警告', 
 function eventName(event: ProcessEvent) {
   return event.status && event.status !== 'running' ? statusLabels[event.status] || event.status : stageLabels[event.stage] || '步骤未记录';
 }
-export function Workflow({ events, job }: { events: ProcessEvent[]; job?: Job }) {
+export function Workflow({ events, job, loading = false }: { events: ProcessEvent[]; job?: Job; loading?: boolean }) {
   const recorded = events.filter(event => event.status);
   const groups = new Map<number, ProcessEvent[]>();
   for (const event of recorded) groups.set(event.attempt, [...(groups.get(event.attempt) || []), event]);
@@ -16,7 +16,7 @@ export function Workflow({ events, job }: { events: ProcessEvent[]; job?: Job })
       <ol className="workflow-graph">{entries.map((event, index) => <li key={event.id} className={'workflow-node ' + (event.status || '')} aria-current={event === recorded.at(-1) ? 'step' : undefined}>
         <span className="workflow-dot" aria-hidden="true">{index + 1}</span><div><strong>{eventName(event)}</strong>{event.run_mode === 'reconcile' && <span className="mode-label">只读核对</span>}{event.status !== 'running' && event.stage !== 'finished' && <span className="muted">{stageLabels[event.stage] || event.stage}</span>}<time dateTime={event.created_at}>{time(event.created_at)}</time></div>
       </li>)}</ol>
-    </div>) : <Empty>状态未采集</Empty>}</div>
+    </div>) : <Empty loading={loading}>状态未采集</Empty>}</div>
   </section>;
 }
 export default function ProcessTimeline({ jobId, job }: { jobId: string; job?: Job }) {
@@ -24,7 +24,7 @@ export default function ProcessTimeline({ jobId, job }: { jobId: string; job?: J
   const resource = useResource<HistoryPage>('/api/jobs/' + encodeURIComponent(jobId) + '/history?page=' + page + '&page_size=50');
   return <>
     <ResourceError error={resource.error} stale={!!resource.data} />
-    <Workflow events={resource.data?.transitions || []} job={job} />
+    <Workflow events={resource.data?.transitions || []} job={job} loading={resource.loading} />
     <section className="surface section-gap" aria-label="处理日志"><div className="surface-header"><h2>处理日志</h2></div><RefreshBar resource={resource} name="刷新日志" />
       {resource.data?.items.length ? <ol className="process-events">{resource.data.items.map(event => <li key={event.id} className={'process-event ' + event.level}>
         <div className="event-time"><time dateTime={event.created_at}>{time(event.created_at)}</time><span>{event.attempt ? '第 ' + event.attempt + ' 次执行' : '任务创建'}</span></div>
