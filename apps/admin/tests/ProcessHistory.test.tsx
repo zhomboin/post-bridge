@@ -120,3 +120,14 @@ it('保存转入核对时只标记实际核对节点，不把本轮写操作标�
   expect(mode.closest('li')?.textContent).not.toContain('填写正文');
   expect(screen.getByRole('heading', { name: '第 1 次执行' }).textContent).not.toContain('只读核对');
 });
+
+
+it('已有事件缺少状态时仍展示实际记录的步骤，不补造终结状态', () => {
+  render(<Workflow events={events.map(event => ({ ...event, status: '', outcome: '', run_mode: '' }))} />);
+  expect(screen.getByText('部分状态未采集')).toBeTruthy();
+  expect(screen.getByText('等待执行')).toBeTruthy();
+  expect(screen.getByText('保存草稿')).toBeTruthy();
+  expect(screen.getByText('处理结束')).toBeTruthy();
+  expect(screen.queryByText('执行完成')).toBeNull();
+  expect(screen.queryByText('只读核对')).toBeNull();
+});

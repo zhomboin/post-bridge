@@ -7,14 +7,14 @@ function eventName(event: ProcessEvent) {
   return event.status && event.status !== 'running' ? statusLabels[event.status] || event.status : stageLabels[event.stage] || '步骤未记录';
 }
 export function Workflow({ events, job, loading = false }: { events: ProcessEvent[]; job?: Job; loading?: boolean }) {
-  const recorded = events.filter(event => event.status);
+  const recorded = events.filter(event => event.status || event.stage);
   const groups = new Map<number, ProcessEvent[]>();
   for (const event of recorded) groups.set(event.attempt, [...(groups.get(event.attempt) || []), event]);
   return <section className="surface section-gap" aria-label="状态流转"><div className="surface-header"><h2>状态流转</h2>{job && <Status value={job.status} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} />}</div>
     <div className="surface-body workflow-groups">{events.some(event => !event.status) && <p className="muted" role="status">部分状态未采集</p>}{groups.size ? Array.from(groups, ([attempt, entries]) => <div key={attempt} className="workflow-attempt">
       <h3>{attempt ? '第 ' + attempt + ' 次执行' : '任务创建'}</h3>
       <ol className="workflow-graph">{entries.map((event, index) => <li key={event.id} className={'workflow-node ' + (event.status || '')} aria-current={event === recorded.at(-1) ? 'step' : undefined}>
-        <span className="workflow-dot" aria-hidden="true">{index + 1}</span><div><strong>{eventName(event)}</strong>{event.run_mode === 'reconcile' && <span className="mode-label">只读核对</span>}{event.status !== 'running' && event.stage !== 'finished' && <span className="muted">{stageLabels[event.stage] || event.stage}</span>}<time dateTime={event.created_at}>{time(event.created_at)}</time></div>
+        <span className="workflow-dot" aria-hidden="true">{index + 1}</span><div><strong>{eventName(event)}</strong>{event.run_mode === 'reconcile' && <span className="mode-label">只读核对</span>}{event.status && event.status !== 'running' && event.stage !== 'finished' && <span className="muted">{stageLabels[event.stage] || event.stage}</span>}<time dateTime={event.created_at}>{time(event.created_at)}</time></div>
       </li>)}</ol>
     </div>) : <Empty loading={loading}>状态未采集</Empty>}</div>
   </section>;

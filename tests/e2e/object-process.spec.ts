@@ -53,6 +53,22 @@ test('对象处理记录可查看真实字段前后值、状态流程与最终�
   expect(logs).not.toContain('编辑器原有文字'); expect(logs).not.toContain('合成代码');
   await page.getByRole('link', { name: '返回处理记录', exact: true }).click();
   await expect(page.getByRole('heading', { name: '处理记录', exact: true })).toBeVisible();
+  await page.route('**/api/jobs/' + job.id + '/history?*', async route => {
+    const response = await route.fetch(), history = await response.json();
+    const stagesOnly = (entries: Record<string, unknown>[]) => entries.map(entry => ({ ...entry, status: '', outcome: '', run_mode: '' }));
+    await route.fulfill({ response, json: { ...history, items: stagesOnly(history.items), transitions: stagesOnly(history.transitions) } });
+  });
+  await page.goto('/logs/' + job.id);
+  const observed = page.getByRole('region', { name: '状态流转' });
+  await expect(observed).toContainText('部分状态未采集');
+  await expect(observed).toContainText('保存草稿');
+  await expect(observed.locator('.workflow-node').getByText('执行完成', { exact: true })).toHaveCount(0);
+  await expect(observed.locator('.workflow-node').getByText('只读核对', { exact: true })).toHaveCount(0);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath('已有步骤流程-' + width + '.png'), fullPage: true });
+  }
 });
 
 test('同一账号两次检查分成两条处理记录', async ({ page, stack }) => {

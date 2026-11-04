@@ -4,7 +4,7 @@ export type ProcessSummary = Job & {
   object_type: 'article' | 'account'; object_id: string; object_name: string; account_name: string;
   event_count: number; error_count: number; warning_count: number;
 };
-export type ProcessEvent = LogEntry & { stage: string; attempt: number; status?: string; outcome?: string; run_mode?: string };
+export type ProcessEvent = Omit<LogEntry, 'id'> & { id: string | number; stage: string; attempt: number; status?: string; outcome?: string; run_mode?: string };
 export type HistoryPage = { items: ProcessEvent[]; transitions: ProcessEvent[]; total: number; page: number; page_size: number };
 export type ProcessSnapshot = {
   id: number | string; attempt: number; phase: 'before' | 'after'; object_type: 'article' | 'account';
