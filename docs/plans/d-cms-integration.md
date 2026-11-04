@@ -8,6 +8,7 @@ PostBridge 侧文件为 [OpenAPI](../../contracts/cms.openapi.yaml)、[共享签
 
 - [x] 明确 CMS 主入口、PostBridge 预览与异常入口，以及双方独立身份和数据职责。
 - [x] 形成实际外部与管理员确认接口、签名固定 profile、指纹、错误与限制的机器契约和手册。
+- [x] 后台文档图标打开站内接入手册，支持章节目录、窄屏表格及契约、测试向量下载；与现行 Markdown 同源。
 - [x] 固定当前目标为 CSDN 文字 Markdown save_draft，未实现的公开发布、图片、MDX 和其他平台明确拒绝。
 - [x] PostBridge 本地校验共享签名与指纹向量、路由覆盖、模型和来源严格状态响应。
 - [ ] CMS 结合自身实现审阅并共同确认契约与测试向量。

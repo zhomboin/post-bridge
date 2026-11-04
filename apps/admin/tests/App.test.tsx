@@ -677,3 +677,44 @@ it('外部分发的实际账号登录等待仍允许登录后继续', async () =
   expect(screen.getByLabelText('我已完成指定账号登录')).toBeTruthy();
   expect(screen.queryByRole('link', { name: '处理来源授权' })).toBeNull();
 });
+
+describe('接入文档入口', () => {
+  it('通过有名称的文档图标进入站内现行文档，显示表格和可下载契约', async () => {
+    render(<App />);
+    const link = await screen.findByRole('link', { name: '接入文档' });
+    expect(link.getAttribute('href')).toBe('/docs/integrations');
+    fireEvent.click(link);
+    await screen.findByRole('heading', { level: 1, name: '外部系统接入' });
+    expect(window.location.pathname).toBe('/docs/integrations');
+    expect(screen.getAllByRole('table').length).toBeGreaterThan(5);
+    expect(screen.getByRole('columnheader', { name: '负责方' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'OpenAPI' }).getAttribute('download')).toBe('cms.openapi.yaml');
+    expect(screen.getByRole('link', { name: '测试向量' }).getAttribute('download')).toBe('integration-contract.json');
+    expect(screen.getByRole('link', { name: '返回内容来源' }).getAttribute('href')).toBe('/integrations');
+    expect(calls.every(call => !call.init?.method || call.init.method === 'GET')).toBe(true);
+  });
+
+  it('直接访问文档可刷新，浏览器后退恢复原页面', async () => {
+    window.history.replaceState({}, '', '/docs/integrations');
+    render(<App />);
+    await screen.findByRole('heading', { level: 1, name: '外部系统接入' });
+    await act(async () => {
+      window.history.replaceState({}, '', '/jobs?page=2');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await screen.findByRole('heading', { level: 1, name: '草稿任务' });
+    fireEvent.click(screen.getByRole('link', { name: '接入文档' }));
+    await screen.findByRole('heading', { level: 1, name: '外部系统接入' });
+    await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 50)); });
+    await screen.findByRole('heading', { level: 1, name: '草稿任务' });
+    expect(window.location.search).toBe('?page=2');
+  });
+
+  it('未登录时直接访问文档保留管理员登录流程', async () => {
+    window.history.replaceState({}, '', '/docs/integrations');
+    handler = () => response({ code: 'unauthorized' }, 401);
+    render(<App />);
+    await screen.findByRole('heading', { name: '登录发布工作台' });
+    expect(screen.queryByRole('heading', { name: '外部系统接入' })).toBeNull();
+  });
+});

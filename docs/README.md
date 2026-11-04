@@ -8,7 +8,7 @@
 - [版本记录](version.md)：简要变更。
 - [完整实施计划](implementation-plan.md)：阶段依赖与剩余工作。
 - [CMS 接入总体方案](cms-integration.md)：双方职责、流程、当前实现和调用方剩余工作。
-- [外部系统接入手册](external-integration.md)：注册、签名、指纹、可靠投递与来源状态要求。
+- [外部系统接入手册](external-integration.md)：注册、签名、指纹、可靠投递与来源状态要求；后台顶部文档图标可站内阅读，并下载契约与测试向量。
 - [外部接口机器契约](../contracts/cms.openapi.yaml)：实际开放接口、模型和权限。
 - [后台及内部 API](api.md)：管理员、任务与执行器协议。
 - [管理后台规范](admin-ui.md)：界面规则、来源工作台与合成截图。
