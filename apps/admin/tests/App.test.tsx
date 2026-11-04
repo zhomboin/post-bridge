@@ -44,7 +44,7 @@ describe('管理员会话与任务闭环', () => {
     render(<App />);
     const button = await screen.findByRole('button', { name: '重新自动核对' });
     expect(screen.getByText('无法匹配完整稿件').closest('details')?.open).toBe(false);
-    expect(screen.getByText(/候选草稿ID为可选项/)).toBeTruthy();
+    expect(screen.getByLabelText('候选草稿ID（可选，仅数字）')).toBeTruthy();
     fireEvent.click(button);
     fireEvent.click(button);
     expect((button as HTMLButtonElement).disabled).toBe(true);
@@ -59,10 +59,10 @@ describe('管理员会话与任务闭环', () => {
     handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status, outcome: 'unknown', external_started: true, run_mode: 'reconcile', auto_reconcile_started: true, reconcile_count: 1, absence_checks: 1, available_at: '2026-11-03T04:00:20Z' }) : fallback(url, init);
     render(<App />);
     await screen.findByText('后台正在自动查询草稿');
-    expect(screen.getByText(/已完成 1 \/ 4 轮/)).toBeTruthy();
+    expect(screen.getByText(/查询进度 1 \/ 4/)).toBeTruthy();
     if (status === 'reconciling') expect(screen.getByText(/下一次查询/)).toBeTruthy();
     else expect(screen.queryByText(/下一次查询/)).toBeNull();
-    expect(screen.getByText(/连续两次确认未保存/)).toBeTruthy();
+    expect(screen.queryByText(/连续两次确认未保存/)).toBeNull();
     const button = screen.getByRole('button', { name: '正在自动核对…' });
     expect((button as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(button);
@@ -80,7 +80,7 @@ describe('管理员会话与任务闭环', () => {
     handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'failed', outcome: 'unknown', external_started: true, run_mode: 'reconcile', auto_reconcile_started: true, reconcile_count: 4, error_code }) : fallback(url, init);
     render(<App />);
     await screen.findByText(title);
-    expect(screen.getByText(/账号暂不接受新的写入任务/)).toBeTruthy();
+    expect(screen.getByLabelText('候选草稿ID（可选，仅数字）')).toBeTruthy();
     expect(screen.queryByText('后台正在自动查询草稿')).toBeNull();
     expect((screen.getByRole('button', { name: '重新自动核对' }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByRole('button', { name: '重试任务' })).toBeNull();
@@ -93,7 +93,7 @@ describe('管理员会话与任务闭环', () => {
     handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'failed', outcome: 'unknown', external_started: true, manual_resolved: ended }) : fallback(url, init);
     render(<App />);
     await screen.findByRole('button', { name: '重新自动核对' });
-    fireEvent.change(screen.getByLabelText('候选草稿ID（仅数字）'), { target: { value: 'abc' } });
+    fireEvent.change(screen.getByLabelText('候选草稿ID（可选，仅数字）'), { target: { value: 'abc' } });
     fireEvent.click(screen.getByRole('button', { name: '重新自动核对' }));
     await screen.findByText('候选草稿ID仅接受数字。');
     expect(calls.some(c => c.url.endsWith('/reconcile'))).toBe(false);
@@ -232,13 +232,14 @@ describe('管理员会话与任务闭环', () => {
     expect(calls.filter(c => c.url === '/api/jobs')).toHaveLength(0);
   });
 
-  it('账号检查创建后台任务并清楚说明本地登录下一步', async () => {
+  it('账号检查创建后台任务并保留登录入口', async () => {
     window.history.replaceState({}, '', '/account');
     const fallback = handler;
     handler = (url, init) => url === '/api/account/check' ? response({ ...job, kind: 'check_account' }, 202) : fallback(url, init);
     render(<App />);
     await screen.findByText('测试账号');
-    expect(screen.getByText(/验证主机/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '开始远程登录' })).toBeTruthy();
+    expect(screen.queryByText(/验证主机/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '检查登录状态' }));
     await waitFor(() => expect(calls.some(c => c.url === '/api/account/check')).toBe(true));
     const check = calls.find(c => c.url === '/api/account/check')!;
@@ -303,7 +304,7 @@ describe('管理员会话与任务闭环', () => {
     const fallback = handler;
     handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, status: 'waiting_user' }) : url.endsWith('/resume') ? response({ ...job, status: 'queued' }) : fallback(url, init);
     render(<App />);
-    await screen.findByText(/^请在账号页完成远程登录验证/);
+    await screen.findByRole('link', { name: '登录 CSDN' });
     fireEvent.click(screen.getByLabelText('我已完成指定账号登录'));
     fireEvent.click(screen.getByRole('button', { name: '登录完成，继续任务' }));
     await waitFor(() => expect(calls.some(c => c.url.endsWith('/resume'))).toBe(true));
@@ -316,7 +317,7 @@ describe('管理员会话与任务闭环', () => {
     render(<App />);
     await screen.findByRole('heading', { name: '第一篇技术文章' });
     expect(screen.queryByRole('button', { name: '重试任务' })).toBeNull();
-    fireEvent.change(screen.getByLabelText('候选草稿ID（仅数字）'), { target: { value: '12345' } });
+    fireEvent.change(screen.getByLabelText('候选草稿ID（可选，仅数字）'), { target: { value: '12345' } });
     fireEvent.click(screen.getByRole('button', { name: '重新自动核对' }));
     await waitFor(() => expect(calls.some(c => c.url.endsWith('/reconcile'))).toBe(true));
     expect(JSON.parse(String(calls.find(c => c.url.endsWith('/reconcile'))?.init?.body))).toEqual({ remote_id: '12345' });
@@ -466,4 +467,78 @@ describe('远程登录输入与销毁边界',()=>{
   fireEvent.click(screen.getByRole('link',{name:'草稿任务'}));finish(response({id:'late-id',status:'pending',width:1280,height:800,expires_at:''},202));
   await waitFor(()=>expect(calls.some(c=>c.url==='/api/account/login/late-id'&&c.init?.method==='DELETE')).toBe(true));
  });
+});
+
+
+describe('登录弹窗', () => {
+  it('点击开始立即打开弹窗，关闭后恢复焦点并撤销等待会话', async () => {
+    window.history.replaceState({}, '', '/account');
+    const fallback = handler;
+    handler = (url, init) => url === '/api/account/login'
+      ? response({ id: init?.method === 'POST' ? 'modal-test' : '', status: init?.method === 'POST' ? 'pending' : 'idle', width: 1280, height: 800, expires_at: '' })
+      : url === '/api/account/login/modal-test' ? response({ status: 'cancelled' }) : fallback(url, init);
+    render(<App />);
+    const start = await screen.findByRole('button', { name: '开始远程登录' });
+    await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    start.focus(); fireEvent.click(start);
+    const dialog = await screen.findByRole('dialog', { name: 'CSDN 登录' });
+    await screen.findByText('正在等待执行器空闲');
+    expect(document.body.style.overflow).toBe('hidden');
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(calls.some(c => c.url === '/api/account/login/modal-test' && c.init?.method === 'DELETE')).toBe(true));
+    expect(document.body.style.overflow).toBe('');
+    expect(document.activeElement).toBe(start);
+  });
+
+  it('创建响应迟到时关闭弹窗仍撤销会话，不重新打开', async () => {
+    window.history.replaceState({}, '', '/account'); const fallback = handler;
+    let finish: (value: Response) => void = () => {};
+    handler = (url, init) => url === '/api/account/login' ? init?.method === 'POST'
+      ? new Promise<Response>(resolve => { finish = resolve; })
+      : response({ id: '', status: 'idle', width: 1280, height: 800, expires_at: '' })
+      : url === '/api/account/login/late-modal' ? response({ status: 'cancelled' }) : fallback(url, init);
+    render(<App />);
+    const start = await screen.findByRole('button', { name: '开始远程登录' });
+    await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(start);
+    fireEvent.click(await screen.findByRole('button', { name: '关闭登录弹窗' }));
+    expect((start as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(start);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls.filter(c => c.init?.method === 'POST')).toHaveLength(1);
+    await act(async () => finish(response({ id: 'late-modal', status: 'pending', width: 1280, height: 800, expires_at: '' })));
+    await waitFor(() => expect(calls.some(c => c.url === '/api/account/login/late-modal' && c.init?.method === 'DELETE')).toBe(true));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+
+describe('弹窗终态清理', () => {
+  it('输入未返回而轮询先成功时，关闭弹窗仍解锁入口并清理输入', async () => {
+    window.history.replaceState({}, '', '/account');
+    const fallback = handler; let status = 'active';
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:synthetic-frame'), revokeObjectURL: vi.fn() }));
+    handler = (url, init) => url === '/api/account/login'
+      ? response({ id: 'finished-input', status, width: 1280, height: 800, expires_at: '' })
+      : url.endsWith('/frame') ? new Response('synthetic', { headers: { 'Content-Type': 'image/jpeg' } })
+      : url.endsWith('/input') ? new Promise<Response>((_, reject) => { init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))); })
+      : fallback(url, init);
+    vi.useFakeTimers();
+    await act(async () => { render(<App />); await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByRole('img', { name: 'CSDN 远程登录画面' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('输入到页面的文字'), { target: { value: 'temporary-secret' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送文字' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    status = 'succeeded';
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByText('指定账号登录成功，等待任务已恢复')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '关闭登录弹窗' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect((screen.getByRole('button', { name: '开始远程登录' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls.filter(c => c.url.endsWith('/input')).every(c => c.init?.signal?.aborted)).toBe(true);
+    expect(screen.queryByDisplayValue('temporary-secret')).toBeNull();
+  });
 });

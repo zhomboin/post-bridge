@@ -26,6 +26,8 @@ Go 使用 *_test.go，TypeScript 使用 *.test.ts 或 *.test.tsx。测试采用 
 
 ## 前端设计与审阅
 
+界面不添加多余功能说明，只保留必要的标题、按钮、文章、图片、表单、状态、错误与操作确认。
+
 所有前端实现和审阅先阅读并共同遵循项目内 [Frontend Design](.agents/skills/frontend-design/SKILL.md) 与 [Emil Kowalski](.agents/skills/emil-design-eng/SKILL.md)，不以同名全局技能替代。按 [后台规范](docs/admin-ui.md) 检查中文工作台、桌面及 390/320 窄屏、键盘、减少动态效果和日志脱敏；审阅用“调整前／调整后／原因”表格链接实现。
 
 ## 提交、PR 与安全

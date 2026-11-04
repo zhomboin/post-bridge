@@ -113,7 +113,7 @@ test('未知结果阻止新建且人工结束保留事实并禁止重试', async
   await page.goto('/jobs/' + original.id);
   await expect(page.getByText('后台正在自动查询草稿', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '重试任务', exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('候选草稿ID（仅数字）', { exact: true })).toBeDisabled();
+  await expect(page.getByLabel('候选草稿ID（可选，仅数字）', { exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '正在自动核对…', exact: true })).toBeDisabled();
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -137,8 +137,8 @@ test('未知结果阻止新建且人工结束保留事实并禁止重试', async
   expect(exhausted.reconcile_count).toBe(4);
   await page.getByRole('button', { name: '刷新', exact: true }).click();
   await expect(page.getByText('草稿查询未完成', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('候选草稿ID（仅数字）', { exact: true })).toBeEnabled();
-  await page.getByLabel('候选草稿ID（仅数字）', { exact: true }).fill('987654321');
+  await expect(page.getByLabel('候选草稿ID（可选，仅数字）', { exact: true })).toBeEnabled();
+  await page.getByLabel('候选草稿ID（可选，仅数字）', { exact: true }).fill('987654321');
   const manualReconcile = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/api/jobs/' + original.id + '/reconcile'));
   await page.getByRole('button', { name: '重新自动核对', exact: true }).click();
   expect((await manualReconcile).status()).toBe(200);
