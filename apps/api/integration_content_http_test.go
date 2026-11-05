@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,29 +13,12 @@ import (
 	"time"
 )
 
-type integrationFixtureTransport func(*http.Request) (*http.Response, error)
-
-func (f integrationFixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func integrationHTTPFixture(t *testing.T) (*handler, IntegrationClient, func(string, string, any, bool) *httptest.ResponseRecorder, *IntegrationSourceState) {
+func integrationHTTPFixture(t *testing.T) (*handler, IntegrationClient, func(string, string, any, bool) *httptest.ResponseRecorder) {
 	t.Helper()
 	h, s := integrationTestHandler(t)
 	client := integrationSeedClient(t, h)
-	client.SourceURL = "https://cms.example.test"
-	client.SourceClientID = "bridge-source"
-	client.SourceKeyID = "cms-key"
-	client.SourceServiceID = "cms"
-	client.SourceEnvironment = "test"
-	data, _ := json.Marshal(client)
-	cipher, err := h.integrations.seal(bytes.Repeat([]byte{9}, 32), "source:"+client.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = s.pool.Exec(context.Background(), "UPDATE integration_clients SET metadata=$2,encrypted_source_secret=$3 WHERE id=$1", client.ID, data, cipher); err != nil {
-		t.Fatal(err)
-	}
 	var keyID string
-	if err = s.pool.QueryRow(context.Background(), "SELECT id FROM integration_keys WHERE client_id=$1", client.ID).Scan(&keyID); err != nil {
+	if err := s.pool.QueryRow(context.Background(), "SELECT id FROM integration_keys WHERE client_id=$1", client.ID).Scan(&keyID); err != nil {
 		t.Fatal(err)
 	}
 	secret, err := h.integrations.Secret(context.Background(), keyID)
@@ -48,14 +30,7 @@ func integrationHTTPFixture(t *testing.T) (*handler, IntegrationClient, func(str
 	if _, err = s.pool.Exec(context.Background(), "INSERT INTO sessions(token_hash,username,csrf_token,expires_at) VALUES($1,'admin',$2,$3)", hashToken(cookie), csrf, s.now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	state := &IntegrationSourceState{ArticleID: "article-1", SourceVersion: 2, StateSeq: 2, Status: "published", AuthorizationValid: true, Allowed: true, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
-	h.integrations.SourceHTTPClient = &http.Client{Transport: integrationFixtureTransport(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Host != "cms.example.test" || req.Header.Get("Signature") == "" || req.Header.Get("X-Integration-Client") != "bridge-source" {
-			t.Error("source signing identity lost")
-		}
-		body, _ := json.Marshal(state)
-		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(bytes.NewReader(body))}, nil
-	})}
+
 	call := func(method, path string, body any, admin bool) *httptest.ResponseRecorder {
 		var raw []byte
 		if body != nil {
@@ -79,13 +54,13 @@ func integrationHTTPFixture(t *testing.T) (*handler, IntegrationClient, func(str
 		h.ServeHTTP(rr, req)
 		return rr
 	}
-	return h, client, call, state
+	return h, client, call
 }
 func TestIntegrationSignedHTTPDraftLifecycle(t *testing.T) {
-	h, _, call, state := integrationHTTPFixture(t)
+	h, _, call := integrationHTTPFixture(t)
 	snapshot := IntegrationSnapshot{Title: "来源系统发出的文章", Body: "# 内容\n\n正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	state.ContentFingerprint = fp
+
 	prepare := IntegrationPrepareInput{RequestID: "http-prepare", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "preview-grant", AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
 	rr := call("POST", "/api/integrations/v1/preparations", prepare, false)
 	if rr.Code != 201 {
@@ -106,7 +81,7 @@ func TestIntegrationSignedHTTPDraftLifecycle(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &prep); err != nil {
 		t.Fatal(err)
 	}
-	submit := IntegrationSubmitInput{RequestID: "http-distribution", SourceID: "cms", ArticleID: "article-1", SourceVersion: 2, StateSeq: 2, ContentFingerprint: fp, PreparationID: prep.ID, ConfirmationFingerprint: prep.ConfirmationFingerprint, DraftRevisionIDs: prep.DraftRevisionIDs, Targets: prep.Targets}
+	submit := IntegrationSubmitInput{RequestID: "http-distribution", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: prep.ID, ConfirmationFingerprint: prep.ConfirmationFingerprint, DraftRevisionIDs: prep.DraftRevisionIDs, Targets: prep.Targets}
 	rr = call("POST", "/api/integrations/v1/distributions", submit, false)
 	if rr.Code != 202 {
 		t.Fatalf("submit %d %s", rr.Code, rr.Body.String())
@@ -118,8 +93,8 @@ func TestIntegrationSignedHTTPDraftLifecycle(t *testing.T) {
 	if len(d.JobIDs) != 1 {
 		t.Fatal("missing linked child")
 	}
-	// A lost response can be recovered even when the CMS has become temporarily unreachable.
-	state.Allowed = false
+	// 丢失响应后可用原请求安全恢复结果。
+
 	rr = call("POST", "/api/integrations/v1/distributions", submit, false)
 	if rr.Code != 200 {
 		t.Fatalf("lost response recovery %d %s", rr.Code, rr.Body.String())
@@ -150,10 +125,10 @@ func TestIntegrationSignedHTTPDraftLifecycle(t *testing.T) {
 	}
 }
 func TestIntegrationSignedHTTPSourceIsolationAndFrozenRevision(t *testing.T) {
-	h, client, call, state := integrationHTTPFixture(t)
+	h, client, call := integrationHTTPFixture(t)
 	snapshot := IntegrationSnapshot{Title: "来源系统发出的文章", Body: "原文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	state.ContentFingerprint = fp
+
 	prepare := IntegrationPrepareInput{RequestID: "edit-prepare", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant", AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
 	rr := call("POST", "/api/integrations/v1/preparations", prepare, false)
 	if rr.Code != 201 {
@@ -190,7 +165,7 @@ func TestIntegrationSignedHTTPSourceIsolationAndFrozenRevision(t *testing.T) {
 	client.Operations = []string{}
 	raw, _ := json.Marshal(client)
 	_, _ = h.store.pool.Exec(context.Background(), "UPDATE integration_clients SET metadata=$2 WHERE id=$1", client.ID, raw)
-	submit := IntegrationSubmitInput{RequestID: "old-grant", SourceID: "cms", ArticleID: "article-1", SourceVersion: 2, StateSeq: 2, ContentFingerprint: fp, PreparationID: prep.ID, ConfirmationFingerprint: prep.ConfirmationFingerprint, DraftRevisionIDs: prep.DraftRevisionIDs, Targets: prep.Targets}
+	submit := IntegrationSubmitInput{RequestID: "old-grant", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: prep.ID, ConfirmationFingerprint: prep.ConfirmationFingerprint, DraftRevisionIDs: prep.DraftRevisionIDs, Targets: prep.Targets}
 	rr = call("POST", "/api/integrations/v1/distributions", submit, false)
 	if rr.Code != 403 && rr.Code != 409 {
 		t.Fatalf("revoked operation accepted %d %s", rr.Code, rr.Body.String())
@@ -198,7 +173,7 @@ func TestIntegrationSignedHTTPSourceIsolationAndFrozenRevision(t *testing.T) {
 }
 
 func TestIntegrationDistributionFiltersBeforePagination(t *testing.T) {
-	h, client, call, _ := integrationHTTPFixture(t)
+	h, client, call := integrationHTTPFixture(t)
 	ctx := context.Background()
 	for i := range 2 {
 		article := fmt.Sprintf("list-%d", i)
@@ -213,8 +188,8 @@ func TestIntegrationDistributionFiltersBeforePagination(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		state := IntegrationSourceState{ArticleID: article, SourceVersion: 2, StateSeq: 2, Status: "published", ContentFingerprint: fp, AuthorizationValid: true, Allowed: true, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
-		d, _, err := h.commitIntegrationDistribution(ctx, client, IntegrationSubmitInput{RequestID: article, SourceID: "cms", ArticleID: article, SourceVersion: 2, StateSeq: 2, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets}, state)
+
+		d, _, err := h.commitIntegrationDistribution(ctx, client, IntegrationSubmitInput{RequestID: article, SourceID: "cms", ArticleID: article, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -241,7 +216,7 @@ func TestIntegrationDistributionFiltersBeforePagination(t *testing.T) {
 }
 
 func TestIntegrationAdminClientFailureDoesNotInvalidateSession(t *testing.T) {
-	h, client, call, _ := integrationHTTPFixture(t)
+	h, client, call := integrationHTTPFixture(t)
 	ctx := context.Background()
 	snapshot := IntegrationSnapshot{Title: "后台会话边界测试", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
@@ -263,7 +238,7 @@ func TestIntegrationAdminClientFailureDoesNotInvalidateSession(t *testing.T) {
 	}
 }
 func TestIntegrationCancelledUnwrittenCopyCanUseNewAuthorization(t *testing.T) {
-	h, client, call, _ := integrationHTTPFixture(t)
+	h, client, call := integrationHTTPFixture(t)
 	ctx := context.Background()
 	snapshot := IntegrationSnapshot{Title: "重新授权来源测试", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
@@ -276,9 +251,9 @@ func TestIntegrationCancelledUnwrittenCopyCanUseNewAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := IntegrationSourceState{ArticleID: input.ArticleID, SourceVersion: 2, StateSeq: 2, Status: "published", ContentFingerprint: fp, AuthorizationValid: true, Allowed: true, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
-	submit := IntegrationSubmitInput{RequestID: "old-cancelled", SourceID: "cms", ArticleID: input.ArticleID, SourceVersion: 2, StateSeq: 2, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets}
-	first, _, err := h.commitIntegrationDistribution(ctx, client, submit, state)
+
+	submit := IntegrationSubmitInput{RequestID: "old-cancelled", SourceID: "cms", ArticleID: input.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets}
+	first, _, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,15 +276,14 @@ func TestIntegrationCancelledUnwrittenCopyCanUseNewAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state.StateSeq = 4
-	state.SourceVersion = 4
+
 	submit.RequestID = "fresh-distribution"
 	submit.PreparationID = p.ID
 	submit.ConfirmationFingerprint = p.ConfirmationFingerprint
 	submit.DraftRevisionIDs = p.DraftRevisionIDs
 	submit.SourceVersion = 4
 	submit.StateSeq = 4
-	second, created, err := h.commitIntegrationDistribution(ctx, client, submit, state)
+	second, created, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil || !created || second.ID == first.ID {
 		t.Fatalf("safe cancelled copy permanently blocked: %+v %v", second, err)
 	}

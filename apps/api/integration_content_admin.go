@@ -159,20 +159,26 @@ func (h *handler) resumeIntegrationDistribution(ctx context.Context, id, fingerp
 	if len(prep.Drafts) == 0 {
 		return d, ErrIntegrationExpired
 	}
-	state, err := h.integrations.CheckSource(ctx, d.ClientID, IntegrationSourceCheck{ArticleID: d.ArticleID, AuthorizationID: prep.AuthorizationID, PreparationID: prep.ID, AccountID: d.Targets[0].AccountID, Operation: d.Targets[0].Operation, ContentFingerprint: d.ContentFingerprint, MinStateSeq: d.StateSeq})
-	if err != nil {
-		return d, err
+	if !prep.AuthorizationExpiresAt.After(h.store.now()) {
+		return d, ErrIntegrationExpired
 	}
 	err = h.store.locked(ctx, func(tx pgx.Tx, now time.Time) error {
 		next, e := integrationReadDistribution(ctx, tx, id)
 		if e != nil {
 			return e
 		}
+		prep, e = integrationReadPreparation(ctx, tx, next.PreparationID, true)
+		if e != nil {
+			return e
+		}
+		if len(prep.Drafts) == 0 || !prep.AuthorizationExpiresAt.After(now) {
+			return ErrIntegrationExpired
+		}
 		latest, e := integrationLatestEvent(ctx, tx, next.SourceID, next.ArticleID)
 		if e != nil {
 			return e
 		}
-		if !integrationAcceptState(latest, state.StateSeq, state.ContentFingerprint) {
+		if !integrationAcceptState(latest, next.StateSeq, next.SourceVersion, next.ContentFingerprint) {
 			return ErrIntegrationSourceChanged
 		}
 		fresh, e := integrationClientAllowedTx(ctx, tx, next.ClientID, "distributions:write", next.Targets, now)
@@ -187,9 +193,6 @@ func (h *handler) resumeIntegrationDistribution(ctx context.Context, id, fingerp
 		}
 		if fresh.GrantVersion != current.GrantVersion {
 			return ErrConflict
-		}
-		if e = integrationAdvanceSourceState(ctx, tx, next.SourceID, next.ArticleID, state); e != nil {
-			return e
 		}
 		for _, jobID := range next.JobIDs {
 			job, e := load(ctx, tx, jobID)
@@ -220,8 +223,6 @@ func (h *handler) resumeIntegrationDistribution(ctx context.Context, id, fingerp
 			}
 		}
 		next.GrantVersion = fresh.GrantVersion
-		next.SourceVersion = state.SourceVersion
-		next.StateSeq = state.StateSeq
 		raw, e := json.Marshal(next)
 		if e != nil {
 			return e

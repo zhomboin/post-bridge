@@ -15,10 +15,10 @@ func integrationContentError(w http.ResponseWriter, err error) {
 		fail(w, 410, "preparation_expired", "准备稿已过期、撤销或不可修改")
 	case errors.Is(err, ErrIntegrationUnsupported):
 		fail(w, 422, "unsupported_content", "目标操作或正文格式尚不支持")
-	case errors.Is(err, ErrIntegrationSourceChanged), errors.Is(err, ErrSourceDenied):
+	case errors.Is(err, ErrIntegrationSourceChanged):
 		fail(w, 409, "source_changed", "来源状态、内容或授权已变化，请重新确认")
-	case errors.Is(err, ErrSourceUnavailable):
-		fail(w, 503, "source_unavailable", "暂时无法确认来源授权，任务未执行")
+	case errors.Is(err, ErrIntegrationNotCancellable):
+		fail(w, 409, "distribution_not_cancellable", "任务已发生或可能发生外站操作，请先核对结果")
 	default:
 		integrationError(w, err)
 	}
@@ -129,12 +129,7 @@ func (h *handler) integrationRoutes() {
 			integrationContentError(w, err)
 			return
 		}
-		state, err := h.integrations.CheckSource(r.Context(), p.ID, IntegrationSourceCheck{ArticleID: prep.ArticleID, AuthorizationID: prep.AuthorizationID, PreparationID: prep.ID, AccountID: prep.Targets[0].AccountID, Operation: prep.Targets[0].Operation, ContentFingerprint: prep.ContentFingerprint, MinStateSeq: in.StateSeq})
-		if err != nil {
-			integrationContentError(w, err)
-			return
-		}
-		out, created, err := h.commitIntegrationDistribution(r.Context(), p.IntegrationClient, in, state)
+		out, created, err := h.commitIntegrationDistribution(r.Context(), p.IntegrationClient, in)
 		if err != nil {
 			integrationContentError(w, err)
 			return
@@ -144,6 +139,14 @@ func (h *handler) integrationRoutes() {
 			status = 202
 		}
 		h.writeIntegrationDistribution(w, r, out, status)
+	}))
+	h.mux.HandleFunc("POST /api/integrations/v1/distributions/{id}/cancel", h.integrationEndpoint("distributions:write", func(w http.ResponseWriter, r *http.Request, p IntegrationPrincipal) {
+		d, err := h.cancelIntegrationDistribution(r.Context(), p.IntegrationClient, r.PathValue("id"))
+		if err != nil {
+			integrationContentError(w, err)
+			return
+		}
+		h.writeIntegrationDistribution(w, r, d, 200)
 	}))
 	h.mux.HandleFunc("GET /api/integrations/v1/distributions/{id}", h.integrationEndpoint("distributions:read", func(w http.ResponseWriter, r *http.Request, p IntegrationPrincipal) {
 		out, err := integrationReadDistribution(r.Context(), h.store.pool, r.PathValue("id"))

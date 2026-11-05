@@ -45,20 +45,20 @@
 
 ## B04：来源登记与受限接口
 
-当前 PostBridge 侧 CSDN 文字草稿子范围已实现，准确协议见[外部手册](../external-integration.md)及[OpenAPI](../../contracts/cms.openapi.yaml)。CMS 自身反向注册与来源状态服务仍由 CMS 项目实施。
+当前 PostBridge 侧 CSDN 文字草稿子范围已实现，准确协议见[外部手册](../external-integration.md)及[OpenAPI](../../contracts/cms.openapi.yaml)。任意调用方按固定协议独立接入，无需反向服务或先发送来源事件。
 
-实际文件：[integration_auth.go](../../apps/api/integration_auth.go)、[integration_registry.go](../../apps/api/integration_registry.go)、[integration_signature.go](../../apps/api/integration_signature.go)、[integration_source.go](../../apps/api/integration_source.go)。
+实际文件：[integration_auth.go](../../apps/api/integration_auth.go)、[integration_registry.go](../../apps/api/integration_registry.go)、[integration_signature.go](../../apps/api/integration_signature.go)。
 
 - [x] 实现受邀注册、审批、一次密钥签发、激活、权限更新、轮换、暂停和撤销；身份、环境与接收服务分别绑定。
 - [x] 固定签名与正文摘要、时间窗口、共享 nonce、前置及应用配额；认证和限流存储不可用时拒绝。
 - [x] 校验 scope、来源、账号、操作与资源归属；来源身份不能访问管理、执行器或浏览器接口。
-- [x] 来源根地址经管理员审批；反向 HTTPS 请求限制实际 DNS/连接地址、跳转、大小和时限。
-- [x] 草稿关键写入前实时复核来源与授权；来源暂停需重新确认后恢复原任务，未知结果只读核对。
-- [x] 用真实隔离数据库及合成来源测试重放、越权、轮换、缩权、失效、迟到状态与不可达边界。
-- [ ] CMS 实现反向身份与权威状态接口，双方完成实际 HTTPS 联通。
+- [x] 应用授权只包含来源、权限、账号、操作、期限与请求上限，不需要反向地址或凭据。
+- [x] 草稿关键写入前复核本地快照授权与应用权限；来源暂停需重新确认后恢复原任务，未知结果只读核对。
+- [x] 用真实隔离数据库及合成来源测试重放、越权、轮换、缩权、失效、迟到状态、授权到期及主动取消边界。
+- [ ] 与真实调用方完成固定签名、人工确认、提交／查询／取消的 HTTPS 联调。
 - [ ] 图片、公开提交和其他平台能力完成后扩展对应授权与写入边界。
 
-测试定位：[integration_auth_test.go](../../apps/api/integration_auth_test.go)、[integration_signature_test.go](../../apps/api/integration_signature_test.go)、[integration_source_test.go](../../apps/api/integration_source_test.go)。B04 当前草稿服务端子范围完成，双方完整关口仍依赖 D。
+测试定位：[integration_auth_test.go](../../apps/api/integration_auth_test.go)、[integration_signature_test.go](../../apps/api/integration_signature_test.go)、[integration_guard_test.go](../../apps/api/integration_guard_test.go)。B04 当前草稿服务端子范围完成，双方完整关口仍依赖 D。
 
 ## B05：不可变快照与确认流程
 
@@ -67,9 +67,9 @@
 - [x] 保存来源快照与独立平台稿；编辑生成新修订和稿件标识，不覆盖旧确认。
 - [x] 确认绑定来源内容指纹、平台稿修订、目标账号、操作和授权版本；提交仅接受当前确认。
 - [x] 区分内容版本、状态序列和指纹，校验纯状态变化、指纹变化及同标识冲突。
-- [x] 来源已发布且当前允许时事务创建分发与子任务；已提交稿不可修改。
+- [x] 本地快照授权有效且人工确认通过时事务创建分发与子任务；已提交稿不可修改。
 - [x] 对未提交稿实行有效期与撤销清理，未知结果和活跃任务保留必要内容。
-- [ ] CMS 侧实现发布与待发送事务，联合验证私有/未授权内容不外传及确认一致性。
+- [ ] 真实调用方实现可靠发送，联合验证私有/未授权内容不外传及确认一致性。
 - [ ] 图片、MDX 和其他平台的结构化转换及预览按 C01/C02 继续实施。
 
 测试定位：[integration_content_test.go](../../apps/api/integration_content_test.go)、[integration_content_http_test.go](../../apps/api/integration_content_http_test.go)、[Integrations.test.tsx](../../apps/admin/tests/Integrations.test.tsx)。已交付文字草稿修订确认子范围，不代表全部内容转换完成。
@@ -81,8 +81,8 @@
 - [x] CSDN 草稿任务使用事务领取、账号互斥、租期与领取代次，旧领取不能提交结果。
 - [x] 来源父分发与子任务同事务持久化；稳定请求去重；有副作用或活跃任务拒绝重建，确定未写入的取消/来源暂停任务经新确认可安全替代并保留记录。
 - [x] 草稿有限安全重试、取消、登录恢复及未知结果核对沿用原任务，不以换标识重发。
-- [x] 来源事件与实时守卫阻止后续写入；管理员恢复重查来源、授权、原确认与租约。
-- [ ] 完成真实 CMS、API 与执行器跨进程重启和断网联合验收。
+- [x] 已收到来源事件与本地授权守卫阻止后续写入；管理员恢复重查来源、授权、原确认与租约。
+- [ ] 完成真实调用方、API 与执行器跨进程重启和断网联合验收。
 - [ ] 扩展多账号和多平台调度，验证部分成功保留及独立子任务恢复，不以单 CSDN 结果代替。
 
 测试定位：[integration_guard_test.go](../../apps/api/integration_guard_test.go)、[integration_test.go](../../apps/api/integration_test.go)、[auto_reconcile_test.go](../../apps/api/auto_reconcile_test.go)。当前草稿持久化与来源隔离子范围已验证，完整多平台验收未通过。

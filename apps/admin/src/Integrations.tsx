@@ -28,9 +28,9 @@ export function IntegrationModal({ title, children, onClose, closeLabel = '关�
 export function IntegrationState({ value }: { value: string }) { return <span className={'status integration-state ' + value}>{integrationStatuses[value] || '未知状态'}</span>; }
 const list = (value: string) => value.split(/[,，\n]/).map(item => item.trim()).filter(Boolean);
 const localDate = (value?: string) => value && !Number.isNaN(Date.parse(value)) ? new Date(Date.parse(value) - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
-type Grant = { source_id: string; environment: string; scopes: string[]; accounts: string; expires_at: string; client_expires_at: string; rate_limit_per_minute: number; source_url: string; source_client_id: string; source_key_id: string; source_service_id: string; source_environment: string; source_secret: string };
+type Grant = { source_id: string; environment: string; scopes: string[]; accounts: string; expires_at: string; client_expires_at: string; rate_limit_per_minute: number };
 function GrantForm({ value, invitation = false, pending, onSubmit }: { value?: Partial<IntegrationClient>; invitation?: boolean; pending: boolean; onSubmit: (body: Record<string, unknown>) => Promise<void> }) {
-  const [form, setForm] = useState<Grant>({ source_id: value?.source_id || '', environment: value?.environment || '', scopes: value?.scopes || ['targets:read', 'preparations:read', 'preparations:write', 'distributions:read', 'distributions:write'], accounts: (value?.accounts || []).join(', '), expires_at: localDate(value?.expires_at), client_expires_at: '', rate_limit_per_minute: value?.rate_limit_per_minute || 60, source_url: value?.source_url || '', source_client_id: value?.source_client_id || '', source_key_id: value?.source_key_id || '', source_service_id: value?.source_service_id || '', source_environment: value?.source_environment || '', source_secret: '' });
+  const [form, setForm] = useState<Grant>({ source_id: value?.source_id || '', environment: value?.environment || '', scopes: value?.scopes || ['targets:read', 'preparations:read', 'preparations:write', 'distributions:read', 'distributions:write'], accounts: (value?.accounts || []).join(', '), expires_at: localDate(value?.expires_at), client_expires_at: '', rate_limit_per_minute: value?.rate_limit_per_minute || 60 });
   const [error, setError] = useState('');
   function field(key: keyof Grant, label: string, options: { required?: boolean; type?: string } = {}) {
     return <label>{label}<input type={options.type || 'text'} required={options.required} autoComplete="off" value={String(form[key])} disabled={pending} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} /></label>;
@@ -42,9 +42,9 @@ function GrantForm({ value, invitation = false, pending, onSubmit }: { value?: P
     const body = { ...form, scopes: form.scopes, accounts: list(form.accounts), operations: ['save_draft'], expires_at: new Date(form.expires_at).toISOString(), rate_limit_per_minute: Number(form.rate_limit_per_minute) };
     if (invitation && !form.client_expires_at) { setError('请填写应用有效期。'); return; }
     const result: Record<string, unknown> = { ...body };
-    if (invitation) { result.client_expires_at = new Date(form.client_expires_at).toISOString(); for (const key of Object.keys(result)) if (key.startsWith('source_') && key !== 'source_id') delete result[key]; }
+    if (invitation) { result.client_expires_at = new Date(form.client_expires_at).toISOString();  }
     else { delete result.client_expires_at; delete result.environment; }
-    try { await onSubmit(result); } finally { setForm(current => ({ ...current, source_secret: '' })); }
+    await onSubmit(result);
   }
   return <form className="form-grid" onSubmit={event => void submit(event)}><fieldset className="integration-fields" disabled={pending}>
     {(invitation || value?.id) && field('source_id', '来源标识', { required: true })}{invitation && field('environment', '运行环境', { required: true })}
@@ -52,7 +52,6 @@ function GrantForm({ value, invitation = false, pending, onSubmit }: { value?: P
     {field('accounts', '允许账号（逗号分隔）', {required: true})}<label>允许操作<input value="保存 CSDN 草稿" disabled /></label>
     {field('expires_at', invitation ? '邀请有效期' : '应用有效期', {required: true,type:'datetime-local'})}{invitation && field('client_expires_at','应用有效期',{required:true,type:'datetime-local'})}
     <label>每分钟请求上限<input type="number" min={1} max={600} value={form.rate_limit_per_minute} onChange={event => setForm(current=>({...current,rate_limit_per_minute:Number(event.target.value)}))} /></label>
-    {!invitation && <><h3 className="integration-full">反向来源</h3>{field('source_url','来源地址',{type:'url'})}{field('source_client_id','来源客户端标识')}{field('source_key_id','来源密钥标识')}{field('source_service_id','来源服务标识')}{field('source_environment','来源运行环境')}{field('source_secret','来源密钥',{type:'password'})}</>}
     </fieldset>{error && <div className="notice error" role="alert">{error}</div>}<button type="submit" className="primary" disabled={pending}>{pending ? '正在处理…' : invitation ? '生成邀请' : value?.grant_version ? '保存应用配置' : '批准并签发密钥'}</button></form>;
 }
 function Secret({ value, onClose }: { value: IssuedSecret; onClose: () => void }) {

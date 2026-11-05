@@ -1,8 +1,7 @@
 export type IntegrationClient = {
   id: string; name: string; source_id: string; environment: string; service_id: string; status: string;
   scopes: string[]; accounts: string[]; operations: string[]; grant_version: number; expires_at: string;
-  rate_limit_per_minute: number; source_url?: string; source_client_id?: string; source_key_id?: string;
-  source_service_id?: string; source_environment?: string;
+  rate_limit_per_minute: number;
 };
 export type Registration = Partial<IntegrationClient> & { id: string; name: string; status: string; created_at: string };
 export type IssuedSecret = { client_id?: string; key_id?: string; client_secret?: string; invitation_id?: string; invitation_token?: string; expires_at?: string };

@@ -97,17 +97,19 @@ it('创建邀请携带CSRF且关闭和离开均清除一次令牌', async () => 
   fireEvent.click(screen.getByRole('button',{name:'关闭密钥'}));
   expect(screen.queryByText('one-time-invitation')).toBeNull();
 });
-it('反向来源密钥保存后立即清空且不出现在请求地址中', async () => {
+it('应用授权只提交固定接入字段，无需反向服务配置', async () => {
   window.history.replaceState({}, '', '/integrations?tab=clients');
   const base=handler;handler=(url,init)=>url==='/api/integration-clients/client-one'&&init?.method==='PUT'?response({...client,grant_version:2}):base(url,init);
   render(<App />); fireEvent.click(await screen.findByRole('button',{name:'内容中心'}));
-  const input=await screen.findByLabelText('来源密钥');
-  fireEvent.change(input,{target:{value:'private-example-key'}});
+  await screen.findByRole('button',{name:'保存应用配置'});
+  expect(screen.queryByText('反向来源')).toBeNull();
+  expect(screen.queryByLabelText('来源地址')).toBeNull();
+  expect(screen.queryByLabelText('来源密钥')).toBeNull();
   fireEvent.click(screen.getByRole('button',{name:'保存应用配置'}));
-  await waitFor(()=>expect((input as HTMLInputElement).value).toBe(''));
-  expect(calls.some(call=>call.url.includes('private-example-key'))).toBe(false);
+  await waitFor(()=>expect(calls.some(call=>call.init?.method==='PUT')).toBe(true));
   const body=JSON.parse(calls.find(call=>call.init?.method==='PUT')!.init!.body as string);
-  expect(body.source_secret).toBe('private-example-key');
+  expect(Object.keys(body).sort()).toEqual(['accounts','expires_at','operations','rate_limit_per_minute','scopes','source_id'].sort());
+  expect(body.operations).toEqual(['save_draft']);
   expect(localStorage.length).toBe(0);
 });
 it('平台稿保存冲突保留本地编辑并提示重新核对', async () => {

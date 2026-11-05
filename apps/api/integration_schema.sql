@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS integration_registrations (
 );
 CREATE TABLE IF NOT EXISTS integration_clients (
  id text PRIMARY KEY, registration_id text NOT NULL UNIQUE REFERENCES integration_registrations(id),
- metadata jsonb NOT NULL, encrypted_source_secret bytea, created_at timestamptz NOT NULL
+ metadata jsonb NOT NULL, created_at timestamptz NOT NULL
 );
 CREATE TABLE IF NOT EXISTS integration_keys (
  id text PRIMARY KEY, client_id text NOT NULL REFERENCES integration_clients(id), encrypted_secret bytea NOT NULL,
@@ -28,3 +28,10 @@ CREATE TABLE IF NOT EXISTS integration_audit (
  id bigserial PRIMARY KEY, client_id text NOT NULL DEFAULT '', action text NOT NULL,
  actor text NOT NULL, created_at timestamptz NOT NULL
 );
+ALTER TABLE integration_clients DROP COLUMN IF EXISTS encrypted_source_secret;
+UPDATE integration_clients
+ SET metadata = metadata - ARRAY['source_url','source_client_id','source_key_id','source_service_id','source_environment','source_secret']
+ WHERE metadata ?| ARRAY['source_url','source_client_id','source_key_id','source_service_id','source_environment','source_secret'];
+UPDATE integration_registrations
+ SET application = application - ARRAY['source_url','source_client_id','source_key_id','source_service_id','source_environment','source_secret']
+ WHERE application ?| ARRAY['source_url','source_client_id','source_key_id','source_service_id','source_environment','source_secret'];
