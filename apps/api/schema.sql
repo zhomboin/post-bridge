@@ -6,6 +6,12 @@ CREATE TABLE IF NOT EXISTS account (
  last_checked_at timestamptz,
  last_error text NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS csdn_publish_presets (
+ account_id text PRIMARY KEY REFERENCES account(id),
+ account_username text NOT NULL,
+ revision bigint NOT NULL CHECK(revision > 0),
+ options jsonb NOT NULL
+);
 CREATE TABLE IF NOT EXISTS jobs (
  id text PRIMARY KEY,
  request_id text NOT NULL UNIQUE,

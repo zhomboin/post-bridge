@@ -2,6 +2,7 @@ import { useRef, type KeyboardEvent } from 'react';
 import { AccountStats, Articles, type ArticlePage } from './Articles';
 import RemoteLogin from './RemoteLogin';
 import AccountAvatar from './AccountAvatar';
+import CSDNPublishSettings from './CSDNPublishSettings';
 import { Empty, RefreshBar, ResourceError, Status, jobHref, queryPage, time, useAction, useResource, useWorkspace, type Account, type Job } from './runtime';
 
 const tabs = [{ value: '', label: '文章' }, { value: 'stats', label: '数据统计' }, { value: 'settings', label: '账号设置' }] as const;
@@ -19,7 +20,7 @@ function AccountSettings({ account }: { account: AccountResource }) {
   return <><section className="surface"><div className="surface-header"><h2>账号设置</h2><button className="primary" disabled={action.pending || !account.data} onClick={() => void check()}>{action.pending ? '正在创建检查任务…' : '检查登录状态'}</button></div><RefreshBar resource={account} />
     {!account.data ? <Empty loading={account.loading}>无法读取账号信息，请刷新。</Empty> : <div className="surface-body"><dl className="readonly-list"><dt>最近检查</dt><dd>{time(account.data.last_checked_at)}</dd></dl>{account.data.last_error && <div className="notice error section-gap">{account.data.last_error}</div>}</div>}
     {action.error && <div className="notice error error-inline" role="alert">{action.error}</div>}
-  </section><RemoteLogin onVerified={account.refresh} /></>;
+  </section><RemoteLogin onVerified={account.refresh} /><CSDNPublishSettings /></>;
 }
 
 export default function PlatformAccount() {

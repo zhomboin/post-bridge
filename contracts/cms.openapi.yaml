@@ -3,7 +3,7 @@
   "info": {
     "title": "PostBridge 外部内容接入契约",
     "version": "1.0.0",
-    "description": "PostBridge独立部署，对任意获批调用方开放固定接口和固定HMAC认证，无需调用方提供反向服务或修改PostBridge。当前开放CSDN文字Markdown保存草稿，保留管理员预览确认策略。publish、图片、MDX和其他平台未开放。代码、本地、真实平台端到端及生产验收分别记录；部署origin由环境提供，契约不包含真实地址或凭据。"
+    "description": "PostBridge独立部署，对任意获批调用方开放固定接口和固定HMAC认证，无需调用方提供反向服务或修改PostBridge。开放 CSDN Markdown 保存草稿并保留管理员预览确认。目标 images 为 true 时支持批准的正文图片转存。正式发布、MDX 和其他平台未开放。代码、本地、真实平台端到端及生产验收分别记录；部署origin由环境提供，契约不包含真实地址或凭据。"
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "tags": [
@@ -3261,6 +3261,77 @@
         "additionalProperties": false,
         "description": "详情返回来源快照；失效、撤销或保留期清理后可为空字段，tags/assets可为null。管理员列表不返回正文。"
       },
+      "CSDNPublishOptions": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "categories": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "string"
+            }
+          },
+          "article_type": {
+            "type": "string",
+            "enum": [
+              "original",
+              "repost",
+              "translated"
+            ]
+          },
+          "creation_declaration": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ai_assisted",
+              "online_recreation",
+              "personal_opinion"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "private",
+              "fans",
+              "vip"
+            ]
+          },
+          "template": {
+            "type": "string",
+            "enum": [
+              "default",
+              "simple",
+              "moyan"
+            ]
+          },
+          "cover_image_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tags",
+          "summary",
+          "categories",
+          "article_type",
+          "creation_declaration",
+          "visibility",
+          "template",
+          "cover_image_url"
+        ],
+        "additionalProperties": false
+      },
       "Draft": {
         "type": "object",
         "properties": {
@@ -3290,6 +3361,9 @@
             "type": "integer",
             "format": "int64",
             "minimum": 1
+          },
+          "publish_options": {
+            "$ref": "#/components/schemas/CSDNPublishOptions"
           }
         },
         "required": [
@@ -3332,6 +3406,9 @@
             "type": "integer",
             "format": "int64",
             "minimum": 1
+          },
+          "publish_options": {
+            "$ref": "#/components/schemas/CSDNPublishOptions"
           }
         },
         "required": [
@@ -4374,7 +4451,8 @@
       "operation",
       "title",
       "markdown",
-      "revision"
+      "revision",
+      "publish_options"
     ]
   },
   "x-rate-limits": {

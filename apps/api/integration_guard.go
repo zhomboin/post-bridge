@@ -44,6 +44,11 @@ func (s *Store) integrationGuardAllowed(ctx context.Context, tx pgx.Tx, r *recor
 	if !matched || r.Kind != "save_draft" {
 		return ErrIntegrationPermission
 	}
+	if len(r.ImageURLs) != 0 {
+		if _, err := approvedImageMarkdown(r.Title, r.Markdown, r.ImageURLs); err != nil {
+			return ErrIntegrationSourceChanged
+		}
+	}
 	latest, err := integrationLatestEvent(ctx, tx, d.SourceID, d.ArticleID)
 	if err != nil {
 		return err

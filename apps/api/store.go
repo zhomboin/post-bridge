@@ -587,7 +587,7 @@ func (s *Store) Jobs(ctx context.Context, q, status string, page, size int) ([]J
 			return nil, 0, err
 		}
 		j := r.Job
-		j.Markdown = ""
+		j.Markdown, j.PlatformMarkdown, j.ImageURLs = "", "", nil
 		jobs = append(jobs, j)
 	}
 	if len(jobs) == 0 {

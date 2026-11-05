@@ -52,7 +52,7 @@ func (h *handler) integrationRoutes() {
 			return
 		}
 		if integrationHas(p.Accounts, account.ID) && integrationHas(p.Operations, "save_draft") {
-			items = append(items, map[string]any{"platform": "csdn", "account_id": account.ID, "display_name": account.DisplayName, "status": account.Status, "last_checked_at": account.LastCheckedAt, "operations": []string{"save_draft"}, "body_formats": []string{"markdown"}, "images": false, "title_min": 5, "title_max": 100, "body_max": 200000})
+			items = append(items, map[string]any{"platform": "csdn", "account_id": account.ID, "display_name": account.DisplayName, "status": account.Status, "last_checked_at": account.LastCheckedAt, "operations": []string{"save_draft"}, "body_formats": []string{"markdown"}, "images": len(csdnImageHosts()) != 0, "title_min": 5, "title_max": 100, "body_max": 200000})
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))
@@ -239,7 +239,7 @@ func (h *handler) integrationRoutes() {
 			integrationAdminContentError(w, err)
 			return
 		}
-		writeJSON(w, 200, integrationPreparationResponse(p, h.origin, h.store.now()))
+		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
 	h.mux.HandleFunc("PUT /api/integration-preparations/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
@@ -254,7 +254,7 @@ func (h *handler) integrationRoutes() {
 			integrationAdminContentError(w, err)
 			return
 		}
-		writeJSON(w, 200, integrationPreparationResponse(p, h.origin, h.store.now()))
+		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
 	h.mux.HandleFunc("POST /api/integration-preparations/{id}/confirm", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
@@ -268,7 +268,7 @@ func (h *handler) integrationRoutes() {
 			integrationAdminContentError(w, err)
 			return
 		}
-		writeJSON(w, 200, integrationPreparationResponse(p, h.origin, h.store.now()))
+		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
 	h.mux.HandleFunc("POST /api/integration-preparations/{id}/revoke", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		p, err := h.revokeIntegrationPreparation(r.Context(), r.PathValue("id"))
@@ -276,7 +276,7 @@ func (h *handler) integrationRoutes() {
 			integrationAdminContentError(w, err)
 			return
 		}
-		writeJSON(w, 200, integrationPreparationResponse(p, h.origin, h.store.now()))
+		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
 	h.mux.HandleFunc("GET /api/integration-distributions", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		h.listIntegrationDistributions(w, r)
@@ -304,6 +304,16 @@ func (h *handler) integrationRoutes() {
 		h.writeIntegrationDistribution(w, r, d, 200)
 	}))
 }
+func integrationAdminPreparationResponse(p IntegrationPreparation, origin string, now time.Time) map[string]any {
+	result := integrationPreparationResponse(p, origin, now)
+	if p.Status == "submitted" || p.ExpiresAt.After(now) {
+		if images, err := approvedImageMarkdown(p.Snapshot.Title, p.Snapshot.Body, nil); err == nil && len(images) > 0 {
+			result["preview_image_urls"] = images
+		}
+	}
+	return result
+}
+
 func integrationPreparationResponse(p IntegrationPreparation, origin string, now time.Time) map[string]any {
 	if p.Status != "submitted" && !p.ExpiresAt.After(now) {
 		p.Status = "expired"

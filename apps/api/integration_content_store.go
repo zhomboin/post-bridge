@@ -166,6 +166,11 @@ func (h *handler) prepareIntegration(ctx context.Context, client IntegrationClie
 		out = IntegrationPreparation{ID: randomToken(), ClientID: client.ID, SourceID: client.SourceID, RequestID: in.RequestID, ArticleID: in.ArticleID, SourceVersion: in.SourceVersion, StateSeq: in.StateSeq, AuthorizationID: in.AuthorizationID, AuthorizationExpiresAt: in.AuthorizationExpiresAt, ContentFingerprint: fp, Snapshot: in.Snapshot, Targets: in.Targets, Revision: 1, DraftRevisionIDs: []string{}, Confirmed: false, Status: "prepared", GrantVersion: client.GrantVersion, ExpiresAt: expiry, CreatedAt: now}
 		for _, target := range in.Targets {
 			draft := IntegrationDraft{ID: randomToken(), Platform: target.Platform, AccountID: target.AccountID, Operation: target.Operation, Title: in.Snapshot.Title, Markdown: in.Snapshot.Body, Revision: 1}
+			options, optionsErr := h.store.csdnDraftPublishOptions(ctx, tx, target.AccountID, in.Snapshot)
+			if optionsErr != nil {
+				return optionsErr
+			}
+			draft.PublishOptions = &options
 			out.Drafts = append(out.Drafts, draft)
 			out.DraftRevisionIDs = append(out.DraftRevisionIDs, draft.ID)
 		}
@@ -218,8 +223,28 @@ func (h *handler) updateIntegrationPreparation(ctx context.Context, id string, r
 			if d.ID != before.ID || d.Platform != before.Platform || d.AccountID != before.AccountID || d.Operation != before.Operation {
 				return ErrConflict
 			}
-			if e = ValidateCreate(CreateInput{RequestID: "validate", Platform: d.Platform, Kind: d.Operation, Title: d.Title, Markdown: d.Markdown}); e != nil {
+			sourceImages, sourceErr := approvedImageMarkdown(p.Snapshot.Title, p.Snapshot.Body, nil)
+			if sourceErr != nil {
+				return sourceErr
+			}
+			if _, e = approvedImageMarkdown(d.Title, d.Markdown, sourceImages); e != nil {
 				return ErrIntegrationUnsupported
+			}
+			if d.PublishOptions == nil {
+				d.PublishOptions = before.PublishOptions
+			} else {
+				options, optionsErr := normalizeCSDNPublishOptions(*d.PublishOptions, p.Snapshot.CoverImageURL)
+				if optionsErr != nil {
+					return optionsErr
+				}
+				var previousCategories []string
+				if before.PublishOptions != nil {
+					previousCategories = before.PublishOptions.Categories
+				}
+				if optionsErr = h.store.validateCSDNDraftCategories(ctx, tx, d.AccountID, previousCategories, options.Categories); optionsErr != nil {
+					return optionsErr
+				}
+				d.PublishOptions = &options
 			}
 			d.ID = randomToken()
 			d.Revision = p.Revision + 1
@@ -356,6 +381,14 @@ func (h *handler) commitIntegrationDistribution(ctx context.Context, client Inte
 		out = IntegrationDistribution{ID: randomToken(), ClientID: client.ID, SourceID: client.SourceID, ArticleID: in.ArticleID, RequestID: in.RequestID, PreparationID: p.ID, SourceVersion: p.SourceVersion, StateSeq: p.StateSeq, ContentFingerprint: in.ContentFingerprint, ConfirmationFingerprint: in.ConfirmationFingerprint, GrantVersion: current.GrantVersion, Targets: p.Targets, JobIDs: []string{}, CreatedAt: now}
 		for i, draft := range p.Drafts {
 			job := newRecord(CreateInput{RequestID: fmt.Sprintf("integration:%s:%d", out.ID, i), Platform: draft.Platform, Kind: draft.Operation, Title: draft.Title, Markdown: draft.Markdown}, now)
+			sourceImages, imageErr := approvedImageMarkdown(p.Snapshot.Title, p.Snapshot.Body, nil)
+			if imageErr != nil {
+				return imageErr
+			}
+			job.ImageURLs, imageErr = approvedImageMarkdown(draft.Title, draft.Markdown, sourceImages)
+			if imageErr != nil {
+				return imageErr
+			}
 			job.IntegrationDistributionID = out.ID
 			data, e := json.Marshal(job)
 			if e != nil {
@@ -620,7 +653,7 @@ func integrationCanPurgeUnexecutedJob(r *record, now time.Time) bool {
 }
 
 func integrationPurgeUnexecutedJob(ctx context.Context, tx pgx.Tx, r *record, now time.Time) error {
-	r.Markdown = ""
+	r.Markdown, r.PlatformMarkdown, r.ImageURLs = "", "", nil
 	r.SourceGuardBlocked = true
 	r.Status = "cancelled"
 	r.Ready = false
@@ -729,7 +762,7 @@ func integrationCheckExistingCopies(ctx context.Context, tx pgx.Tx, source, arti
 				job.Ready = false
 				job.FinishedAt = &now
 				job.UpdatedAt = now
-				job.Markdown = ""
+				job.Markdown, job.PlatformMarkdown, job.ImageURLs = "", "", nil
 				job.RetryAllowed = false
 				if _, e = tx.Exec(ctx, "DELETE FROM process_snapshots WHERE job_id=$1", id); e != nil {
 					return e

@@ -36,13 +36,14 @@ type IntegrationTarget struct {
 	Operation string `json:"operation"`
 }
 type IntegrationDraft struct {
-	ID        string `json:"id"`
-	Platform  string `json:"platform"`
-	AccountID string `json:"account_id"`
-	Operation string `json:"operation"`
-	Title     string `json:"title"`
-	Markdown  string `json:"markdown"`
-	Revision  int64  `json:"revision"`
+	ID             string              `json:"id"`
+	Platform       string              `json:"platform"`
+	AccountID      string              `json:"account_id"`
+	Operation      string              `json:"operation"`
+	Title          string              `json:"title"`
+	Markdown       string              `json:"markdown"`
+	Revision       int64               `json:"revision"`
+	PublishOptions *CSDNPublishOptions `json:"publish_options,omitempty"`
 }
 type IntegrationPreparation struct {
 	ID                      string              `json:"id"`
@@ -169,7 +170,7 @@ func validateIntegrationSnapshot(s IntegrationSnapshot) error {
 			return ErrInvalid
 		}
 	}
-	if err := ValidateCreate(CreateInput{RequestID: "validate", Kind: "save_draft", Platform: "csdn", Title: s.Title, Markdown: s.Body}); err != nil {
+	if _, err := approvedImageMarkdown(s.Title, s.Body, nil); err != nil {
 		return ErrIntegrationUnsupported
 	}
 	return nil

@@ -73,6 +73,8 @@ export interface Job {
   kind: 'save_draft' | 'check_account' | 'sync_articles' | 'read_article';
   title: string;
   markdown: string;
+  image_urls?: string[];
+  platform_markdown?: string;
   article_id?: string;
   account_username?: string;
   run_mode: 'execute' | 'reconcile';
@@ -88,7 +90,7 @@ export interface Observation {
   status: string;
   remote_id?: string;
 }
-export interface Progress { stage: string; external_started?: boolean; remote_id?: string; message?: string; observation?: Observation }
+export interface Progress { stage: string; external_started?: boolean; remote_id?: string; message?: string; observation?: Observation; platform_markdown?: string }
 export interface JobResult {
   status: 'succeeded' | 'failed' | 'waiting_user' | 'reconciling' | 'cancelled';
   remote_id?: string;
