@@ -261,7 +261,8 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 	if readKind(r.Kind) && (in.Status == "reconciling" || in.RemoteID != "" || r.ExternalStarted || r.RunMode != "execute") {
 		return ErrInvalid
 	}
-	if readKind(r.Kind) && r.CancelRequested && in.Status != "succeeded" {
+	unwritten := !r.ExternalStarted && r.RunMode != "reconcile" && r.Outcome != "unknown" && r.RemoteID == "" && r.ReconcileCandidateID == ""
+	if r.CancelRequested && (readKind(r.Kind) || unwritten) && in.Status != "succeeded" {
 		in.Status = "cancelled"
 		in.ErrorCode = "cancelled"
 		in.Retryable = false

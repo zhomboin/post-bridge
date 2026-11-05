@@ -38,7 +38,6 @@ type IntegrationRegistrationInput struct {
 	Scopes      []string `json:"scopes"`
 	Accounts    []string `json:"accounts"`
 	Operations  []string `json:"operations"`
-	SourceURL   string   `json:"source_url"`
 }
 type IntegrationRegistration struct {
 	IntegrationRegistrationInput
@@ -53,12 +52,6 @@ type IntegrationGrantInput struct {
 	Operations         []string  `json:"operations"`
 	ExpiresAt          time.Time `json:"expires_at"`
 	RateLimitPerMinute int       `json:"rate_limit_per_minute"`
-	SourceURL          string    `json:"source_url"`
-	SourceClientID     string    `json:"source_client_id"`
-	SourceKeyID        string    `json:"source_key_id"`
-	SourceServiceID    string    `json:"source_service_id"`
-	SourceEnvironment  string    `json:"source_environment"`
-	SourceSecret       string    `json:"source_secret"`
 }
 type IntegrationIssued struct {
 	ClientID string `json:"client_id"`
@@ -120,7 +113,7 @@ func (s *IntegrationService) Register(ctx context.Context, token string, in Inte
 	if len(token) != 64 {
 		return result, ErrIntegrationAuthentication
 	}
-	if len(strings.TrimSpace(in.Name)) < 1 || len(in.Name) > 100 || !integrationPermissions(in.Scopes, in.Accounts, in.Operations) || validateIntegrationURL(in.SourceURL) != nil {
+	if len(strings.TrimSpace(in.Name)) < 1 || len(in.Name) > 100 || !integrationPermissions(in.Scopes, in.Accounts, in.Operations) {
 		return result, ErrInvalid
 	}
 	tx, e := s.store.pool.Begin(ctx)
@@ -190,37 +183,7 @@ func integrationApplyGrant(c *IntegrationClient, in IntegrationGrantInput, now t
 	c.Operations = in.Operations
 	c.ExpiresAt = in.ExpiresAt
 	c.RateLimitPerMinute = in.RateLimitPerMinute
-	if in.SourceURL != "" {
-		if validateIntegrationURL(in.SourceURL) != nil {
-			return ErrInvalid
-		}
-		c.SourceURL = strings.TrimSuffix(in.SourceURL, "/")
-	}
-	if in.SourceClientID != "" || in.SourceKeyID != "" || in.SourceServiceID != "" || in.SourceEnvironment != "" {
-		if !integrationIdentifier.MatchString(in.SourceClientID) || !integrationIdentifier.MatchString(in.SourceKeyID) || !integrationIdentifier.MatchString(in.SourceServiceID) || !integrationIdentifier.MatchString(in.SourceEnvironment) {
-			return ErrInvalid
-		}
-		c.SourceClientID = in.SourceClientID
-		c.SourceKeyID = in.SourceKeyID
-		c.SourceServiceID = in.SourceServiceID
-		c.SourceEnvironment = in.SourceEnvironment
-	}
 	return nil
-}
-func (s *IntegrationService) sourceSecret(ctx context.Context, tx pgx.Tx, id, secret string) error {
-	if secret == "" {
-		return nil
-	}
-	raw, e := base64.StdEncoding.Strict().DecodeString(secret)
-	if e != nil || len(raw) != 32 {
-		return ErrInvalid
-	}
-	encrypted, e := s.seal(raw, "source:"+id)
-	if e != nil {
-		return e
-	}
-	_, e = tx.Exec(ctx, "UPDATE integration_clients SET encrypted_source_secret=$2 WHERE id=$1", id, encrypted)
-	return e
 }
 func (s *IntegrationService) Approve(ctx context.Context, id string, in IntegrationGrantInput, actor string) (IntegrationIssued, error) {
 	tx, e := s.store.pool.Begin(ctx)
@@ -243,16 +206,13 @@ func (s *IntegrationService) Approve(ctx context.Context, id string, in Integrat
 	if in.SourceID != "" && in.SourceID != cap.SourceID || !integrationSubset(in.Scopes, cap.Scopes) || !integrationSubset(in.Accounts, cap.Accounts) || !integrationSubset(in.Operations, cap.Operations) || in.ExpiresAt.After(cap.ClientExpiresAt) || in.RateLimitPerMinute > cap.RateLimitPerMinute {
 		return IntegrationIssued{}, ErrIntegrationPermission
 	}
-	c := IntegrationClient{ID: randomToken(), Name: reg.Name, SourceID: reg.SourceID, Environment: s.environment, ServiceID: s.serviceID, Status: "pending_activation", GrantVersion: 1, SourceURL: reg.SourceURL}
+	c := IntegrationClient{ID: randomToken(), Name: reg.Name, SourceID: reg.SourceID, Environment: s.environment, ServiceID: s.serviceID, Status: "pending_activation", GrantVersion: 1}
 	if e = integrationApplyGrant(&c, in, s.store.now()); e != nil {
 		return IntegrationIssued{}, e
 	}
 	raw, _ = json.Marshal(c)
 	_, e = tx.Exec(ctx, "INSERT INTO integration_clients(id,registration_id,metadata,created_at) VALUES($1,$2,$3,$4)", c.ID, id, raw, s.store.now())
 	if e != nil {
-		return IntegrationIssued{}, e
-	}
-	if e = s.sourceSecret(ctx, tx, c.ID, in.SourceSecret); e != nil {
 		return IntegrationIssued{}, e
 	}
 	issued, e := s.issue(ctx, tx, c)
@@ -286,17 +246,13 @@ func (s *IntegrationService) Update(ctx context.Context, id string, in Integrati
 	if e = integrationApplyGrant(&c, in, s.store.now()); e != nil {
 		return c, e
 	}
-	// 来源绑定或权限变动推进代次；同一来源的正常密钥轮换沿用既有确认。
-	before.SourceKeyID = c.SourceKeyID
+	// 来源标识或权限变动推进代次。
 	a, _ := json.Marshal(before)
 	b, _ := json.Marshal(c)
 	if string(a) != string(b) {
 		c.GrantVersion++
 	}
 	if e = integrationSaveClient(ctx, tx, c); e != nil {
-		return c, e
-	}
-	if e = s.sourceSecret(ctx, tx, id, in.SourceSecret); e != nil {
 		return c, e
 	}
 

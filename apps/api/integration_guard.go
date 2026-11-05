@@ -10,34 +10,30 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type integrationGuardState struct {
-	Distribution IntegrationDistribution
-	Preparation  IntegrationPreparation
-	MinStateSeq  int64
-}
-
-func (s *Store) integrationGuardState(ctx context.Context, tx pgx.Tx, r *record, now time.Time) (integrationGuardState, error) {
-	var out integrationGuardState
+func (s *Store) integrationGuardAllowed(ctx context.Context, tx pgx.Tx, r *record, now time.Time) error {
 	if s.integrations == nil || r.SourceGuardBlocked {
-		return out, ErrIntegrationAuthentication
+		return ErrIntegrationAuthentication
 	}
 	d, err := integrationReadDistribution(ctx, tx, r.IntegrationDistributionID)
 	if err != nil {
-		return out, err
+		return err
 	}
 	p, err := integrationReadPreparation(ctx, tx, d.PreparationID, false)
 	if err != nil {
-		return out, err
+		return err
 	}
 	if err = integrationAuthorizationAllowed(ctx, tx, d.SourceID, d.ArticleID, p.AuthorizationID); err != nil {
-		return out, err
+		return err
 	}
 	c, err := integrationClientAllowedTx(ctx, tx, d.ClientID, "distributions:write", d.Targets, now)
 	if err != nil {
-		return out, err
+		return err
+	}
+	if !p.AuthorizationExpiresAt.After(now) {
+		return ErrIntegrationExpired
 	}
 	if c.Status != "active" || !c.ExpiresAt.After(now) || c.GrantVersion != d.GrantVersion || c.SourceID != d.SourceID || p.SourceID != d.SourceID || p.ArticleID != d.ArticleID || p.ClientID != c.ID || p.Status != "submitted" || len(p.Drafts) == 0 || strings.TrimSpace(r.Markdown) == "" || p.ContentFingerprint != d.ContentFingerprint || p.AuthorizationID == "" || !integrationHas(d.JobIDs, r.ID) || !integrationHas(c.Scopes, "distributions:write") || !integrationHas(c.Accounts, r.AccountID) || !integrationHas(c.Operations, r.Kind) {
-		return out, ErrIntegrationPermission
+		return ErrIntegrationPermission
 	}
 	matched := false
 	for _, target := range d.Targets {
@@ -46,20 +42,18 @@ func (s *Store) integrationGuardState(ctx context.Context, tx pgx.Tx, r *record,
 		}
 	}
 	if !matched || r.Kind != "save_draft" {
-		return out, ErrIntegrationPermission
+		return ErrIntegrationPermission
 	}
 	latest, err := integrationLatestEvent(ctx, tx, d.SourceID, d.ArticleID)
 	if err != nil {
-		return out, err
+		return err
 	}
-	seq := d.StateSeq
 	if latest.StateSeq >= d.StateSeq {
 		if latest.Status != "published" || !latest.AuthorizationValid || latest.ContentFingerprint != "" && latest.ContentFingerprint != d.ContentFingerprint || latest.AuthorizationID != "" && latest.AuthorizationID != p.AuthorizationID {
-			return out, ErrIntegrationSourceChanged
+			return ErrIntegrationSourceChanged
 		}
-		seq = latest.StateSeq
 	}
-	return integrationGuardState{Distribution: d, Preparation: p, MinStateSeq: seq}, nil
+	return nil
 }
 
 func integrationGuardPause(ctx context.Context, tx pgx.Tx, r *record, now time.Time) error {
@@ -91,7 +85,7 @@ func (s *Store) integrationClaimAllowed(ctx context.Context, tx pgx.Tx, r *recor
 	if r.IntegrationDistributionID == "" || r.RunMode == "reconcile" || readKind(r.Kind) {
 		return true, nil
 	}
-	if _, err := s.integrationGuardState(ctx, tx, r, now); err != nil {
+	if err := s.integrationGuardAllowed(ctx, tx, r, now); err != nil {
 		if err = integrationGuardPause(ctx, tx, r, now); err != nil {
 			return false, err
 		}
@@ -107,16 +101,14 @@ func (s *Store) integrationActionAllowed(ctx context.Context, tx pgx.Tx, r *reco
 	if r.SourceGuardBlocked || r.ErrorCode == "source_guard_failed" || r.ErrorCode == "source_changed" {
 		return ErrConflict
 	}
-	if _, err := s.integrationGuardState(ctx, tx, r, now); err != nil {
+	if err := s.integrationGuardAllowed(ctx, tx, r, now); err != nil {
 		return ErrConflict
 	}
 	return nil
 }
 
 func (s *Store) integrationProgress(ctx context.Context, id string, in ProgressInput) (bool, error) {
-	handled := false
-	blocked := false
-	var before integrationGuardState
+	handled, blocked := false, false
 	err := s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
 		r, err := load(ctx, tx, id)
 		if err != nil {
@@ -137,50 +129,9 @@ func (s *Store) integrationProgress(ctx context.Context, id string, in ProgressI
 		if err = candidate.progress(in, now); err != nil {
 			return err
 		}
-		before, err = s.integrationGuardState(ctx, tx, r, now)
-		if err != nil {
+		if err = s.integrationGuardAllowed(ctx, tx, r, now); err != nil {
 			blocked = true
 			return integrationGuardPause(ctx, tx, r, now)
-		}
-		return nil
-	})
-	if err != nil || !handled {
-		return handled, err
-	}
-	if blocked {
-		return true, ErrConflict
-	}
-	d, p := before.Distribution, before.Preparation
-	state, sourceErr := s.integrations.CheckSource(ctx, d.ClientID, IntegrationSourceCheck{ArticleID: d.ArticleID, AuthorizationID: p.AuthorizationID, PreparationID: p.ID, AccountID: d.Targets[0].AccountID, Operation: d.Targets[0].Operation, ContentFingerprint: d.ContentFingerprint, MinStateSeq: before.MinStateSeq})
-	err = s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
-		r, err := load(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		if !leaseValid(r, in.LeaseToken, now) || r.CancelRequested || r.RunMode != "execute" {
-			return ErrConflict
-		}
-		current, guardErr := s.integrationGuardState(ctx, tx, r, now)
-		if sourceErr != nil || guardErr != nil || current.Distribution.GrantVersion != d.GrantVersion || current.Distribution.ContentFingerprint != d.ContentFingerprint || state.StateSeq < current.MinStateSeq {
-			blocked = true
-			return integrationGuardPause(ctx, tx, r, now)
-		}
-		if err = integrationAdvanceSourceState(ctx, tx, d.SourceID, d.ArticleID, state); err != nil {
-			blocked = true
-			return integrationGuardPause(ctx, tx, r, now)
-		}
-		if state.StateSeq > current.Distribution.StateSeq {
-			current.Distribution.StateSeq = state.StateSeq
-		}
-		if state.SourceVersion > current.Distribution.SourceVersion {
-			current.Distribution.SourceVersion = state.SourceVersion
-		}
-		raw, err := json.Marshal(current.Distribution)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, "UPDATE integration_distributions SET record=$2 WHERE id=$1", current.Distribution.ID, raw); err != nil {
-			return err
 		}
 		if in.RemoteID != "" {
 			var exists bool
@@ -207,7 +158,7 @@ func (s *Store) integrationProgress(ctx context.Context, id string, in ProgressI
 	if err == nil && blocked {
 		err = ErrConflict
 	}
-	return true, err
+	return handled, err
 }
 
 func (s *Store) maintainIntegrations(ctx context.Context, tx pgx.Tx, now time.Time) error {

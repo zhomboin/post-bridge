@@ -3,7 +3,7 @@
   "info": {
     "title": "PostBridge 外部内容接入契约",
     "version": "1.0.0",
-    "description": "当前开放CSDN文字Markdown保存草稿。publish、图片、MDX和其他平台未开放。PostBridge侧实现不代表调用方CMS、真实平台端到端和生产已验收。部署origin由环境提供，契约不包含真实地址或凭据。"
+    "description": "PostBridge独立部署，对任意获批调用方开放固定接口和固定HMAC认证，无需调用方提供反向服务或修改PostBridge。当前开放CSDN文字Markdown保存草稿，保留管理员预览确认策略。publish、图片、MDX和其他平台未开放。代码、本地、真实平台端到端及生产验收分别记录；部署origin由环境提供，契约不包含真实地址或凭据。"
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "tags": [
@@ -301,7 +301,7 @@
           }
         },
         "x-required-scope": "preparations:write",
-        "description": "同一client_id和request_id、相同规范化请求返回同一准备稿；首次201、重复200。有效期为创建后24小时与来源授权有效期中较早者。"
+        "description": "同一client_id和request_id、相同规范化请求返回同一准备稿；首次201、重复200。有效期为创建后24小时与来源授权有效期中较早者。 source_version、state_seq及authorization由调用方声明并保存在本地；无需预先发送来源事件。"
       }
     },
     "/api/integrations/v1/preparations/{id}": {
@@ -463,7 +463,7 @@
           }
         },
         "x-required-scope": "distributions:write",
-        "description": "首次接受202，幂等重投200。已有外站副作用、unknown、remote_id、有效租约或普通排队任务时拒绝新建；明确未写入且已取消或被来源守卫暂停的旧任务，可在当前授权与新的预览确认后安全取代，旧任务取消并清除正文但保留记录。不支持已有外站副本显式再次新建，不能靠换request_id绕过。接受不代表草稿已保存或公开发布。"
+        "description": "首次接受202，幂等重投200。已有外站副作用、unknown、remote_id、有效租约或普通排队任务时拒绝新建；明确未写入且已取消或被来源守卫暂停的旧任务，可在当前授权与新的预览确认后安全取代，旧任务取消并清除正文但保留记录。不支持已有外站副本显式再次新建，不能靠换request_id绕过。接受不代表草稿已保存或公开发布。 source_version与state_seq必须和已确认准备稿一致。提交及执行检查本地快照、授权到期、应用当前权限和已收到的主动状态事件，不发起反向请求。"
       },
       "get": {
         "operationId": "integration_7_get",
@@ -689,7 +689,7 @@
           }
         },
         "x-required-scope": "source-events:write",
-        "description": "相同event_id相同请求不重复应用；同event_id不同内容返回409。文章级事件在相同state_seq表达相同实际状态时可忽略，即使event_id不同；同序列实际状态不同返回409。旧序列不回退最新状态，授权撤销独立按authorization_id记录。"
+        "description": "可选的调用方主动来源状态或授权失效通知，不是准备稿或分发准入前置条件。稳定event_id与单调state_seq用于幂等、乱序及失效处理；不实现任何反向服务。"
       }
     },
     "/api/integration-invitations": {
@@ -1121,7 +1121,7 @@
     "/api/integration-clients/{id}": {
       "get": {
         "operationId": "integration_16_get",
-        "summary": "读取应用授权及反向来源配置",
+        "summary": "读取应用身份与授权",
         "tags": [
           "管理员接入管理"
         ],
@@ -1189,7 +1189,7 @@
       },
       "put": {
         "operationId": "integration_17_put",
-        "summary": "更新当前授权与反向来源配置",
+        "summary": "更新当前应用授权",
         "tags": [
           "管理员接入管理"
         ],
@@ -1274,7 +1274,7 @@
             }
           }
         ],
-        "description": "更新授权版本。source_secret仅写，空值保留；响应不会回显密钥。"
+        "description": "更新授权版本；已签发密钥不会回显。"
       }
     },
     "/api/integration-clients/{id}/rotate": {
@@ -2346,6 +2346,83 @@
         ],
         "description": "提交原confirmation_fingerprint并重新核验来源、授权和租约。原冻结正文缺失返回410，需新prepare和确认；接入应用不可用对管理员返回409 client_unavailable，不能导致管理员会话退出。未知结果不能重建。"
       }
+    },
+    "/api/integrations/v1/distributions/{id}/cancel": {
+      "post": {
+        "operationId": "integration_distribution_cancel",
+        "summary": "取消当前应用尚未产生外站副作用的分发",
+        "tags": [
+          "外部调用"
+        ],
+        "security": [
+          {
+            "SignatureInput": [],
+            "Signature": [],
+            "ContentDigest": [],
+            "IntegrationClient": [],
+            "IntegrationEnvironment": [],
+            "IntegrationService": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "取消成功或重复取消，返回当前父分发摘要。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Distribution"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Error410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,128}$"
+            }
+          }
+        ],
+        "x-required-scope": "distributions:write",
+        "description": "请求正文为空或空JSON对象，签名覆盖实际正文字节。仅允许当前应用取消自身分发，使用distributions:write。重复取消幂等返回原分发。尚未外站写入的任务停止后续执行；取消不等于立即删除审计快照，正文按现行保留条件清理。已发生或未知副作用、远端标识或不安全执行阶段返回409 distribution_not_cancellable；不删除外站文章。所有子任务取消后父状态为completed，不能据此认定草稿已保存。"
+      }
     }
   },
   "components": {
@@ -2676,11 +2753,6 @@
             },
             "maxItems": 100,
             "uniqueItems": true
-          },
-          "source_url": {
-            "type": "string",
-            "format": "uri",
-            "description": "仅HTTPS公网来源根地址，无用户信息、路径、查询和片段，仅默认HTTPS端口。"
           }
         },
         "required": [
@@ -2689,8 +2761,7 @@
           "source_id",
           "scopes",
           "accounts",
-          "operations",
-          "source_url"
+          "operations"
         ],
         "additionalProperties": false
       },
@@ -2753,11 +2824,6 @@
             "maxItems": 100,
             "uniqueItems": true
           },
-          "source_url": {
-            "type": "string",
-            "format": "uri",
-            "description": "仅HTTPS公网来源根地址，无用户信息、路径、查询和片段，仅默认HTTPS端口。"
-          },
           "id": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,128}$"
@@ -2782,7 +2848,6 @@
           "scopes",
           "accounts",
           "operations",
-          "source_url",
           "id",
           "status",
           "created_at"
@@ -2830,28 +2895,6 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 600
-          },
-          "source_url": {
-            "type": "string",
-            "description": "来源HTTPS公网根地址；空值保留已有地址。"
-          },
-          "source_client_id": {
-            "type": "string",
-            "description": "反向调用来源服务使用的client_id。"
-          },
-          "source_key_id": {
-            "type": "string"
-          },
-          "source_service_id": {
-            "type": "string"
-          },
-          "source_environment": {
-            "type": "string"
-          },
-          "source_secret": {
-            "type": "string",
-            "writeOnly": true,
-            "description": "调用方来源服务签发的32字节密钥的标准Base64；仅写入，空值保留已有密钥。"
           }
         },
         "required": [
@@ -2862,7 +2905,7 @@
           "rate_limit_per_minute"
         ],
         "additionalProperties": false,
-        "description": "权限、账号、操作与到期时间不得超出邀请审批上限。来源身份四字段如任一非空，则四项均须为有效标识。应用有效期最多366天。"
+        "description": "权限、账号、操作与到期时间不得超出邀请审批上限。应用有效期最多366天。无需来源地址或反向凭据。"
       },
       "Client": {
         "type": "object",
@@ -2933,23 +2976,6 @@
             "type": "integer",
             "format": "int64",
             "minimum": 1
-          },
-          "source_url": {
-            "type": "string",
-            "description": "来源HTTPS公网根地址；空值保留已有地址。"
-          },
-          "source_client_id": {
-            "type": "string",
-            "description": "反向调用来源服务使用的client_id。"
-          },
-          "source_key_id": {
-            "type": "string"
-          },
-          "source_service_id": {
-            "type": "string"
-          },
-          "source_environment": {
-            "type": "string"
           }
         },
         "required": [
@@ -2964,12 +2990,7 @@
           "operations",
           "expires_at",
           "rate_limit_per_minute",
-          "grant_version",
-          "source_url",
-          "source_client_id",
-          "source_key_id",
-          "source_service_id",
-          "source_environment"
+          "grant_version"
         ],
         "additionalProperties": false
       },
@@ -4019,69 +4040,6 @@
         ],
         "additionalProperties": false
       },
-      "SourceState": {
-        "type": "object",
-        "properties": {
-          "article_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "source_version": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 1
-          },
-          "state_seq": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 1
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "private",
-              "deleted"
-            ]
-          },
-          "content_fingerprint": {
-            "type": "string",
-            "minLength": 1
-          },
-          "authorization_valid": {
-            "type": "boolean"
-          },
-          "allowed": {
-            "type": "boolean"
-          },
-          "accounts": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "operations": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "article_id",
-          "source_version",
-          "state_seq",
-          "status",
-          "content_fingerprint",
-          "authorization_valid",
-          "allowed",
-          "accounts",
-          "operations"
-        ],
-        "additionalProperties": false,
-        "description": "由调用方实现的反向状态响应。所有九个字段必须出现、不能为null，不允许重复或未知字段，不允许多个JSON值。允许执行还需published、指纹相同、state_seq达到请求方所需序列、授权及目标允许。"
-      },
       "Targets": {
         "type": "object",
         "properties": {
@@ -4262,7 +4220,7 @@
         }
       },
       "Error409": {
-        "description": "conflict / source_changed / client_unavailable：业务标识、确认、来源状态或管理员操作的接入应用不可用；client_unavailable不表示管理员会话失效。",
+        "description": "conflict / source_changed / client_unavailable：业务标识、确认、来源状态或管理员操作的接入应用不可用；client_unavailable不表示管理员会话失效。 取消无法保证无外站副作用时code为distribution_not_cancellable。",
         "content": {
           "application/json": {
             "schema": {
@@ -4330,7 +4288,7 @@
         }
       },
       "Error503": {
-        "description": "source_unavailable / integration_disabled：来源核验不可用或接入未配置。",
+        "description": "integration_disabled：外部接入未配置或配置不可用。",
         "content": {
           "application/json": {
             "schema": {
@@ -4363,84 +4321,6 @@
     "nonce_retention_seconds": 601,
     "body_limit_bytes": 1048576,
     "description": "Signature-Input严格固定字段及参数顺序。标准Base64编码摘要和HMAC。签名正文为原始请求字节，GET也摘要空正文。target-uri为部署HTTPS origin加原始RequestURI，查询顺序及编码不得重写。"
-  },
-  "x-caller-contract": {
-    "description": "以下接口由调用方CMS实现，不是本仓库提供的PostBridge路由。反向注册的具体HTTP路由由调用方自行定义；调用方签发独立身份与密钥，管理员写入source_*配置。",
-    "paths": {
-      "/api/v1/integrations/postbridge/articles/{article_id}/distribution-state": {
-        "get": {
-          "summary": "调用方提供的权威文章分发状态",
-          "security": [
-            {
-              "SignatureInput": [],
-              "Signature": [],
-              "ContentDigest": [],
-              "IntegrationClient": [],
-              "IntegrationEnvironment": [],
-              "IntegrationService": []
-            }
-          ],
-          "parameters": [
-            {
-              "name": "article_id",
-              "in": "path",
-              "required": true,
-              "schema": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 256
-              }
-            },
-            {
-              "name": "authorization_id",
-              "in": "query",
-              "required": true,
-              "schema": {
-                "type": "string"
-              }
-            },
-            {
-              "name": "preparation_id",
-              "in": "query",
-              "required": true,
-              "schema": {
-                "type": "string"
-              }
-            },
-            {
-              "name": "account_id",
-              "in": "query",
-              "required": true,
-              "schema": {
-                "type": "string"
-              }
-            },
-            {
-              "name": "operation",
-              "in": "query",
-              "required": true,
-              "schema": {
-                "type": "string",
-                "const": "save_draft"
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "description": "必须返回Content-Type application/json，完整且唯一的九个字段，无额外字段。",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/SourceState"
-                  }
-                }
-              }
-            }
-          },
-          "description": "反向请求签名使用source_*身份和调用方签发的独立secret。禁止跳转；总时限3秒，响应上限64KiB；来源必须解析为可访问的公网HTTPS地址。"
-        }
-      }
-    }
   },
   "x-content-fingerprint-profile": {
     "hash": "sha256-lowercase-hex",

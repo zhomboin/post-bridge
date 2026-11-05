@@ -33,26 +33,15 @@ type IntegrationClient struct {
 	GrantVersion       int64     `json:"grant_version"`
 	ExpiresAt          time.Time `json:"expires_at"`
 	RateLimitPerMinute int       `json:"rate_limit_per_minute"`
-	SourceURL          string    `json:"source_url"`
-	SourceClientID     string    `json:"source_client_id"`
-	SourceKeyID        string    `json:"source_key_id"`
-	SourceServiceID    string    `json:"source_service_id"`
-	SourceEnvironment  string    `json:"source_environment"`
 }
 type IntegrationPrincipal struct {
 	IntegrationClient
 	KeyID string `json:"key_id"`
 }
-type IntegrationSourceCredentials struct {
-	URL      string
-	Identity IntegrationSigningIdentity
-	Secret   []byte `json:"-"`
-}
 type IntegrationService struct {
 	store                          *Store
 	aead                           cipher.AEAD
 	environment, serviceID, origin string
-	SourceHTTPClient               *http.Client
 }
 
 func NewIntegrationService(store *Store, masterKeyHex, environment, serviceID, publicOrigin string) (*IntegrationService, error) {
@@ -129,22 +118,6 @@ func (s *IntegrationService) Secret(ctx context.Context, keyID string) ([]byte, 
 		return nil, ErrIntegrationAuthentication
 	}
 	return s.open(raw, keyID)
-}
-func (s *IntegrationService) SourceCredentials(ctx context.Context, id string) (IntegrationSourceCredentials, error) {
-	c, e := s.Client(ctx, id)
-	if e != nil {
-		return IntegrationSourceCredentials{}, e
-	}
-	if c.Status != "active" || !c.ExpiresAt.After(s.store.now()) || c.SourceURL == "" {
-		return IntegrationSourceCredentials{}, ErrIntegrationPermission
-	}
-	var raw []byte
-	e = s.store.pool.QueryRow(ctx, "SELECT encrypted_source_secret FROM integration_clients WHERE id=$1", id).Scan(&raw)
-	if e != nil {
-		return IntegrationSourceCredentials{}, e
-	}
-	secret, e := s.open(raw, "source:"+id)
-	return IntegrationSourceCredentials{URL: c.SourceURL, Identity: IntegrationSigningIdentity{ClientID: c.SourceClientID, KeyID: c.SourceKeyID, Environment: c.SourceEnvironment, ServiceID: c.SourceServiceID}, Secret: secret}, e
 }
 func integrationHas(xs []string, v string) bool {
 	for _, x := range xs {

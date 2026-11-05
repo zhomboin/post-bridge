@@ -2,16 +2,16 @@
 
 ## 项目结构与范围
 
-本项目提供独立内容分发后台，当前实现 CSDN 文字 Markdown 草稿流程、按对象组织的处理记录，以及统一平台账号工作台中的文章只读列表、统计、账号设置和独立正文查看。PostBridge 侧外部来源注册、签名、平台稿确认、分发查询与来源守卫已实现并本地验证。完整范围见 [需求](docs/requirements.md)，交付状态见 [进度](docs/progress.md)；公开发布、图片、MDX、其他平台、CMS 实际连接与生产验收仍待。
+本项目提供独立内容分发后台，当前实现 CSDN 文字 Markdown 草稿流程、按对象组织的处理记录，以及统一平台账号工作台中的文章只读列表、统计、账号设置和独立正文查看。PostBridge 侧外部来源注册、签名、平台稿确认、分发查询与来源守卫已实现并本地验证。完整范围见 [需求](docs/requirements.md)，交付状态见 [进度](docs/progress.md)；公开发布、图片、MDX、其他平台、真实调用方连接与生产验收仍待。
 
-- apps/api：平铺 Go 管理接口、PostgreSQL 队列与初始化；integration_*.go 分担来源认证、注册、签名、内容修订、来源状态和守卫。
+- apps/api：平铺 Go 管理接口、PostgreSQL 队列与初始化；integration_*.go 分担来源认证、注册、签名、内容修订、主动来源事件和本地授权守卫。
 - apps/admin/src：React/TypeScript 后台、页面和样式。
 - apps/worker/src：Node.js/Playwright 固定 CSDN 执行器。
 - tests/e2e、tests/runtime：跨服务与启动安全测试；单元测试随应用组织。
 - contracts/cms.openapi.yaml：外部接入机器契约；tests/fixtures/integration-contract.json：共享合成签名与指纹向量。
 - scripts：PowerShell、WSL 和 Ubuntu 部署入口；.github/workflows：CI。
 
-来源接入只开放 CSDN 文字 Markdown save_draft，接口以 [外部手册](docs/external-integration.md) 和机器契约为准。CMS 数据库、事务发件箱及反向来源服务不由本仓库实现。可选接入配置与存储密钥仅传给 API，worker 不接收；运行数据与凭据置于仓库外私有配置。
+来源接入只开放 CSDN 文字 Markdown save_draft，接口以 [外部手册](docs/external-integration.md) 和机器契约为准。调用方按固定接口和签名协议接入，无需反向服务；调用方数据库及可靠发送由其自行实现，CMS 事务发件箱仅是建议。可选接入配置与存储密钥仅传给 API，worker 不接收；运行数据与凭据置于仓库外私有配置。
 
 本指南保留根目录，其他文档使用中文 Markdown，放入 docs。所有文件使用 UTF-8 无 BOM。进度和简要变更分别写入 docs/progress.md、docs/version.md；只描述当前状态，已交付任务的详细实施计划及时删除。
 

@@ -73,11 +73,17 @@ func integrationLatestEvent(ctx context.Context, tx pgx.Tx, source, article stri
 	}
 	return event, err
 }
-func integrationAcceptState(latest IntegrationSourceEvent, seq int64, fp string) bool {
+func integrationAcceptState(latest IntegrationSourceEvent, seq, version int64, fp string) bool {
 	if latest.StateSeq > seq {
 		return false
 	}
 	if latest.StateSeq == seq {
+		if latest.SourceVersion != version {
+			return false
+		}
+		if latest.Status != "published" || !latest.AuthorizationValid {
+			return false
+		}
 		if latest.Type == "private" || latest.Type == "deleted" || latest.Type == "unpublished" || latest.Type == "authorization_revoked" {
 			return false
 		}
@@ -135,7 +141,7 @@ func (h *handler) prepareIntegration(ctx context.Context, client IntegrationClie
 			if e != nil {
 				return e
 			}
-			if !out.ExpiresAt.After(now) || out.Status == "revoked" || !integrationAcceptState(latest, in.StateSeq, fp) {
+			if !out.ExpiresAt.After(now) || out.Status == "revoked" || !integrationAcceptState(latest, in.StateSeq, in.SourceVersion, fp) {
 				return ErrIntegrationExpired
 			}
 			return nil
@@ -150,7 +156,7 @@ func (h *handler) prepareIntegration(ctx context.Context, client IntegrationClie
 		if e != nil {
 			return e
 		}
-		if !integrationAcceptState(latest, in.StateSeq, fp) {
+		if !integrationAcceptState(latest, in.StateSeq, in.SourceVersion, fp) {
 			return ErrIntegrationSourceChanged
 		}
 		expiry := now.Add(24 * time.Hour)
@@ -202,7 +208,7 @@ func (h *handler) updateIntegrationPreparation(ctx context.Context, id string, r
 		if e != nil {
 			return e
 		}
-		if !integrationAcceptState(latest, p.StateSeq, p.ContentFingerprint) {
+		if !integrationAcceptState(latest, p.StateSeq, p.SourceVersion, p.ContentFingerprint) {
 			return ErrIntegrationSourceChanged
 		}
 		next := make([]IntegrationDraft, len(drafts))
@@ -262,7 +268,7 @@ func (h *handler) confirmIntegrationPreparation(ctx context.Context, id string, 
 		if e != nil {
 			return e
 		}
-		if !integrationAcceptState(latest, p.StateSeq, p.ContentFingerprint) {
+		if !integrationAcceptState(latest, p.StateSeq, p.SourceVersion, p.ContentFingerprint) {
 			return ErrIntegrationSourceChanged
 		}
 		p.GrantVersion = c.GrantVersion
@@ -277,7 +283,7 @@ func (h *handler) confirmIntegrationPreparation(ctx context.Context, id string, 
 	})
 	return out, err
 }
-func (h *handler) commitIntegrationDistribution(ctx context.Context, client IntegrationClient, in IntegrationSubmitInput, state IntegrationSourceState) (IntegrationDistribution, bool, error) {
+func (h *handler) commitIntegrationDistribution(ctx context.Context, client IntegrationClient, in IntegrationSubmitInput) (IntegrationDistribution, bool, error) {
 	var out IntegrationDistribution
 	created := false
 	if !validKey(in.RequestID) || in.SourceID != client.SourceID || !validKey(in.ArticleID) || in.StateSeq < 1 || in.SourceVersion < 1 {
@@ -328,28 +334,26 @@ func (h *handler) commitIntegrationDistribution(ctx context.Context, client Inte
 		if !p.ExpiresAt.After(now) {
 			return ErrIntegrationExpired
 		}
-		if state.ArticleID != in.ArticleID || state.Status != "published" || !state.AuthorizationValid || !state.Allowed || state.ContentFingerprint != in.ContentFingerprint || state.StateSeq < in.StateSeq || state.SourceVersion < in.SourceVersion {
+		if in.StateSeq != p.StateSeq || in.SourceVersion != p.SourceVersion {
 			return ErrIntegrationSourceChanged
 		}
-		for _, target := range in.Targets {
-			if !integrationHas(state.Accounts, target.AccountID) || !integrationHas(state.Operations, target.Operation) {
-				return ErrIntegrationSourceChanged
-			}
+		if !p.AuthorizationExpiresAt.After(now) {
+			return ErrIntegrationExpired
 		}
 		latest, e := integrationLatestEvent(ctx, tx, client.SourceID, in.ArticleID)
 		if e != nil {
 			return e
 		}
-		if !integrationAcceptState(latest, state.StateSeq, state.ContentFingerprint) {
+		if !integrationAcceptState(latest, p.StateSeq, p.SourceVersion, p.ContentFingerprint) {
 			return ErrIntegrationSourceChanged
 		}
-		if e = integrationAdvanceSourceState(ctx, tx, client.SourceID, in.ArticleID, state); e != nil {
+		if e = integrationAdvanceSnapshotState(ctx, tx, p); e != nil {
 			return e
 		}
 		if err := integrationCheckExistingCopies(ctx, tx, client.SourceID, in.ArticleID, now); err != nil {
 			return err
 		}
-		out = IntegrationDistribution{ID: randomToken(), ClientID: client.ID, SourceID: client.SourceID, ArticleID: in.ArticleID, RequestID: in.RequestID, PreparationID: p.ID, SourceVersion: state.SourceVersion, StateSeq: state.StateSeq, ContentFingerprint: in.ContentFingerprint, ConfirmationFingerprint: in.ConfirmationFingerprint, GrantVersion: current.GrantVersion, Targets: p.Targets, JobIDs: []string{}, CreatedAt: now}
+		out = IntegrationDistribution{ID: randomToken(), ClientID: client.ID, SourceID: client.SourceID, ArticleID: in.ArticleID, RequestID: in.RequestID, PreparationID: p.ID, SourceVersion: p.SourceVersion, StateSeq: p.StateSeq, ContentFingerprint: in.ContentFingerprint, ConfirmationFingerprint: in.ConfirmationFingerprint, GrantVersion: current.GrantVersion, Targets: p.Targets, JobIDs: []string{}, CreatedAt: now}
 		for i, draft := range p.Drafts {
 			job := newRecord(CreateInput{RequestID: fmt.Sprintf("integration:%s:%d", out.ID, i), Platform: draft.Platform, Kind: draft.Operation, Title: draft.Title, Markdown: draft.Markdown}, now)
 			job.IntegrationDistributionID = out.ID
@@ -663,29 +667,23 @@ func integrationClientAllowedTx(ctx context.Context, tx pgx.Tx, id, scope string
 func integrationSameSourceState(a, b IntegrationSourceEvent) bool {
 	return a.SourceID == b.SourceID && a.ArticleID == b.ArticleID && a.StateSeq == b.StateSeq && a.SourceVersion == b.SourceVersion && a.Status == b.Status && a.AuthorizationValid == b.AuthorizationValid && a.ContentFingerprint == b.ContentFingerprint
 }
-func integrationAdvanceSourceState(ctx context.Context, tx pgx.Tx, source, article string, state IntegrationSourceState) error {
-	if state.ArticleID != article || state.Status != "published" || !state.AuthorizationValid || !state.Allowed || state.StateSeq < 1 {
-		return ErrIntegrationSourceChanged
-	}
-	latest, err := integrationLatestEvent(ctx, tx, source, article)
+func integrationAdvanceSnapshotState(ctx context.Context, tx pgx.Tx, p IntegrationPreparation) error {
+	latest, err := integrationLatestEvent(ctx, tx, p.SourceID, p.ArticleID)
 	if err != nil {
 		return err
 	}
-	next := IntegrationSourceEvent{SourceID: source, ArticleID: article, StateSeq: state.StateSeq, SourceVersion: state.SourceVersion, Type: "published", Status: "published", AuthorizationValid: true, ContentFingerprint: state.ContentFingerprint}
-	if latest.StateSeq > next.StateSeq {
+	if !integrationAcceptState(latest, p.StateSeq, p.SourceVersion, p.ContentFingerprint) {
 		return ErrIntegrationSourceChanged
 	}
+	next := IntegrationSourceEvent{SourceID: p.SourceID, ArticleID: p.ArticleID, StateSeq: p.StateSeq, SourceVersion: p.SourceVersion, Type: "published", Status: "published", AuthorizationValid: true, ContentFingerprint: p.ContentFingerprint}
 	if latest.StateSeq == next.StateSeq {
-		if !integrationSameSourceState(latest, next) {
-			return ErrIntegrationSourceChanged
-		}
 		return nil
 	}
 	raw, err := json.Marshal(next)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", source, article, state.StateSeq, raw)
+	_, err = tx.Exec(ctx, "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", p.SourceID, p.ArticleID, p.StateSeq, raw)
 	return err
 }
 

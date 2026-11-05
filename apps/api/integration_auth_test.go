@@ -28,7 +28,7 @@ func TestIntegrationRegistryLifecycleReplayAndGrant(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, SourceURL: "https://cms.example"}
+	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
 	reg, e := s.Register(ctx, inv.Token, registration)
 	if e != nil {
 		t.Fatal(e)
@@ -157,7 +157,7 @@ func TestIntegrationInvitationBoundsAndApprovalCeiling(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, SourceURL: "https://cms.example"}
+	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
 	bad := registration
 	bad.SourceID = "other"
 	if _, e = s.Register(ctx, inv.Token, bad); e != ErrIntegrationPermission {
@@ -364,47 +364,6 @@ func TestIntegrationRotationHandoverAndClockBoundary(t *testing.T) {
 	}
 }
 
-func TestIntegrationSourceCredentialsAreWriteOnlyAndEncrypted(t *testing.T) {
-	st := testStore(t)
-	ctx := context.Background()
-	s, e := NewIntegrationService(st, strings.Repeat("ab", 32), "test", "bridge-test", "https://bridge.example")
-	if e != nil {
-		t.Fatal(e)
-	}
-	now := st.now()
-	c := IntegrationClient{ID: "source-client", Name: "Source", SourceID: "cms", Environment: "test", ServiceID: "bridge-test", Status: "active", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, GrantVersion: 1, ExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 100}
-	if e = seedIntegrationClient(ctx, s, c); e != nil {
-		t.Fatal(e)
-	}
-	rawSecret := []byte(strings.Repeat("s", 32))
-	in := IntegrationGrantInput{Scopes: c.Scopes, Accounts: c.Accounts, Operations: c.Operations, ExpiresAt: c.ExpiresAt, RateLimitPerMinute: 100, SourceURL: "https://cms.example", SourceClientID: "postbridge", SourceKeyID: "source-key", SourceEnvironment: "test", SourceServiceID: "cms", SourceSecret: base64.StdEncoding.EncodeToString(rawSecret)}
-	updated, e := s.Update(ctx, c.ID, in, "admin")
-	if e != nil {
-		t.Fatal(e)
-	}
-	credentials, e := s.SourceCredentials(ctx, c.ID)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if string(credentials.Secret) != string(rawSecret) || credentials.URL != "https://cms.example" || credentials.Identity.ClientID != "postbridge" {
-		t.Fatal("incorrect source credentials")
-	}
-	raw, _ := json.Marshal(updated)
-	if strings.Contains(string(raw), in.SourceSecret) || strings.Contains(string(raw), "source_secret") {
-		t.Fatal("source secret leaked")
-	}
-	wrong, _ := NewIntegrationService(st, strings.Repeat("cd", 32), "test", "bridge-test", "https://bridge.example")
-	if _, e = wrong.SourceCredentials(ctx, c.ID); e == nil {
-		t.Fatal("wrong master key decrypted credentials")
-	}
-	if e = s.Transition(ctx, c.ID, "suspend", "admin"); e != nil {
-		t.Fatal(e)
-	}
-	if _, e = s.SourceCredentials(ctx, c.ID); e == nil {
-		t.Fatal("suspended source credentials returned")
-	}
-}
-
 func TestIntegrationRegistrationMissingInvitationAndOversizedBody(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
@@ -413,7 +372,7 @@ func TestIntegrationRegistrationMissingInvitationAndOversizedBody(t *testing.T) 
 		t.Fatal(e)
 	}
 	h := h0.(*handler)
-	input := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, SourceURL: "https://cms.example"}
+	input := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
 	raw, _ := json.Marshal(input)
 	r := httptest.NewRequest("POST", "https://bridge.example/api/integrations/v1/registrations", strings.NewReader(string(raw)))
 	r.Header.Set("Content-Type", "application/json")
@@ -460,7 +419,7 @@ func TestIntegrationConcurrentInvitationAndNonceSingleConsumption(t *testing.T) 
 	if e != nil {
 		t.Fatal(e)
 	}
-	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, SourceURL: "https://cms.example"}
+	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
 	var wg sync.WaitGroup
 	results := make(chan error, 12)
 	for i := 0; i < 12; i++ {
@@ -725,134 +684,5 @@ func TestIntegrationPreauthenticationSaturatedWindowDoesNotRewriteCounter(t *tes
 	}
 	if subjects != 1 || audits != 0 {
 		t.Fatalf("saturated traffic expanded storage: rows=%d audits=%d", subjects, audits)
-	}
-}
-
-func integrationSourceRotationFixture(t *testing.T) (*handler, *Store, IntegrationClient, IntegrationDistribution, IntegrationPreparation, IntegrationGrantInput) {
-	t.Helper()
-	h, st, c, queued := guardFixture(t)
-	c.ExpiresAt = st.now().Add(24 * time.Hour)
-	guardUpdateClient(t, st, c)
-	ctx := context.Background()
-	snapshot := IntegrationSnapshot{Title: "反向密钥轮换确认文章", Body: "# 确认正文\n\n内容", BodyFormat: "markdown", Tags: []string{}}
-	fp, _ := IntegrationContentFingerprint(snapshot)
-	prep, _, e := h.prepareIntegration(ctx, c, IntegrationPrepareInput{RequestID: "reverse-rotation-prepare", SourceID: c.SourceID, ArticleID: "reverse-rotation-article", SourceVersion: 1, StateSeq: 1, AuthorizationID: "reverse-rotation-grant", AuthorizationExpiresAt: st.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}})
-	if e != nil {
-		t.Fatal(e)
-	}
-	prep, e = h.confirmIntegrationPreparation(ctx, prep.ID, prep.Revision)
-	if e != nil {
-		t.Fatal(e)
-	}
-	grant := IntegrationGrantInput{SourceID: c.SourceID, Scopes: c.Scopes, Accounts: c.Accounts, Operations: c.Operations, ExpiresAt: c.ExpiresAt, RateLimitPerMinute: c.RateLimitPerMinute, SourceURL: c.SourceURL, SourceClientID: c.SourceClientID, SourceKeyID: c.SourceKeyID, SourceServiceID: c.SourceServiceID, SourceEnvironment: c.SourceEnvironment}
-	return h, st, c, queued, prep, grant
-}
-func integrationSourceRotationSubmit(prep IntegrationPreparation) (IntegrationSubmitInput, IntegrationSourceState) {
-	in := IntegrationSubmitInput{RequestID: "reverse-rotation-submit", SourceID: prep.SourceID, ArticleID: prep.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: prep.ContentFingerprint, PreparationID: prep.ID, DraftRevisionIDs: prep.DraftRevisionIDs, ConfirmationFingerprint: prep.ConfirmationFingerprint, Targets: prep.Targets}
-	state := IntegrationSourceState{ArticleID: prep.ArticleID, SourceVersion: 1, StateSeq: 1, Status: "published", ContentFingerprint: prep.ContentFingerprint, AuthorizationValid: true, Allowed: true, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
-	return in, state
-}
-func TestIntegrationSourceKeyRotationPreservesConfirmedAndQueuedWork(t *testing.T) {
-	for _, mode := range []string{"secret_only", "key_id_only", "key_and_secret"} {
-		t.Run(mode, func(t *testing.T) {
-			h, st, c, queued, prep, grant := integrationSourceRotationFixture(t)
-			ctx := context.Background()
-			expectedSecret := []byte(strings.Repeat("s", 32))
-			if mode != "secret_only" {
-				grant.SourceKeyID = "source-key-rotated"
-			}
-			if mode != "key_id_only" {
-				expectedSecret = []byte(strings.Repeat("n", 32))
-				grant.SourceSecret = base64.StdEncoding.EncodeToString(expectedSecret)
-			}
-			updated, e := h.integrations.Update(ctx, c.ID, grant, "admin")
-			if e != nil {
-				t.Fatal(e)
-			}
-			if updated.GrantVersion != c.GrantVersion {
-				t.Fatalf("routine reverse key rotation invalidated grant: before=%d after=%d", c.GrantVersion, updated.GrantVersion)
-			}
-			credentials, e := h.integrations.SourceCredentials(ctx, c.ID)
-			if e != nil {
-				t.Fatal(e)
-			}
-			if credentials.Identity.KeyID != grant.SourceKeyID || string(credentials.Secret) != string(expectedSecret) {
-				t.Fatal("rotated reverse credentials were not saved")
-			}
-			persisted, e := integrationReadPreparation(ctx, st.pool, prep.ID, false)
-			if e != nil || !persisted.Confirmed || persisted.ConfirmationFingerprint != prep.ConfirmationFingerprint {
-				t.Fatalf("confirmation replaced: %+v %v", persisted, e)
-			}
-			submit, state := integrationSourceRotationSubmit(prep)
-			if _, created, e := h.commitIntegrationDistribution(ctx, updated, submit, state); e != nil || !created {
-				t.Fatalf("confirmed draft unusable after reverse rotation: %v", e)
-			}
-			original := h.integrations.SourceHTTPClient.Transport
-			calls := 0
-			h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-				calls++
-				if e := VerifyIntegrationRequest(r, nil, c.SourceURL, expectedSecret, st.now()); e != nil {
-					t.Error("reverse source request used stale secret", e)
-				}
-				if match := integrationInput.FindStringSubmatch(r.Header.Get("Signature-Input")); match == nil || match[2] != grant.SourceKeyID {
-					t.Error("reverse source request used stale key id")
-				}
-				return original.RoundTrip(r)
-			})
-			claim, e := st.Claim(ctx, "reverse-rotation-worker")
-			if e != nil || claim == nil || claim.Job.ID != queued.JobIDs[0] {
-				t.Fatalf("queued job did not survive normal rotation: %+v %v", claim, e)
-			}
-			if e = st.Progress(ctx, claim.Job.ID, ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); e != nil || calls != 1 {
-				t.Fatalf("live source check failed after routine rotation: %v calls=%d", e, calls)
-			}
-		})
-	}
-}
-func TestIntegrationSourceTrustBindingChangesInvalidateConfirmedAndQueuedWork(t *testing.T) {
-	for _, mode := range []string{"source_id", "url", "client_id", "environment", "service_id", "scope", "account", "operation", "expiry"} {
-		t.Run(mode, func(t *testing.T) {
-			h, st, c, queued, prep, grant := integrationSourceRotationFixture(t)
-			ctx := context.Background()
-			switch mode {
-			case "source_id":
-				grant.SourceID = "other-source"
-			case "url":
-				grant.SourceURL = "https://other-cms.example"
-			case "client_id":
-				grant.SourceClientID = "other-client"
-			case "environment":
-				grant.SourceEnvironment = "production"
-			case "service_id":
-				grant.SourceServiceID = "other-service"
-			case "scope":
-				grant.Scopes = []string{"targets:read", "preparations:write"}
-			case "account":
-				grant.Accounts = []string{}
-			case "operation":
-				grant.Operations = []string{}
-			case "expiry":
-				grant.ExpiresAt = st.now().Add(12 * time.Hour)
-			}
-			updated, e := h.integrations.Update(ctx, c.ID, grant, "admin")
-			if e != nil {
-				t.Fatal(e)
-			}
-			if updated.GrantVersion != c.GrantVersion+1 {
-				t.Fatalf("trust binding change retained old grant: %d", updated.GrantVersion)
-			}
-			submit, state := integrationSourceRotationSubmit(prep)
-			if _, _, e = h.commitIntegrationDistribution(ctx, c, submit, state); e == nil {
-				t.Fatal("old confirmation accepted under changed trust binding")
-			}
-			claim, e := st.Claim(ctx, "changed-binding-worker")
-			if e != nil || claim != nil {
-				t.Fatalf("old queued work executed after changed trust: %+v %v", claim, e)
-			}
-			job := guardReadRecord(t, st, queued.JobIDs[0])
-			if job.Status != "waiting_user" || !job.SourceGuardBlocked {
-				t.Fatalf("old queued work not paused: %+v", job)
-			}
-		})
 	}
 }

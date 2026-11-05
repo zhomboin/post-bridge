@@ -4,35 +4,34 @@
 
 PostBridge 已提供注册审批、签名身份、目标能力查询、平台稿预览确认、父分发记录和来源事件处理。当前执行能力只有 CSDN 文字 Markdown 保存草稿；公开发布、图片、MDX、其他平台均未开放；平台文章的自动更新、自动撤回及已有外站副本的显式再次新建仍属后续能力。保存平台草稿不代表文章已公开，来源撤回也不代表自动删除或撤回平台文章。
 
-本文对应 [OpenAPI 契约](../contracts/cms.openapi.yaml)。接口与模型以[注册实现](../apps/api/integration_registry.go)、[内容路由](../apps/api/integration_content_http.go)、[内容模型](../apps/api/integration_content.go)和[反向来源校验](../apps/api/integration_source.go)为依据。PostBridge 侧实现、调用方 CMS 实现、真实平台端到端和生产验收分别记录；调用方 CMS 与生产接入仍待验证。
+本文对应 [OpenAPI 契约](../contracts/cms.openapi.yaml)。接口与模型以[注册实现](../apps/api/integration_registry.go)、[内容路由](../apps/api/integration_content_http.go)、[内容模型](../apps/api/integration_content.go)和[本地执行授权守卫](../apps/api/integration_guard.go)为依据。PostBridge 侧实现、调用方接入、真实平台端到端和生产验收分别记录；真实调用方与生产接入仍待验证。
 
-## 双向身份与职责
+## 独立接口与职责
+
+PostBridge 独立部署，任意调用方按本手册的固定 HTTP 接口和固定 HMAC 认证接入。新增调用方只需邀请、审批与授权配置，无需修改 PostBridge、共享数据库或提供反向 HTTP 服务。调用方可以是 CMS、脚本或其他服务，生产执行不依赖 CMS 常驻。
 
 | 事项 | 负责方 |
 | --- | --- |
-| 来源文章发布、内容版本、授权和状态序列 | 调用方 CMS |
-| 文章状态变更与待发送事件在同一数据库事务提交 | 调用方 CMS |
-| 事务发件箱、稳定事件标识、失败补发及有界退避 | 调用方 CMS |
-| 向 PostBridge 申请身份并安全保管一次性密钥 | 调用方 |
-| 向 PostBridge 签发独立反向调用身份和密钥 | 调用方来源服务 |
-| 提供权威文章分发状态接口 | 调用方来源服务 |
-| 邀请、审批、账号与操作授权、管理员确认 | PostBridge 管理员 |
-| 平台稿修订、来源核验、排队及状态查询 | PostBridge |
-| 外部 CMS、真实账号及生产环境端到端验收 | 双方共同完成，当前未验收 |
+| 选择允许分发的内容、声明快照版本与授权期限 | 调用方 |
+| 申请身份、安全保存密钥、按稳定标识提交及查询 | 调用方服务端 |
+| 需要提前终止任务时主动取消或发送状态／授权失效事件 | 调用方 |
+| 邀请、审批、账号与操作授权、平台稿人工确认 | PostBridge 管理员 |
+| 保存独立快照、平台稿修订、本地权限守卫、排队及状态查询 | PostBridge |
+| 真实调用方、真实账号和生产端到端验收 | 双方共同完成，当前未验收 |
 
-调用方到 PostBridge 与 PostBridge 到来源服务使用两套身份及密钥，不能混用。反向注册的具体流程由来源服务实现；本仓库没有替调用方实现反向注册服务，也不会自动创建调用方的数据库事务或发件箱。
+调用方后端保存应用密钥，业务浏览器不持有密钥。原稿数据库、业务事务与可靠发送由调用方自行实现；事务发件箱可以作为 CMS 的可靠投递方式，不是接口准入条件。当前结果通过轮询查询；Webhook 尚未实现，未来可作为可选通知能力。
 
-服务通过独立的 INTEGRATION_MASTER_KEY_FILE 读取 32 字节密钥的十六进制文本，PUBLIC_ORIGIN 必须为 HTTPS；INTEGRATION_ENVIRONMENT 与 INTEGRATION_SERVICE_ID 单独配置，不从 worker 身份或密钥推导。服务配置中的 master_key 是 PostBridge 用于加密保存密钥的存储密钥，不是发给调用方的 client_secret。审批与轮换返回的 client_secret，以及来源服务签发后写入 source_secret 的反向密钥，均是标准 Base64 编码的随机 32 字节密钥；HMAC 使用 Base64 解码后的字节。
+服务通过独立的 INTEGRATION_MASTER_KEY_FILE 读取 32 字节密钥的十六进制文本，PUBLIC_ORIGIN 必须为 HTTPS；INTEGRATION_ENVIRONMENT 与 INTEGRATION_SERVICE_ID 单独配置，不从 worker 身份或密钥推导。master_key 是 PostBridge 加密保存应用密钥的存储密钥，不是调用方 client_secret。审批与轮换返回的 client_secret 是标准 Base64 编码的随机 32 字节密钥；HMAC 使用 Base64 解码后的字节。
 
 ## 注册、审批与激活
 
 1. 管理员创建邀请，限制来源、运行环境、scope、目标账号、操作、有效期和每分钟请求量。邀请最多有效 24 小时，应用有效期最多 366 天，请求上限为每分钟 1 至 600 次。
 2. 调用方通过注册接口提交申请，X-Integration-Invitation 头携带一次性邀请。该步骤不使用应用签名；来源与环境必须匹配邀请，申请权限不能超出邀请。
-3. 管理员审批申请，校验来源地址及反向身份配置。批准后返回 client_id、key_id、client_secret 和 pending_activation 状态；密钥只返回一次。
+3. 管理员审批申请，核对来源标识、账号、操作及权限。批准后返回 client_id、key_id、client_secret 和 pending_activation 状态；密钥只返回一次。
 4. 调用方使用待激活密钥为激活接口签名。成功后应用和新密钥启用，返回 active；未激活密钥不能调用内容接口。
 5. 管理员轮换时生成另一把待激活密钥。新密钥激活后，原启用密钥进入最多十分钟交接期；调用方应及时切换。暂停与撤销会阻止后续业务访问。
 
-注册请求字段为 name、environment、source_id、scopes、accounts、operations、source_url。source_url 必须是无用户信息、无业务路径、无查询及片段的 HTTPS 公网根地址，使用默认 HTTPS 端口。反向访问不接受重定向、私网地址或混合公网与受限地址的 DNS 结果。
+注册请求字段为 name、environment、source_id、scopes、accounts、operations。调用方不提交来源服务地址或反向凭据。
 
 邀请令牌使用一次后即消费。注册响应丢失时，请管理员核对已有申请，不能假定重新提交邀请能够再次取得同一结果。申请审批后的密钥通过安全方式交付，列表和详情均不提供密钥查询。一次性内容不要放入地址、日志、截图、前端持久存储或仓库。
 
@@ -48,25 +47,16 @@ PostBridge 已提供注册审批、签名身份、目标能力查询、平台稿
 | POST /api/integration-registrations/{id}/approve | 审批并一次签发密钥 |
 | POST /api/integration-registrations/{id}/reject | 拒绝待审批申请 |
 | GET /api/integration-clients | 最近 100 个应用 |
-| GET、PUT /api/integration-clients/{id} | 查看、更新应用与反向来源配置 |
+| GET、PUT /api/integration-clients/{id} | 查看、更新应用身份与授权 |
 | POST /api/integration-clients/{id}/rotate | 一次签发待激活的新密钥 |
 | POST /api/integration-clients/{id}/suspend | 暂停应用 |
 | POST /api/integration-clients/{id}/resume | 启用已暂停应用 |
 | POST /api/integration-clients/{id}/revoke | 撤销应用 |
 | GET /api/integration-audit | 最近 100 条审计，可按 client_id 筛选 |
 
-邀请创建字段为 source_id、environment、scopes、accounts、operations、expires_at、client_expires_at、rate_limit_per_minute。审批与更新字段为 scopes、accounts、operations、expires_at、rate_limit_per_minute，以及下表中的反向来源配置；source_id 可在更新时指定，审批时仍受邀请来源限制。
+邀请创建字段为 source_id、environment、scopes、accounts、operations、expires_at、client_expires_at、rate_limit_per_minute。审批与更新字段为 scopes、accounts、operations、expires_at、rate_limit_per_minute；source_id 可在更新时指定，审批仍受邀请来源限制。
 
-| 字段 | 含义 |
-| --- | --- |
-| source_url | 来源服务 HTTPS 公网根地址 |
-| source_client_id | 来源服务向 PostBridge 签发的反向客户端标识 |
-| source_key_id | 反向密钥标识 |
-| source_service_id | 反向请求的目标服务标识 |
-| source_environment | 反向请求的运行环境 |
-| source_secret | 来源服务签发的独立反向密钥，仅写入；空值保留现有密钥 |
-
-四个反向身份字段只要填写任意一项，就必须全部有效。更新授权会改变 grant_version，原平台稿确认不能绕过授权变化。权限 DTO 允许的 publish 是保留数据值，不能据此认定执行能力支持公开发布；当前只应申请 save_draft。
+更新授权会改变 grant_version，原平台稿确认不能绕过授权变化。权限 DTO 允许的 publish 是保留数据值，不能据此认定执行能力支持公开发布；当前只应申请 save_draft。
 
 ## 签名协议
 
@@ -103,7 +93,8 @@ PostBridge 已提供注册审批、签名身份、目标能力查询、平台稿
 | POST /api/integrations/v1/distributions | distributions:write | 首次接受 202；相同请求 200 |
 | GET /api/integrations/v1/distributions/{id} | distributions:read | 父分发与子任务状态 |
 | GET /api/integrations/v1/distributions | distributions:read | 通过 request_id 查询一个原分发结果 |
-| POST /api/integrations/v1/source-events | source-events:write | received、applied |
+| POST /api/integrations/v1/distributions/{id}/cancel | distributions:write | 当前父分发与子任务状态 |
+| POST /api/integrations/v1/source-events | source-events:write | 可选主动通知，received、applied |
 
 scope、accounts、operations 共同生效。targets 只返回当前账号与操作授权允许的能力；调用方应读取返回的 account_id，而不是传入真实平台用户名。当前恰好一个目标，platform 为 csdn、operation 为 save_draft、body_formats 只有 markdown、images 为 false；标题为 5 至 100 个 Unicode 字符，正文非空且最多 200000 个字符。
 
@@ -111,7 +102,7 @@ scope、accounts、operations 共同生效。targets 只返回当前账号与操
 
 ## 原稿到已确认平台稿
 
-调用方只允许为已发布且当前授权有效的来源文章发起分发。准备请求携带 request_id、source_id、article_id、source_version、state_seq、authorization_id、authorization_expires_at、content_fingerprint、snapshot 和 targets。source_id 必须与调用身份绑定的来源一致。
+调用方只允许发送明确授权的内容快照。准备请求携带 request_id、source_id、article_id、source_version、state_seq、authorization_id、authorization_expires_at、content_fingerprint、snapshot 和 targets。source_id 必须与调用身份绑定的来源一致。source_version、state_seq 和授权由调用方声明并在 PostBridge 本地保存，不要求先发送来源事件；调用方负责这些声明的真实性。
 
 snapshot 保存 title、summary、body、body_format、tags、cover_image_url、assets 和可选 original_url。当前 body_format 必须为 markdown，cover_image_url 为空、assets 为空数组。正文不接受图片、HTML、MDX、代码围栏之外的花括号或 import/export；代码围栏中的代码样例可以保留。摘要最多 2000 字符，标签最多 20 个，每个标签非空且最多 64 字符。详情不得被当作公开内容接口，服务端过期或保留期清理后正文可以为空。
 
@@ -152,33 +143,15 @@ JSON 使用紧凑格式，不转义中文，不额外转义 HTML 字符，保留
 
 targets 每个对象的字段顺序为 platform、account_id、operation；drafts 每个对象的字段顺序为 id、platform、account_id、operation、title、markdown、revision。数组顺序保持不变。确认绑定的是平台稿修订和当前授权版本，内容指纹仍标识来源原稿，二者不能互换。
 
-## 调用方来源状态接口
+## 本地授权与执行守卫
 
-调用方必须自行实现 GET /api/v1/integrations/postbridge/articles/{article_id}/distribution-state，并先为 PostBridge 完成反向身份注册和独立授权。OpenAPI 的 x-caller-contract 仅描述调用方应实现的接口，不是 PostBridge 提供的服务路由。
+PostBridge 根据本地已保存的数据决定执行：应用仍启用且未到期、来源和目标仍在当前 scope／账号／操作授权内、管理员确认及冻结平台稿一致、调用方声明的 authorization_expires_at 未到期，以及已收到的来源状态或撤销记录没有禁止执行。提交、领取、关键写入进度与恢复都会检查适用条件，不向调用方发起反向请求。
 
-PostBridge 在提交和关键外站写入阶段使用反向身份签名请求。查询参数为 authorization_id、preparation_id、account_id、operation；当前 operation 只会是 save_draft。来源服务必须从自己的权威存储重新判断当前文章、授权与目标，不依赖调用者自报状态或尚未送达的发件箱缓存。
+平台稿预览到期限制确认和提交。已接受分发不会仅因预览期限结束停止，但应用或快照授权到期仍会阻止后续写入。PostBridge 无法自动得知调用方未发送的内容或权限变化；需要立即阻止任务时，调用方应主动取消或可靠发送来源状态／授权撤销事件。任何取消或失效通知都不代表已撤回外站文章。
 
-响应必须为 HTTP 200 和 application/json，包含下列全部九个字段。禁止额外字段、重复字段、null、尾随第二个 JSON 值；类型严格匹配。完整响应样例定位到[来源状态 fixture](../apps/api/integration_source_test.go)，本文不复制接口代码。
+## 可选来源事件
 
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| article_id | 字符串 | 当前文章标识，必须匹配请求文章 |
-| source_version | 正整数 | 当前内容版本 |
-| state_seq | 正整数 | 当前来源状态序列，不低于 PostBridge 要求的序列 |
-| status | 字符串 | draft、published、private、deleted 之一 |
-| content_fingerprint | 字符串 | 当前原稿的内容指纹 |
-| authorization_valid | 布尔值 | 当前分发授权仍有效 |
-| allowed | 布尔值 | 当前请求的文章、准备稿、账号和操作允许执行 |
-| accounts | 字符串数组 | 当前授权允许的目标账号，不能为 null |
-| operations | 字符串数组 | 当前授权允许的操作，不能为 null |
-
-允许执行必须同时满足 published、内容指纹一致、来源序列不倒退、authorization_valid 与 allowed 为真，以及目标账号和 save_draft 均在允许列表。提交时还检查返回 source_version 不低于请求版本。
-
-反向请求总时限为 3 秒，响应正文上限为 64 KiB；不发送管理员会话或平台 Cookie，要求不缓存。重定向、非 JSON、超限、超时、DNS 或证书失败按不可确认处理，不能默认允许。来源暂时不可用时任务不继续写入；已经进入外站操作且结果未知的任务转为只读核对，不能盲目再次保存。
-
-## 来源事件与事务发件箱
-
-CMS 必须在同一事务中提交文章变化、source_version 或 state_seq 变化和待发送事件。事务成功后由发件箱独立投递，不应在事务未提交前通知 PostBridge。每个文章的 state_seq 对所有会影响分发的状态变化单调递增；event_id 在同一业务事件的所有重投中保持不变。
+来源事件用于调用方主动通知内容变化、转私密、删除或授权撤销，不是准备或提交的前置条件。若调用方需要与原稿事务可靠同步，建议在同一事务保存变化和待发送记录，提交成功后再投递；也可以采用其他可靠发送方式。每个文章的 state_seq 对所有会影响分发的状态变化单调递增；event_id 在同一业务事件的所有重投中保持不变。
 
 | type | status 与授权要求 |
 | --- | --- |
@@ -195,11 +168,13 @@ CMS 必须在同一事务中提交文章变化、source_version 或 state_seq �
 
 ## 提交、查询与恢复
 
-提交请求使用独立稳定 request_id，并携带 source_id、article_id、source_version、state_seq、content_fingerprint、preparation_id、draft_revision_ids、confirmation_fingerprint 和 targets。PostBridge 校验管理员确认、当前授权版本和反向来源状态，在同一事务中创建父分发与子任务。
+提交请求使用独立稳定 request_id，并携带 source_id、article_id、source_version、state_seq、content_fingerprint、preparation_id、draft_revision_ids、confirmation_fingerprint 和 targets。source_version 和 state_seq 必须与已确认准备稿相同；原稿或序列变化时重新准备并确认。PostBridge 校验管理员确认、当前授权版本和本地快照授权，在同一事务中创建父分发与子任务。
 
 202 只表示进入队列。调用方保存返回父分发 id，查询 status、children、external_status、outcome 和最后核对时间。父状态为 in_progress、needs_attention 或 completed；completed 不是公开发布状态。子任务的 external_status 分别为 not_submitted、draft_saved、unknown，不得用 succeeded 推断公开可见。
 
 网络中断或结果未知时，先以原 request_id 查询分发接口；必要时用同一请求内容重投，不能换 request_id 或 preparation_id 来尝试绕过重复保护。已有外站副作用、未知结果、remote_id、有效租约或普通排队任务时拒绝再创建分发，不支持对已有外站副本显式再次新建。只有服务端证明旧任务从未发生外站写入、无远端标识及有效租约，并且旧任务已取消或因来源守卫暂停时，用户才可取得当前有效授权、重新预览并确认后提交新的分发。提交成功时，来源守卫暂停的未写入旧任务会取消、清除正文并保留记录；这不是对未知结果盲目重试。
+
+调用方可对自身分发发送签名 POST /api/integrations/v1/distributions/{id}/cancel，正文为空或空 JSON 对象，签名覆盖实际正文字节，使用 distributions:write。取消幂等返回当前分发；所有子任务取消后父状态为 completed。仅在能够保证尚未发生外站副作用时请求停止后续执行；取消不等于立即删除审计快照，正文按现行保留条件清理。已有或未知副作用、远端标识或不安全执行阶段返回 409 distribution_not_cancellable，应继续查询与核对，不能推断已删除外站内容。
 
 | 管理员方法与路径 | 行为 |
 | --- | --- |
@@ -229,12 +204,12 @@ CMS 必须在同一事务中提交文章变化、source_version 或 state_seq �
 | 413 request_too_large | 减少请求正文到 1 MiB 以内 |
 | 422 unsupported_content | 移除不支持的内容或目标，不自动降级为其他平台/公开发布 |
 | 429 rate_limited | 按 Retry-After 有界退避，保持业务稳定标识 |
-| 503 source_unavailable | 修复来源服务后再核对，不将不可用视为允许 |
+| 409 distribution_not_cancellable | 任务已发生或可能发生外站副作用，继续查询与核对，不重新发文 |
 | 503 integration_disabled | 由管理员完成 PostBridge 接入配置 |
 | 500 internal_error | 保留业务标识，先查询原结果再有界重投 |
 
 ## 接入验收
 
-调用方至少覆盖签名固定用例、过期与重复 nonce、审批与激活、权限收紧、密钥交接、准备稿修订并发、旧确认拒绝、提交响应丢失、重复与乱序事件、来源撤回、反向超时和未知外站结果。PostBridge 本地测试和合成界面检查不能替代真实调用方与真实平台验收。
+调用方至少覆盖签名固定用例、过期与重复 nonce、审批与激活、权限收紧、密钥交接、准备稿修订并发、旧确认拒绝、提交响应丢失、重复与乱序事件、主动取消、授权到期、来源撤回和未知外站结果。PostBridge 本地测试和合成界面检查不能替代真实调用方与真实平台验收。
 
-联调时只使用独立本地私有配置与合成材料；实际地址、账号、凭据和运行目录不进入仓库。提交前确认调用方事务与发件箱、来源状态服务、反向身份注册、真实平台草稿和生产部署都已分别验证；当前这些跨系统验收仍待完成。
+联调时只使用独立本地私有配置与合成材料；实际地址、账号、凭据和运行目录不进入仓库。联调应分别验证调用方可靠发送、无反向服务的完整提交、人工确认、任务取消、真实平台草稿及生产部署；当前真实跨系统验收仍待完成。

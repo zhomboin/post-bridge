@@ -106,14 +106,14 @@ func TestIntegrationPreparationConfirmationAndAtomicDistribution(t *testing.T) {
 	if _, err = h.confirmIntegrationPreparation(ctx, draft.ID, draft.Revision+1); err == nil {
 		t.Fatal("stale confirmation accepted")
 	}
-	// The registered source is checked again at execution; commit takes a separately verified state.
-	state := IntegrationSourceState{ArticleID: "article-1", SourceVersion: 2, StateSeq: 2, Status: "published", ContentFingerprint: fp, AuthorizationValid: true, Allowed: true, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
-	submit := IntegrationSubmitInput{RequestID: "dispatch-1", SourceID: "cms", ArticleID: "article-1", SourceVersion: 2, StateSeq: 2, ContentFingerprint: fp, PreparationID: draft.ID, DraftRevisionIDs: confirmed.DraftRevisionIDs, ConfirmationFingerprint: confirmed.ConfirmationFingerprint, Targets: input.Targets}
-	distribution, created, err := h.commitIntegrationDistribution(ctx, client, submit, state)
+	// 提交只使用已确认的不可变内容与本地授权。
+
+	submit := IntegrationSubmitInput{RequestID: "dispatch-1", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: draft.ID, DraftRevisionIDs: confirmed.DraftRevisionIDs, ConfirmationFingerprint: confirmed.ConfirmationFingerprint, Targets: input.Targets}
+	distribution, created, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil || !created || len(distribution.JobIDs) != 1 {
 		t.Fatalf("submit %+v %v", distribution, err)
 	}
-	dupe, created, err := h.commitIntegrationDistribution(ctx, client, submit, state)
+	dupe, created, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil || created || dupe.ID != distribution.ID {
 		t.Fatalf("submit duplicate %v", err)
 	}
@@ -124,12 +124,12 @@ func TestIntegrationPreparationConfirmationAndAtomicDistribution(t *testing.T) {
 	changedOperation := submit
 	changedOperation.RequestID = "dispatch-2"
 	changedOperation.Targets = []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "publish"}}
-	if _, _, err = h.commitIntegrationDistribution(ctx, client, changedOperation, state); err == nil {
+	if _, _, err = h.commitIntegrationDistribution(ctx, client, changedOperation); err == nil {
 		t.Fatal("operation upgraded")
 	}
 	// Reusing a confirmed preparation cannot create a second remote copy with a new request ID.
 	submit.RequestID = "dispatch-another"
-	if _, _, err = h.commitIntegrationDistribution(ctx, client, submit, state); err == nil {
+	if _, _, err = h.commitIntegrationDistribution(ctx, client, submit); err == nil {
 		t.Fatal("confirmed draft reused")
 	}
 }
@@ -242,7 +242,7 @@ func TestIntegrationVerifiedStateRejectsOlderNotification(t *testing.T) {
 	ctx := context.Background()
 	snap := IntegrationSnapshot{Title: "来源水位测试文章", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snap)
-	in := IntegrationPrepareInput{RequestID: "watermark", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snap, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	in := IntegrationPrepareInput{RequestID: "watermark", SourceID: "cms", ArticleID: "article-1", SourceVersion: 10, StateSeq: 10, AuthorizationID: "grant", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snap, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
 	prep, _, err := h.prepareIntegration(ctx, client, in)
 	if err != nil {
 		t.Fatal(err)
@@ -251,9 +251,9 @@ func TestIntegrationVerifiedStateRejectsOlderNotification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := IntegrationSourceState{ArticleID: in.ArticleID, SourceVersion: 10, StateSeq: 10, Status: "published", ContentFingerprint: fp, AuthorizationValid: true, Allowed: true, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
+
 	submit := IntegrationSubmitInput{RequestID: "watermark-submit", SourceID: "cms", ArticleID: in.ArticleID, SourceVersion: 10, StateSeq: 10, ContentFingerprint: fp, PreparationID: prep.ID, DraftRevisionIDs: prep.DraftRevisionIDs, ConfirmationFingerprint: prep.ConfirmationFingerprint, Targets: in.Targets}
-	d, _, err := h.commitIntegrationDistribution(ctx, client, submit, state)
+	d, _, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil {
 		t.Fatal(err)
 	}

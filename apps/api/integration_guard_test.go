@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -28,28 +26,11 @@ func guardFixture(t *testing.T) (*handler, *Store, IntegrationClient, Integratio
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := IntegrationSourceState{ArticleID: p.ArticleID, SourceVersion: 1, StateSeq: 1, Status: "published", ContentFingerprint: fp, AuthorizationValid: true, Allowed: true, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
-	d, _, err := h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{RequestID: "guard-distribute", SourceID: c.SourceID, ArticleID: p.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets}, state)
+
+	d, _, err := h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{RequestID: "guard-distribute", SourceID: c.SourceID, ArticleID: p.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.SourceURL = "https://cms.example"
-	c.SourceClientID = "bridge"
-	c.SourceKeyID = "key-1"
-	c.SourceServiceID = "cms"
-	c.SourceEnvironment = "test"
-	encrypted, err := h.integrations.seal([]byte(strings.Repeat("s", 32)), "source:"+c.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(c)
-	if _, err = s.pool.Exec(ctx, "UPDATE integration_clients SET metadata=$2,encrypted_source_secret=$3 WHERE id=$1", c.ID, raw, encrypted); err != nil {
-		t.Fatal(err)
-	}
-	body, _ := json.Marshal(state)
-	h.integrations.SourceHTTPClient = &http.Client{Transport: integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(string(body))), Request: r}, nil
-	})}
 	return h, s, c, d
 }
 func guardReadRecord(t *testing.T, s *Store, id string) *record {
@@ -138,25 +119,26 @@ func TestIntegrationGuardClaimRejectsCurrentPermissionChanges(t *testing.T) {
 	}
 }
 
-func TestIntegrationGuardProgressChecksLeaseBeforeNetwork(t *testing.T) {
-	h, s, _, d := guardFixture(t)
+func TestIntegrationGuardProgressChecksLeaseAndStage(t *testing.T) {
+	_, s, _, d := guardFixture(t)
 	claim := guardClaim(t, s)
-	calls := 0
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("fixture") })
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: "wrong", Stage: "opening_editor", ExternalStarted: true}); err == nil || calls != 0 {
-		t.Fatalf("invalid lease reached source: %v calls=%d", err, calls)
+
+	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: "wrong", Stage: "opening_editor", ExternalStarted: true}); err == nil {
+		t.Fatalf("invalid lease accepted progress: %v", err)
 	}
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "saving"}); err == nil || calls != 0 {
-		t.Fatalf("invalid stage reached source: %v calls=%d", err, calls)
+	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "saving"}); err == nil {
+		t.Fatalf("invalid stage accepted progress: %v", err)
 	}
 }
 
-func TestIntegrationGuardUnavailablePreservesLeaseAndBlocksAccount(t *testing.T) {
-	h, s, _, d := guardFixture(t)
+func TestIntegrationGuardSuspendedClientPreservesLeaseAndBlocksAccount(t *testing.T) {
+	_, s, _, d := guardFixture(t)
 	claim := guardClaim(t, s)
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("private upstream detail") })
+	c := integrationSeedExistingClient(t, s)
+	c.Status = "suspended"
+	guardUpdateClient(t, s, c)
 	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err == nil {
-		t.Fatal("source unavailable allowed first write")
+		t.Fatal("suspended client allowed first write")
 	}
 	r := guardReadRecord(t, s, d.JobIDs[0])
 	if r.Status != "waiting_user" || r.Ready || r.LeaseToken != claim.LeaseToken || !r.LeaseExpiresAt.After(s.now()) || r.ExternalStarted || r.ErrorCode != "source_guard_failed" {
@@ -171,45 +153,17 @@ func TestIntegrationGuardUnavailablePreservesLeaseAndBlocksAccount(t *testing.T)
 	}
 }
 
-func TestIntegrationGuardRechecksPermissionAfterUnlockedSourceCall(t *testing.T) {
-	h, s, c, d := guardFixture(t)
-	claim := guardClaim(t, s)
-	calls := 0
-	original := h.integrations.SourceHTTPClient.Transport
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-		calls++
-		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
-		defer cancel()
-		if err := s.locked(ctx, func(tx pgx.Tx, _ time.Time) error {
-			current, err := integrationLoadClient(ctx, tx, c.ID)
-			if err != nil {
-				return err
-			}
-			current.GrantVersion++
-			return integrationSaveClient(ctx, tx, current)
-		}); err != nil {
-			t.Errorf("network held account lock: %v", err)
-		}
-		return original.RoundTrip(r)
-	})
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err == nil || calls != 1 {
-		t.Fatalf("changed grant allowed write: %v calls=%d", err, calls)
-	}
-	r := guardReadRecord(t, s, d.JobIDs[0])
-	if r.ErrorCode != "source_guard_failed" || r.ExternalStarted {
-		t.Fatalf("late grant change not paused: %+v", r)
-	}
-}
-
 func TestIntegrationGuardExternalFailureQueuesOnlyReadReconcile(t *testing.T) {
-	h, s, _, d := guardFixture(t)
+	_, s, _, d := guardFixture(t)
 	claim := guardClaim(t, s)
 	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err != nil {
 		t.Fatal(err)
 	}
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("fixture") })
+	c := integrationSeedExistingClient(t, s)
+	c.Status = "suspended"
+	guardUpdateClient(t, s, c)
 	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "filling"}); err == nil {
-		t.Fatal("source failed but later write allowed")
+		t.Fatal("suspended client allowed a later write")
 	}
 	r := guardReadRecord(t, s, d.JobIDs[0])
 	if r.RunMode != "reconcile" || r.Status != "reconciling" || !r.ExternalStarted || r.LeaseToken != claim.LeaseToken || r.Outcome != "unknown" {
@@ -222,7 +176,7 @@ func TestIntegrationGuardExternalFailureQueuesOnlyReadReconcile(t *testing.T) {
 		t.Fatal("recovery was not read-only")
 	}
 	if err := s.Progress(context.Background(), next.Job.ID, ProgressInput{LeaseToken: next.LeaseToken, Stage: "verifying"}); err != nil {
-		t.Fatalf("source unavailable blocked read reconciliation: %v", err)
+		t.Fatalf("suspended client blocked read reconciliation: %v", err)
 	}
 }
 
@@ -363,51 +317,27 @@ func TestIntegrationGuardMaintainDoesNotForgetValidReplayState(t *testing.T) {
 }
 
 func TestIntegrationGuardCannotMarkExternalStartedBeforeCheck(t *testing.T) {
-	h, s, _, d := guardFixture(t)
+	_, s, _, d := guardFixture(t)
 	claim := guardClaim(t, s)
-	calls := 0
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("unavailable") })
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "checking_login", ExternalStarted: true}); err == nil || calls != 1 {
-		t.Fatalf("external start bypassed check: %v calls=%d", err, calls)
-	}
-}
 
-func TestIntegrationGuardPersistsHighestObservedSourceSequence(t *testing.T) {
-	h, s, _, d := guardFixture(t)
-	claim := guardClaim(t, s)
-	original := h.integrations.SourceHTTPClient.Transport
-	calls := 0
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-		response, err := original.RoundTrip(r)
-		if err != nil {
-			return nil, err
-		}
-		body, _ := io.ReadAll(response.Body)
-		response.Body.Close()
-		seq := "3"
-		if calls > 0 {
-			seq = "2"
-		}
-		calls++
-		response.Body = io.NopCloser(strings.NewReader(strings.Replace(string(body), `"state_seq":1`, `"state_seq":`+seq, 1)))
-		return response, nil
-	})
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "filling"}); err == nil {
-		t.Fatal("source sequence rollback accepted")
+	c := integrationSeedExistingClient(t, s)
+	c.Status = "suspended"
+	guardUpdateClient(t, s, c)
+	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "checking_login", ExternalStarted: true}); err == nil {
+		t.Fatalf("external start bypassed check: %v", err)
 	}
 }
 
 func TestIntegrationGuardAbsenceReconciliationCannotResumeWritesAutomatically(t *testing.T) {
-	h, s, _, d := guardFixture(t)
+	_, s, _, d := guardFixture(t)
 	claim := guardClaim(t, s)
 	ctx := context.Background()
 	if err := s.Progress(ctx, d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err != nil {
 		t.Fatal(err)
 	}
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unavailable") })
+	c := integrationSeedExistingClient(t, s)
+	c.Status = "suspended"
+	guardUpdateClient(t, s, c)
 	if err := s.Progress(ctx, d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "filling"}); err == nil {
 		t.Fatal("missing guard failure")
 	}
@@ -432,60 +362,13 @@ func TestIntegrationGuardAbsenceReconciliationCannotResumeWritesAutomatically(t 
 	}
 }
 
-func TestIntegrationGuardRejectsInvalidRunModeBeforeNetwork(t *testing.T) {
-	h, s, _, d := guardFixture(t)
+func TestIntegrationGuardRejectsInvalidRunMode(t *testing.T) {
+	_, s, _, d := guardFixture(t)
 	claim := guardClaim(t, s)
-	calls := 0
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("unavailable") })
+
 	guardMutateRecord(t, s, d.JobIDs[0], func(r *record) { r.RunMode = "invalid" })
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err == nil || calls != 0 {
-		t.Fatalf("invalid run mode reached source: %v calls=%d", err, calls)
-	}
-}
-
-func TestIntegrationGuardCancellationDuringSourceCallStopsWrite(t *testing.T) {
-	h, s, _, d := guardFixture(t)
-	claim := guardClaim(t, s)
-	original := h.integrations.SourceHTTPClient.Transport
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if _, err := s.Action(r.Context(), d.JobIDs[0], "cancel", ActionInput{}); err != nil {
-			t.Error(err)
-		}
-		return original.RoundTrip(r)
-	})
 	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err == nil {
-		t.Fatal("cancellation raced through to write")
-	}
-	r := guardReadRecord(t, s, d.JobIDs[0])
-	if !r.CancelRequested || r.ExternalStarted {
-		t.Fatalf("cancellation not preserved %+v", r)
-	}
-}
-
-func TestIntegrationGuardLiveCheckIgnoresDelayedOldRevocation(t *testing.T) {
-	h, s, c, d := guardFixture(t)
-	claim := guardClaim(t, s)
-	original := h.integrations.SourceHTTPClient.Transport
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-		response, err := original.RoundTrip(r)
-		if err != nil {
-			return nil, err
-		}
-		body, _ := io.ReadAll(response.Body)
-		response.Body.Close()
-		response.Body = io.NopCloser(strings.NewReader(strings.Replace(string(body), `"state_seq":1`, `"state_seq":10`, 1)))
-		return response, nil
-	})
-	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err != nil {
-		t.Fatal(err)
-	}
-	applied, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{EventID: "late-private", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 7, SourceVersion: 1, Type: "private", Status: "private", AuthorizationValid: false})
-	if err != nil || applied {
-		t.Fatalf("delayed notification displaced live check: %v applied=%v", err, applied)
-	}
-	r := guardReadRecord(t, s, d.JobIDs[0])
-	if r.CancelRequested || r.SourceGuardBlocked || r.Status != "running" {
-		t.Fatalf("delayed old notification blocked current state: %+v", r)
+		t.Fatalf("invalid run mode accepted progress: %v", err)
 	}
 }
 
@@ -502,7 +385,7 @@ func TestIntegrationGuardMaintainPreservesPendingApprovalBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registration, err := service.Register(ctx, invitation.Token, IntegrationRegistrationInput{Name: "待审批来源", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, SourceURL: "https://cms.example"})
+	registration, err := service.Register(ctx, invitation.Token, IntegrationRegistrationInput{Name: "待审批来源", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,54 +395,6 @@ func TestIntegrationGuardMaintainPreservesPendingApprovalBounds(t *testing.T) {
 	}
 	if _, err = service.Approve(ctx, registration.ID, IntegrationGrantInput{Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: clock.Add(12 * time.Hour), RateLimitPerMinute: 60}, "admin"); err != nil {
 		t.Fatalf("maintenance discarded accepted registration approval bounds: %v", err)
-	}
-}
-
-func TestIntegrationGuardAcceptedAuthorizationUsesLiveStateAfterPreviewExpiry(t *testing.T) {
-	for _, liveValid := range []bool{true, false} {
-		name := "invalid"
-		if liveValid {
-			name = "valid"
-		}
-		t.Run(name, func(t *testing.T) {
-			h, s, _, d := guardFixture(t)
-			clock := s.now().Add(2 * time.Hour)
-			s.now = func() time.Time { return clock }
-			original := h.integrations.SourceHTTPClient.Transport
-			calls := 0
-			h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-				calls++
-				response, err := original.RoundTrip(r)
-				if err != nil {
-					return nil, err
-				}
-				if !liveValid {
-					body, _ := io.ReadAll(response.Body)
-					response.Body.Close()
-					response.Body = io.NopCloser(strings.NewReader(strings.Replace(string(body), `"authorization_valid":true`, `"authorization_valid":false`, 1)))
-				}
-				return response, nil
-			})
-			claim, err := s.Claim(context.Background(), "guard-worker")
-			if err != nil || claim == nil {
-				t.Fatalf("accepted task was invalidated by expired preview deadline: %v", err)
-			}
-			if calls != 0 {
-				t.Fatal("claim unexpectedly made source request")
-			}
-			err = s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true})
-			if calls != 1 {
-				t.Fatalf("write did not check current source authorization: calls=%d", calls)
-			}
-			r := guardReadRecord(t, s, d.JobIDs[0])
-			if liveValid {
-				if err != nil || !r.ExternalStarted || r.Status != "running" {
-					t.Fatalf("current authorization was rejected after preview expiry: %v %+v", err, r)
-				}
-			} else if err == nil || r.ExternalStarted || r.Status != "waiting_user" || r.Ready || r.ErrorCode != "source_guard_failed" {
-				t.Fatalf("expired live authorization allowed write: %v %+v", err, r)
-			}
-		})
 	}
 }
 
@@ -644,17 +479,9 @@ func TestIntegrationAuthorizationDelayedRevocationSurvivesNewerArticleWatermark(
 	h, s, c, d := guardFixture(t)
 	pB := guardSecondPreparation(t, h, s, c, d, "grant-B", "prepare-late-grant-B", 1)
 	claim := guardClaim(t, s)
-	original := h.integrations.SourceHTTPClient.Transport
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(r *http.Request) (*http.Response, error) {
-		response, err := original.RoundTrip(r)
-		if err != nil {
-			return nil, err
-		}
-		body, _ := io.ReadAll(response.Body)
-		response.Body.Close()
-		response.Body = io.NopCloser(strings.NewReader(strings.Replace(string(body), `"state_seq":1`, `"state_seq":10`, 1)))
-		return response, nil
-	})
+	if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{EventID: "newer-article", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 10, SourceVersion: 1, Type: "published", Status: "published", AuthorizationValid: true, ContentFingerprint: d.ContentFingerprint}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -745,14 +572,13 @@ func TestIntegrationAuthorizationRevocationGuardRejectsRestoredQueuedTask(t *tes
 		r.ErrorCode = ""
 		r.FinishedAt = nil
 	})
-	calls := 0
-	h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("unavailable") })
+
 	if claim, err := s.Claim(ctx, "guard-worker"); err != nil || claim != nil {
 		t.Fatalf("restored revoked authorization reached worker: %+v %v", claim, err)
 	}
 	r := guardReadRecord(t, s, d.JobIDs[0])
-	if r.Status != "waiting_user" || !r.SourceGuardBlocked || r.Ready || calls != 0 {
-		t.Fatalf("grant tombstone did not prevent write: %+v calls=%d", r, calls)
+	if r.Status != "waiting_user" || !r.SourceGuardBlocked || r.Ready {
+		t.Fatalf("grant tombstone did not prevent write: %+v", r)
 	}
 }
 
@@ -802,10 +628,7 @@ func TestIntegrationRevocationPreservesOnlyLeasedOrUncertainJobBodies(t *testing
 				claim = guardClaim(t, s)
 			}
 			if mode == "waiting_lease" {
-				h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unavailable") })
-				if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err == nil {
-					t.Fatal("expected temporary source pause")
-				}
+				guardMutateRecord(t, s, d.JobIDs[0], func(r *record) { r.Status = "waiting_user"; r.Ready = false; r.SourceGuardBlocked = true })
 			}
 			if mode == "external_started" {
 				if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err != nil {
@@ -860,7 +683,7 @@ func TestIntegrationRevocationPreservesOnlyLeasedOrUncertainJobBodies(t *testing
 }
 
 func TestIntegrationNonRevocationPausesKeepAcceptedBodies(t *testing.T) {
-	for _, mode := range []string{"source_unavailable", "permission_changed", "content_changed"} {
+	for _, mode := range []string{"permission_changed", "content_changed"} {
 		t.Run(mode, func(t *testing.T) {
 			h, s, c, d := guardFixture(t)
 			if mode == "content_changed" {
@@ -869,12 +692,8 @@ func TestIntegrationNonRevocationPausesKeepAcceptedBodies(t *testing.T) {
 				}
 			} else {
 				claim := guardClaim(t, s)
-				if mode == "source_unavailable" {
-					h.integrations.SourceHTTPClient.Transport = integrationSourceRoundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unavailable") })
-				} else {
-					c.Scopes = []string{"targets:read"}
-					guardUpdateClient(t, s, c)
-				}
+				c.Scopes = []string{"targets:read"}
+				guardUpdateClient(t, s, c)
 				if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err == nil {
 					t.Fatal("expected pause")
 				}
