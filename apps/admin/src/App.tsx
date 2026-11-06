@@ -26,7 +26,7 @@ const locationRoute = () => {
 const navigation = [
   { href: '/', label: '总览', icon: LayoutDashboard },
   { href: '/account', label: '平台账号', icon: BookOpenText },
-  { href: '/jobs', label: '草稿任务', icon: ListFilter },
+  { href: '/jobs', label: '平台任务', icon: ListFilter },
   { href: '/logs', label: '处理记录', icon: LogsIcon },
   { href: '/integrations', label: '内容来源', icon: BookOpenText },
 ];
@@ -125,7 +125,7 @@ export default function App() {
   else if (pathname === '/docs/integrations') content = <Suspense fallback={<div className="loading-page" role="status">正在读取接入文档…</div>}><IntegrationDocs /></Suspense>;
   else if (pathname === '/integrations') content = <Integrations />;
   else if (/^\/integration-preparations\/[^/]+$/.test(pathname)) content = <IntegrationDraft key={pathname} id={decodeURIComponent(pathname.slice('/integration-preparations/'.length))} />;
-  else content = <div className="page"><h1>页面不存在</h1><p className="section-gap"><RouteLink href="/jobs">返回草稿任务</RouteLink></p></div>;
+  else content = <div className="page"><h1>页面不存在</h1><p className="section-gap"><RouteLink href="/jobs">返回平台任务</RouteLink></p></div>;
   const pageName = pathname === '/docs/integrations' ? '接入文档' : navigation.find(item => item.href === (pathname.startsWith('/integration-preparations') ? '/integrations' : pathname.startsWith('/articles') ? '/account' : pathname.startsWith('/jobs') ? '/jobs' : pathname.startsWith('/logs') ? '/logs' : pathname))?.label || '工作台';
   return <WorkspaceContext.Provider value={context}><a className="skip-link" href="#main-content">跳到主要内容</a><div className="app-shell"><aside className="sidebar">
     <RouteLink className="brand" href="/"><span className="brand-mark"><BookOpenText size={18} aria-hidden="true" /></span>Post Bridge</RouteLink>

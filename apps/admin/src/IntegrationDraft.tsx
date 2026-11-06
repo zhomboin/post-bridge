@@ -46,7 +46,7 @@ export default function IntegrationDraft({ id }: { id: string }) {
     if (error) { action.setError(error); return; }
     const revisions = drafts.map(({ id, platform, account_id, operation, title, markdown, publish_options }) => ({
       id, platform, account_id, operation, title, markdown,
-      publish_options: publish_options && cleanCSDNPublishOptions(publish_options),
+      publish_options: publish_options && cleanCSDNPublishOptions(publish_options, true),
     }));
     const result = await action.run(signal => api<Preparation>('/api/integration-preparations/' + encodeURIComponent(id), {
       method: 'PUT', body: JSON.stringify({ revision: data.revision, drafts: revisions }), signal,

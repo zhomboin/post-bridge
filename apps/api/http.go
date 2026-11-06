@@ -77,6 +77,7 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 	h.remoteLoginRoutes()
 	h.articleRoutes()
 	h.csdnPublishPresetRoutes()
+	h.csdnPublishRoutes()
 	if cfg.IntegrationMasterKey != "" {
 		h.integrations, err = NewIntegrationService(cfg.Store, cfg.IntegrationMasterKey, cfg.IntegrationEnvironment, cfg.IntegrationServiceID, cfg.Origin)
 		if err != nil {

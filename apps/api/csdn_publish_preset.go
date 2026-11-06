@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -16,6 +20,7 @@ import (
 const (
 	csdnSummaryLimit  = 256
 	csdnCategoryLimit = 3
+	csdnTagLimit      = 7
 )
 
 type CSDNPublishOptions struct {
@@ -27,6 +32,8 @@ type CSDNPublishOptions struct {
 	Visibility          string   `json:"visibility"`
 	Template            string   `json:"template"`
 	CoverImageURL       string   `json:"cover_image_url"`
+	OriginalURL         string   `json:"original_url,omitempty"`
+	RightsConfirmed     bool     `json:"rights_confirmed,omitempty"`
 }
 
 type csdnPublishPreset struct {
@@ -53,7 +60,9 @@ func normalizeCSDNOptionLabels(values []string, maxLength int) ([]string, error)
 	normalized := make([]string, 0, len(values))
 	for _, value := range values {
 		value = strings.TrimSpace(value)
-		if !utf8.ValidString(value) || strings.ContainsRune(value, 0) || utf8.RuneCountInString(value) > maxLength {
+		if !utf8.ValidString(value) || strings.ContainsAny(value, ",，") ||
+			strings.ContainsFunc(value, func(r rune) bool { return r <= 0x1f || r == 0x7f }) ||
+			utf8.RuneCountInString(value) > maxLength {
 			return nil, ErrInvalid
 		}
 		if value != "" && !slices.Contains(normalized, value) {
@@ -65,8 +74,14 @@ func normalizeCSDNOptionLabels(values []string, maxLength int) ([]string, error)
 
 func normalizeCSDNPublishOptions(options CSDNPublishOptions, coverCandidate string) (CSDNPublishOptions, error) {
 	options.Summary = strings.TrimSpace(options.Summary)
+	options.OriginalURL = strings.TrimSpace(options.OriginalURL)
+	if (options.ArticleType == "original" && (options.OriginalURL != "" || options.RightsConfirmed)) ||
+		(options.RightsConfirmed && options.OriginalURL == "") ||
+		(options.OriginalURL != "" && !validCSDNOriginalURL(options.OriginalURL)) {
+		return CSDNPublishOptions{}, ErrInvalid
+	}
 	if !utf8.ValidString(options.Summary) || strings.ContainsRune(options.Summary, 0) ||
-		utf8.RuneCountInString(options.Summary) > csdnSummaryLimit ||
+		len(utf16.Encode([]rune(options.Summary))) > csdnSummaryLimit ||
 		(options.CoverImageURL != "" && options.CoverImageURL != coverCandidate) ||
 		!slices.Contains([]string{"original", "repost", "translated"}, options.ArticleType) ||
 		!slices.Contains([]string{"none", "ai_assisted", "online_recreation", "personal_opinion"}, options.CreationDeclaration) ||
@@ -76,8 +91,8 @@ func normalizeCSDNPublishOptions(options CSDNPublishOptions, coverCandidate stri
 	}
 	var err error
 	options.Tags, err = normalizeCSDNOptionLabels(options.Tags, 64)
-	if err != nil {
-		return CSDNPublishOptions{}, err
+	if err != nil || len(options.Tags) > csdnTagLimit {
+		return CSDNPublishOptions{}, ErrInvalid
 	}
 	options.Categories, err = normalizeCSDNOptionLabels(options.Categories, 1000)
 	if err != nil || len(options.Categories) > csdnCategoryLimit {
@@ -86,16 +101,34 @@ func normalizeCSDNPublishOptions(options CSDNPublishOptions, coverCandidate stri
 	return options, nil
 }
 
+func validCSDNOriginalURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil || len(value) > 2048 || u.Scheme != "https" || u.Host != u.Hostname() ||
+		u.User != nil || u.String() != value || strings.ContainsAny(value, "\\#") ||
+		strings.ContainsFunc(value, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return publicImageHost.MatchString(host) && net.ParseIP(host) == nil &&
+		!strings.HasSuffix(host, ".local") && !strings.HasSuffix(host, ".localhost") &&
+		!strings.ContainsFunc(u.Path, unicode.IsControl)
+}
+
 func csdnOptionsFromSnapshot(options CSDNPublishOptions, snapshot IntegrationSnapshot) CSDNPublishOptions {
 	// Snapshot tags have already passed the source contract checks.
-	if len(snapshot.Tags) > 0 {
-		options.Tags, _ = normalizeCSDNOptionLabels(snapshot.Tags, 64)
+	if tags, err := normalizeCSDNOptionLabels(snapshot.Tags, 64); err == nil && len(tags) > 0 {
+		options.Tags = tags[:min(len(tags), csdnTagLimit)]
 	}
-	summary := []rune(strings.TrimSpace(snapshot.Summary))
-	if len(summary) > csdnSummaryLimit {
-		summary = summary[:csdnSummaryLimit]
+	summary := strings.TrimSpace(snapshot.Summary)
+	units := 0
+	for index, letter := range summary {
+		units += utf16.RuneLen(letter)
+		if units > csdnSummaryLimit {
+			summary = summary[:index]
+			break
+		}
 	}
-	options.Summary = string(summary)
+	options.Summary = summary
 	return options
 }
 
@@ -168,7 +201,7 @@ func (s *Store) validateCSDNDraftCategories(ctx context.Context, db csdnPresetQu
 
 func (s *Store) saveCSDNPublishPreset(ctx context.Context, revision int64, options CSDNPublishOptions) (csdnPublishPreset, error) {
 	options, err := normalizeCSDNPublishOptions(options, "")
-	if err != nil || options.Summary != "" {
+	if err != nil || options.Summary != "" || options.OriginalURL != "" || options.RightsConfirmed {
 		return csdnPublishPreset{}, ErrInvalid
 	}
 	const accountID = "csdn-main"

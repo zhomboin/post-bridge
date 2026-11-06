@@ -379,6 +379,10 @@ func (h *handler) commitIntegrationDistribution(ctx context.Context, client Inte
 			return err
 		}
 		out = IntegrationDistribution{ID: randomToken(), ClientID: client.ID, SourceID: client.SourceID, ArticleID: in.ArticleID, RequestID: in.RequestID, PreparationID: p.ID, SourceVersion: p.SourceVersion, StateSeq: p.StateSeq, ContentFingerprint: in.ContentFingerprint, ConfirmationFingerprint: in.ConfirmationFingerprint, GrantVersion: current.GrantVersion, Targets: p.Targets, JobIDs: []string{}, CreatedAt: now}
+		var accountUsername string
+		if e = tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&accountUsername); e != nil {
+			return e
+		}
 		for i, draft := range p.Drafts {
 			job := newRecord(CreateInput{RequestID: fmt.Sprintf("integration:%s:%d", out.ID, i), Platform: draft.Platform, Kind: draft.Operation, Title: draft.Title, Markdown: draft.Markdown}, now)
 			sourceImages, imageErr := approvedImageMarkdown(p.Snapshot.Title, p.Snapshot.Body, nil)
@@ -390,6 +394,7 @@ func (h *handler) commitIntegrationDistribution(ctx context.Context, client Inte
 				return imageErr
 			}
 			job.IntegrationDistributionID = out.ID
+			job.AccountUsername = accountUsername
 			data, e := json.Marshal(job)
 			if e != nil {
 				return e

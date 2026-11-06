@@ -3,6 +3,7 @@ import { safeRequestURL } from './config.js';
 import { approvedImages, copiedImageOrigin, copiedImageURL, forwardWithoutRedirect, frozenCopies, imagePreviewPath, replaceDestinations, richMarkdown, waitForImagePreviews } from './csdn-images.js';
 import { forwardPreviewImage } from './csdn-preview.js';
 import { verifyImageSourceDNS } from './csdn-image-dns.js';
+import { runCSDNPublish } from './csdn-publish.js';
 import { nativeReadRequest } from './native-read.js';
 import type { Hooks, Job, JobResult, Observation, Progress } from './types.js';
 
@@ -55,6 +56,13 @@ export class CSDNAdapter {
     return login ? 'needs_login' : 'account_mismatch';
   }
   async run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult> {
+    if (job.kind === 'publish') return runCSDNPublish(this.context, job, hooks, signal, {
+      username: this.identity.username, timeout: this.timeout, fixtureOrigin: this.fixture ? this.site.origin : undefined,
+      account: page => this.account(page, signal), editorURL: id => this.editorURL(id), allowed: url => this.allowed(url),
+    });
+    if (job.kind === 'save_draft' && job.account_username && job.account_username !== this.identity.username) {
+      return { status: job.external_started ? 'reconciling' : 'failed', error_code: 'account_mismatch', error_message: '平台账号与任务不一致', retryable: false };
+    }
     const images = job.kind === 'check_account' ? [] : approvedImages(job.title, job.markdown, job.image_urls ?? []);
     if (!images) return { status: 'failed', error_code: 'adapter_mismatch', error_message: '任务内容不符合当前草稿范围', retryable: false };
     const rich = images.length > 0;

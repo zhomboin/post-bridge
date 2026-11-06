@@ -68,13 +68,27 @@ export interface ArticleBody {
   platform_status: string;
   reason: string;
 }
+export interface PublishOptions {
+  tags: string[];
+  summary: string;
+  categories: string[];
+  article_type: 'original' | 'repost' | 'translated';
+  creation_declaration: 'none' | 'ai_assisted' | 'online_recreation' | 'personal_opinion';
+  visibility: 'public' | 'private' | 'fans' | 'vip';
+  template: 'default' | 'simple' | 'moyan';
+  cover_image_url: string;
+  original_url?: string;
+  rights_confirmed?: boolean;
+}
 export interface Job {
   id: string;
-  kind: 'save_draft' | 'check_account' | 'sync_articles' | 'read_article';
+  kind: 'save_draft' | 'publish' | 'check_account' | 'sync_articles' | 'read_article';
   title: string;
   markdown: string;
   image_urls?: string[];
   platform_markdown?: string;
+  publish_options?: PublishOptions;
+  published_html_sha256?: string;
   article_id?: string;
   account_username?: string;
   run_mode: 'execute' | 'reconcile';
@@ -90,10 +104,11 @@ export interface Observation {
   status: string;
   remote_id?: string;
 }
-export interface Progress { stage: string; external_started?: boolean; remote_id?: string; message?: string; observation?: Observation; platform_markdown?: string }
+export interface Progress { stage: string; external_started?: boolean; remote_id?: string; message?: string; observation?: Observation; platform_markdown?: string; published_html_sha256?: string }
 export interface JobResult {
   status: 'succeeded' | 'failed' | 'waiting_user' | 'reconciling' | 'cancelled';
   remote_id?: string;
+  publish_accepted?: boolean;
   error_code?: string;
   error_message?: string;
   retryable?: boolean;

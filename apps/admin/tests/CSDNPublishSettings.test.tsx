@@ -21,7 +21,7 @@ const response = (value: unknown) => new Response(JSON.stringify(value));
 
 afterEach(() => vi.unstubAllGlobals());
 
-function openPage(path: string, fixture: typeof preparation & { preview_image_urls?: string[] } = preparation) {
+function openPage(path: string, fixture: typeof preparation & { preview_image_urls?: string[]; snapshot: typeof preparation.snapshot & { original_url?: string } } = preparation) {
   window.history.replaceState({}, '', path);
   const writes: { url: string; body: Record<string, unknown> }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (raw: string, init?: RequestInit) => {
@@ -100,4 +100,48 @@ it('选满三个专栏后允许移除再添加', async () => {
   expect(categories.disabled).toBe(false);
   fireEvent.change(categories, { target: { value: '前端' } });
   expect(categories.disabled).toBe(true);
+});
+
+it('转载与翻译的链接及授权只保存在单篇，修改链接会清空授权', async () => {
+  const writes = openPage('/integration-preparations/prep-one', {
+    ...preparation, snapshot: { ...preparation.snapshot, original_url: 'https://cms.example.test/source' },
+  });
+  const articleType = await screen.findByLabelText('文章类型');
+  fireEvent.change(articleType, { target: { value: 'repost' } });
+  const source = screen.getByLabelText<HTMLInputElement>('原文链接');
+  expect(source.value).toBe('');
+  const permission = screen.getByRole<HTMLInputElement>('checkbox', { name: '我已确认有权转载或翻译此文' });
+  expect(permission.checked).toBe(false);
+  fireEvent.change(source, { target: { value: 'https://author.example.test/note' } });
+  fireEvent.click(permission);
+  expect(permission.checked).toBe(true);
+  fireEvent.change(source, { target: { value: 'https://author.example.test/final-note' } });
+  expect(permission.checked).toBe(false);
+  fireEvent.click(permission);
+  fireEvent.click(screen.getByRole('button', { name: '保存新修订' }));
+  await waitFor(() => expect(writes).toHaveLength(1));
+  expect(writes[0]).toMatchObject({
+    url: draftPath, body: { drafts: [{ publish_options: {
+      article_type: 'repost', original_url: 'https://author.example.test/final-note', rights_confirmed: true,
+    } }] },
+  });
+  fireEvent.change(articleType, { target: { value: 'original' } });
+  expect(screen.queryByLabelText('原文链接')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '保存新修订' }));
+  await waitFor(() => expect(writes).toHaveLength(2));
+  const updated = writes[1].body.drafts as { publish_options: Record<string, unknown> }[];
+  expect(updated[0].publish_options).not.toHaveProperty('original_url');
+  expect(updated[0].publish_options).not.toHaveProperty('rights_confirmed');
+});
+
+it('账号预设只保存文章类型', async () => {
+  const writes = openPage('/account?tab=settings');
+  fireEvent.change(await screen.findByLabelText('文章类型'), { target: { value: 'translated' } });
+  expect(screen.queryByLabelText('原文链接')).toBeNull();
+  expect(screen.queryByRole('checkbox', { name: '我已确认有权转载或翻译此文' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '保存发布预设' }));
+  await waitFor(() => expect(writes).toHaveLength(1));
+  expect(writes[0].body.options).toMatchObject({ article_type: 'translated' });
+  expect(writes[0].body.options).not.toHaveProperty('original_url');
+  expect(writes[0].body.options).not.toHaveProperty('rights_confirmed');
 });

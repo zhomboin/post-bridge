@@ -3266,6 +3266,7 @@
         "properties": {
           "tags": {
             "type": "array",
+            "maxItems": 7,
             "items": {
               "type": "string",
               "maxLength": 64
@@ -3318,6 +3319,14 @@
           },
           "cover_image_url": {
             "type": "string"
+          },
+          "original_url": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "rights_confirmed": {
+            "type": "boolean"
           }
         },
         "required": [

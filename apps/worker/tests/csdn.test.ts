@@ -252,6 +252,12 @@ describe('真实浏览器与本地模拟CSDN页面', () => {
     expect(result.status).toBe(state === 'login' ? 'waiting_user' : 'failed');
     expect(editorVisits).toBe(0); expect(writes).toBe(0);
   });
+  it('有绑定账号的草稿任务拒绝其他执行账号', async () => {
+    await reset();
+    const result = await adapter().run({ ...job, account_username: 'another-account' }, hooks, new AbortController().signal);
+    expect(result).toMatchObject({ status: 'failed', error_code: 'account_mismatch' });
+    expect(editorVisits).toBe(0); expect(writes).toBe(0);
+  });
   it('checkpoint失败时没有访问新建页面', async () => {
     await reset();
     await expect(adapter().run(job, { progress: async value => { if (value.external_started) throw new Error('checkpoint'); } }, new AbortController().signal)).rejects.toThrow();

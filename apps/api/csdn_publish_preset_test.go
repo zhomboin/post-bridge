@@ -48,6 +48,9 @@ func TestNormalizeCSDNPublishOptions(t *testing.T) {
 		"unknown template":    func(o *CSDNPublishOptions) { o.Template = "unsupported" },
 		"arbitrary cover":     func(o *CSDNPublishOptions) { o.CoverImageURL += "?changed" },
 		"invalid tag":         func(o *CSDNPublishOptions) { o.Tags = []string{"tag\x00"} },
+		"tag delimiter":       func(o *CSDNPublishOptions) { o.Tags = []string{"甲,乙"} },
+		"category delimiter":  func(o *CSDNPublishOptions) { o.Categories = []string{"甲，乙"} },
+		"tag control":         func(o *CSDNPublishOptions) { o.Tags = []string{"甲\n乙"} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			invalid := options
@@ -94,5 +97,26 @@ func TestCSDNPublishPresetHTTP(t *testing.T) {
 	options, err := h.store.csdnDraftPublishOptions(ctx, h.store.pool, "csdn-main", snapshot)
 	if err != nil || !reflect.DeepEqual(options.Tags, snapshot.Tags) || !reflect.DeepEqual(options.Categories, []string{"我的专栏"}) {
 		t.Fatalf("bad draft defaults: %#v %v", options, err)
+	}
+}
+
+func TestCSDNArticleRightsAreSpecificToOriginalURL(t *testing.T) {
+	options := defaultCSDNPublishOptions()
+	options.ArticleType = "repost"
+	options.OriginalURL = "https://source.example.test/article?id=123"
+	options.RightsConfirmed = true
+	if got, err := normalizeCSDNPublishOptions(options, ""); err != nil || !reflect.DeepEqual(got, options) {
+		t.Fatalf("valid rights and URL rejected: %v", err)
+	}
+	for _, invalid := range []string{"http://source.example.test/article", "https://127.0.0.1/private", "https://secret@source.example.test/article", ""} {
+		changed := options
+		changed.OriginalURL = invalid
+		if _, err := normalizeCSDNPublishOptions(changed, ""); !errors.Is(err, ErrInvalid) {
+			t.Fatal("invalid original source accepted")
+		}
+	}
+	options.ArticleType = "original"
+	if _, err := normalizeCSDNPublishOptions(options, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatal("original work accepted repost authorization")
 	}
 }

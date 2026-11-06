@@ -7,7 +7,7 @@ import './CSDNPublishSettings.css';
 const path = '/api/account/csdn-publish-preset';
 const summaryLimit = 256;
 const categoryLimit = 3;
-const optionGroups = [
+export const csdnPublishOptionGroups = [
   ['article_type', '文章类型', [['original', '原创'], ['repost', '转载'], ['translated', '翻译']]],
   ['visibility', '可见范围', [['public', '全部可见'], ['private', '仅我可见'], ['fans', '粉丝可见'], ['vip', 'VIP 可见']]],
   ['creation_declaration', '创作声明', [
@@ -42,22 +42,43 @@ function cleanTags(tags: string[]) {
   return [...new Set(tags.map(tag => tag.trim()).filter(Boolean))];
 }
 
-export function cleanCSDNPublishOptions(value: CSDNPublishOptions) {
-  return { ...value, summary: value.summary.trim(), tags: cleanTags(value.tags) };
+export function hasCSDNOriginalURL(value?: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' && !!url.hostname && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+export function cleanCSDNPublishOptions(value: CSDNPublishOptions, draft = false) {
+  const { original_url, rights_confirmed, ...base } = value;
+  const options = { ...base, summary: base.summary.trim(), tags: cleanTags(base.tags) };
+  if (!draft || options.article_type === 'original') return options;
+  return { ...options, original_url: original_url?.trim() || undefined, rights_confirmed: rights_confirmed || undefined };
 }
 
 export function csdnPublishOptionsError(value: CSDNPublishOptions) {
-  if (Array.from(value.summary.trim()).length > summaryLimit) return '摘要最多 256 个字符。';
+  if (value.summary.trim().length > summaryLimit) return '摘要最多 256 个字符。';
   const tags = cleanTags(value.tags);
-  if (tags.length > 20) return '最多填写 20 个标签。';
+  if (tags.length > 7) return '最多填写 7 个标签。';
+  if (tags.some(tag => /[,，\u0000-\u001f\u007f]/.test(tag))) return '标签不能包含逗号或控制字符。';
   if (tags.some(tag => Array.from(tag).length > 64)) return '每个标签最多 64 个字符。';
   return '';
 }
 
 export function draftOptionsFromPreset(preset: CSDNPublishOptions, snapshot: Preparation['snapshot']) {
+  let summary = '';
+  for (const letter of snapshot.summary.trim()) {
+    if (summary.length + letter.length > summaryLimit) break;
+    summary += letter;
+  }
+  const tags = cleanTags(snapshot.tags);
+  const validTags = tags.length && tags.every(tag => !/[,，\u0000-\u001f\u007f]/.test(tag));
   return {
-    ...preset, summary: Array.from(snapshot.summary.trim()).slice(0, summaryLimit).join(''),
-    tags: snapshot.tags.length ? cleanTags(snapshot.tags) : preset.tags, cover_image_url: '',
+    ...cleanCSDNPublishOptions(preset), summary,
+    tags: validTags ? tags.slice(0, 7) : preset.tags, cover_image_url: '',
   };
 }
 
@@ -72,7 +93,7 @@ export function CSDNPublishFields({ value, onChange, availableCategories, catego
 }) {
   const summaryId = useId();
   const categories = availableCategories?.filter(name => !value.categories.includes(name));
-  const summaryLength = Array.from(value.summary.trim()).length;
+  const summaryLength = value.summary.trim().length;
   const categoryLimitReached = value.categories.length >= categoryLimit;
   function update(patch: Partial<CSDNPublishOptions>) { onChange({ ...value, ...patch }); }
   return <div className="csdn-publish-fields">
@@ -87,11 +108,26 @@ export function CSDNPublishFields({ value, onChange, availableCategories, catego
       <textarea id={summaryId} rows={3} value={value.summary} aria-describedby={summaryId + '-count'}
         aria-invalid={summaryLength > summaryLimit} onChange={event => update({ summary: event.target.value })} />
     </div>}
-    {optionGroups.map(([name, label, choices]) => <label key={name}>{label}
-      <select value={value[name]} onChange={event => update({ [name]: event.target.value })}>
+    {csdnPublishOptionGroups.map(([name, label, choices]) => <label key={name}>{label}
+      <select value={value[name]} onChange={event => {
+        const next = event.target.value;
+        if (name === 'article_type') {
+          update({ article_type: next, original_url: next === 'original' ? undefined : value.original_url, rights_confirmed: undefined });
+        } else update({ [name]: next });
+      }}>
         {choices.map(([code, text]) => <option key={code} value={code}>{text}</option>)}
       </select>
     </label>)}
+    {draft && value.article_type !== 'original' && <>
+      <label className="csdn-publish-wide">原文链接
+        <input type="url" autoComplete="off" placeholder="https://" value={value.original_url || ''}
+          onChange={event => update({ original_url: event.target.value, rights_confirmed: undefined })} />
+      </label>
+      <label className="checkbox csdn-publish-wide">
+        <input type="checkbox" checked={!!value.rights_confirmed} disabled={!hasCSDNOriginalURL(value.original_url)}
+          onChange={event => update({ rights_confirmed: event.target.checked })} />我已确认有权转载或翻译此文
+      </label>
+    </>}
     <div className="csdn-publish-wide">
       {!readOnly ? <label>添加专栏
         <select value="" disabled={!categories?.length || categoryLimitReached}

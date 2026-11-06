@@ -309,7 +309,7 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 			if r.Status == "running" || r.LeaseToken != "" && r.LeaseExpiresAt.After(now) {
 				active = true
 			}
-			if r.ExternalStarted && r.Outcome == "unknown" && !r.ManualResolved {
+			if r.ExternalStarted && r.unresolvedResult() && !r.ManualResolved {
 				unknown = r.ID
 			}
 		}
@@ -380,12 +380,12 @@ func (s *Store) mutateLease(ctx context.Context, id, token string, fn func(pgx.T
 		if !leaseValid(r, token, now) {
 			return ErrConflict
 		}
-		if readKind(r.Kind) {
-			var username string
-			if err = tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&username); err != nil {
+		if readKind(r.Kind) || r.Kind == "publish" {
+			matches, err := csdnJobAccountMatches(ctx, tx, r)
+			if err != nil {
 				return err
 			}
-			if r.AccountUsername != username {
+			if !matches {
 				return ErrConflict
 			}
 		}
@@ -413,8 +413,8 @@ func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error
 			return ErrConflict
 		}
 		if in.RemoteID != "" {
-			var exists bool
-			if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id<>$1 AND record->>'remote_id'=$2)", id, in.RemoteID).Scan(&exists); err != nil {
+			exists, err := remoteIDInUse(ctx, tx, r, in.RemoteID)
+			if err != nil {
 				return err
 			}
 			if exists {
@@ -438,9 +438,12 @@ func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error
 			return err
 		}
 		if in.RemoteID != "" {
-			var exists bool
-			if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id<>$1 AND record->>'remote_id'=$2)", id, in.RemoteID).Scan(&exists); err != nil {
+			exists, err := remoteIDInUse(ctx, tx, r, in.RemoteID)
+			if err != nil {
 				return err
+			}
+			if r.Kind == "publish" && (exists || in.RemoteID != r.RemoteID) {
+				return ErrConflict
 			}
 			if exists {
 				in.Status = "reconciling"
@@ -683,14 +686,14 @@ func (s *Store) Maintain(ctx context.Context) error {
 
 			return err
 		}
-		if _, err = tx.Exec(ctx, "DELETE FROM process_snapshots WHERE job_id IN (SELECT id FROM jobs WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome'<>'unknown' AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1)", now.Add(-30*24*time.Hour)); err != nil {
+		if _, err = tx.Exec(ctx, "DELETE FROM process_snapshots WHERE job_id IN (SELECT id FROM jobs WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome' NOT IN ('unknown','submitted') AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1)", now.Add(-30*24*time.Hour)); err != nil {
 			return err
 		}
 		if err = s.maintainIntegrations(ctx, tx, now); err != nil {
 			return err
 		}
 		// 仅清理不可重试终结记录的正文，未决和仍可重试的快照始终保留。
-		_, err = tx.Exec(ctx, "UPDATE jobs SET record=jsonb_set(record,'{markdown}','\"\"'::jsonb) WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome'<>'unknown' AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1", now.Add(-30*24*time.Hour))
+		_, err = tx.Exec(ctx, "UPDATE jobs SET record=jsonb_set(record,'{markdown}','\"\"'::jsonb) WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome' NOT IN ('unknown','submitted') AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1", now.Add(-30*24*time.Hour))
 		return err
 	})
 }

@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-PostBridge 已提供注册审批、签名身份、目标能力查询、平台稿预览确认、父分发记录和来源事件处理。当前执行操作为 CSDN Markdown 保存草稿，目标的 images 字段表示是否支持转存已批准的正文图片。公开发布、MDX、其他平台未开放；平台文章的自动更新、自动撤回及已有外站副本的显式再次新建仍属后续能力。保存平台草稿不代表文章已公开，来源撤回也不代表自动删除或撤回平台文章。
+PostBridge 已提供注册审批、签名身份、目标能力查询、平台稿预览确认、父分发记录和来源事件处理。当前执行操作为 CSDN Markdown 保存草稿，目标的 images 字段表示是否支持转存已批准的正文图片。公开发布、MDX、其他平台未开放；平台文章的自动更新、自动撤回及已有外站副本的显式再次新建仍属后续能力。保存平台草稿不代表文章已公开，来源撤回也不代表自动删除或撤回平台文章。管理员在 PostBridge 确认的正式发布是独立操作，签名调用方没有正式发布入口。
 
 本文对应 [OpenAPI 契约](../contracts/cms.openapi.yaml)。接口与模型以[注册实现](../apps/api/integration_registry.go)、[内容路由](../apps/api/integration_content_http.go)、[内容模型](../apps/api/integration_content.go)和[本地执行授权守卫](../apps/api/integration_guard.go)为依据。PostBridge 侧实现、调用方接入、真实平台端到端和生产验收分别记录；真实调用方与生产接入仍待验证。
 

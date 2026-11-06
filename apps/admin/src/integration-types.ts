@@ -8,6 +8,7 @@ export type IssuedSecret = { client_id?: string; key_id?: string; client_secret?
 export type CSDNPublishOptions = {
   tags: string[]; summary: string; categories: string[]; article_type: string; creation_declaration: string;
   visibility: string; template: string; cover_image_url: string;
+  original_url?: string; rights_confirmed?: boolean;
 };
 export type PlatformDraft = { id: string; platform: string; account_id: string; operation: string; title: string; markdown: string; revision: number; publish_options?: CSDNPublishOptions };
 export type Preparation = {

@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type AnchorHTMLAttributes } from 'react';
 import { RefreshCw } from 'lucide-react';
 
+import type { CSDNPublishOptions } from './integration-types';
+
 export type Session = { user: { username: string }; csrf_token: string };
 export type Job = {
   id: string; request_id: string; platform: string; account_id: string; kind: string;
@@ -9,6 +11,7 @@ export type Job = {
   external_started: boolean; integration_distribution_id?: string; article_id?: string; remote_id?: string; remote_url?: string; reconcile_candidate_id?: string;
   cancel_requested: boolean; manual_resolved?: boolean; error_code?: string; error_message?: string;
   reconcile_count?: number; auto_reconcile_started?: boolean; absence_checks?: number; available_at?: string;
+  account_username?: string; publish_from_job_id?: string; publish_options?: CSDNPublishOptions;
   run_mode?: string; created_at: string; updated_at: string; started_at?: string; finished_at?: string;
 };
 export type LogEntry = { id: string; job_id?: string; attempt?: number; level: string; stage?: string; message: string; created_at: string };
@@ -35,8 +38,13 @@ export const stageLabels: Record<string, string> = {
   syncing_articles: '读取文章列表', reading_article: '读取文章正文',
   draft_acquired: '已取得草稿', filling: '填写正文', saving: '保存草稿', verifying: '核对结果', finished: '处理结束',
 };
-export function isSourcePaused(job: Pick<Job, 'status' | 'error_code' | 'integration_distribution_id'>) {
-  return !!job.integration_distribution_id && job.status === 'waiting_user' && ['source_guard_failed', 'source_changed'].includes(job.error_code || '');
+export function stageLabel(stage: string, kind?: string) {
+  if (kind === 'publish' && stage === 'saving') return '提交发布';
+  if (kind === 'publish' && stage === 'verifying') return '核对发布结果';
+  return stageLabels[stage];
+}
+export function isSourcePaused(job: Pick<Job, 'status' | 'error_code' | 'integration_distribution_id'> & { kind?: string }) {
+  return (job.kind === 'publish' || !!job.integration_distribution_id) && job.status === 'waiting_user' && ['source_guard_failed', 'source_changed'].includes(job.error_code || '');
 }
 export function Status({ value, cancelling = false, label }: { value: string; cancelling?: boolean; label?: string }) {
   return <span aria-live="polite" aria-atomic="true" className={'status ' + (statusLabels[value] ? value : 'unknown')}>{cancelling ? '取消中' : label || statusLabels[value] || '未知状态'}</span>;
@@ -158,6 +166,13 @@ export function useAction() {
   return { pending, error, setError, run };
 }
 export function jobOutcome(job: Job) {
+  if (job.kind === 'publish') {
+    if (job.outcome === 'published') return '已发布到 CSDN';
+    if (job.outcome === 'submitted') return 'CSDN 已受理，等待发布结果';
+    if (job.run_mode === 'reconcile' && ['queued', 'reconciling', 'running'].includes(job.status)) return '后台正在核对发布结果';
+    if (job.outcome === 'unknown') return '发布结果待核对';
+    return ({ queued: '等待提交发布', running: '正在提交发布', cancelled: '发布任务已取消' } as Record<string, string>)[job.status] || '发布尚未提交';
+  }
   if (job.kind === 'sync_articles' || job.kind === 'read_article') {
     const name = job.kind === 'sync_articles' ? '文章同步' : '正文读取';
     return name + (({ succeeded: '完成', failed: '失败', cancelled: '已取消', waiting_user: '等待登录', queued: '排队中', running: '中' } as Record<string, string>)[job.status] || '状态待确认');

@@ -51,7 +51,7 @@ test('文档图标支持键盘进入、刷新、浏览器历史以及实际契�
   await page.getByRole('link', { name: '测试向量', exact: true }).click();
   expect((await vectorDownload).suggestedFilename()).toBe('integration-contract.json');
   await page.goBack();
-  await expect(page.getByRole('heading', { name: '草稿任务', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '平台任务', level: 1 })).toBeVisible();
   expect(new URL(page.url()).search).toBe('?page=2');
   expect(errors).toEqual([]);
 });
