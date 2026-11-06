@@ -534,7 +534,11 @@ func (s *Store) Action(ctx context.Context, id, action string, in ActionInput) (
 		if err = save(ctx, tx, r); err != nil {
 			return err
 		}
-		if err = appendLog(ctx, tx, r, "info", map[string]string{"cancel": "管理员请求停止任务", "retry": "管理员请求安全重试", "resume": "管理员恢复等待任务", "reconcile": "管理员请求只读核对", "resolve": "管理员保留平台现有状态并人工结束任务"}[action], now); err != nil {
+		message := map[string]string{"cancel": "管理员请求停止任务", "retry": "管理员请求安全重试", "resume": "管理员恢复等待任务", "reconcile": "管理员请求只读核对", "resolve": "管理员保留草稿并人工结束任务"}[action]
+		if action == "resolve" && r.Kind == "publish" {
+			message = "管理员保留平台现有状态并人工结束任务"
+		}
+		if err = appendLog(ctx, tx, r, "info", message, now); err != nil {
 			return err
 		}
 		result = r.Job
