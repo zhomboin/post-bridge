@@ -63,6 +63,23 @@ jobs:
         run: npx --no-install tsc -p tests/e2e/tsconfig.json
       - name: 构建
         run: npm run build
+      - name: 从 Ubuntu 安装快照构建
+        run: |
+          python3 -B - <<'PY'
+          import subprocess
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          from scripts.ubuntu_deploy import REPO, copy_source
+
+          with TemporaryDirectory(prefix='post-bridge-snapshot-') as temp:
+              release = Path(temp) / 'release'
+              copy_source(REPO, release)
+              subprocess.run(['npm', 'ci', '--no-audit', '--no-fund'], cwd=release, check=True)
+              subprocess.run(['npm', 'run', 'build'], cwd=release, check=True)
+              subprocess.run(['go', 'build', '-o', release / 'post-bridge-api', './cmd/server'],
+                             cwd=release / 'apps/api', check=True)
+          PY
       - name: 后台与真实 API 端到端验证
         run: npm run test:e2e
       - name: 保存合成数据截图

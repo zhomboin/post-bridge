@@ -202,6 +202,18 @@ def copy_source(source, target):
         else:
             shutil.copy2(path, target / item)
 
+    for item in (
+        'docs/external-integration.md',
+        'contracts/cms.openapi.yaml',
+        'tests/fixtures/integration-contract.json',
+    ):
+        relative = Path(item)
+        if any((source / part).is_symlink() for part in (relative, *relative.parents)):
+            raise ValueError('源码快照不可包含符号链接')
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / relative, destination)
+
 
 def activate_release(root, release):
     release = release.resolve(strict=True)
