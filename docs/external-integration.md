@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-PostBridge 已提供注册审批、签名身份、目标能力查询、平台稿预览确认、父分发记录和来源事件处理。当前执行能力只有 CSDN 文字 Markdown 保存草稿；公开发布、图片、MDX、其他平台均未开放；平台文章的自动更新、自动撤回及已有外站副本的显式再次新建仍属后续能力。保存平台草稿不代表文章已公开，来源撤回也不代表自动删除或撤回平台文章。
+PostBridge 已提供注册审批、签名身份、目标能力查询、平台稿预览确认、父分发记录和来源事件处理。当前执行操作为 CSDN Markdown 保存草稿，目标的 images 字段表示是否支持转存已批准的正文图片。公开发布、MDX、其他平台未开放；平台文章的自动更新、自动撤回及已有外站副本的显式再次新建仍属后续能力。保存平台草稿不代表文章已公开，来源撤回也不代表自动删除或撤回平台文章。管理员在 PostBridge 确认的正式发布是独立操作，签名调用方没有正式发布入口。
 
 本文对应 [OpenAPI 契约](../contracts/cms.openapi.yaml)。接口与模型以[注册实现](../apps/api/integration_registry.go)、[内容路由](../apps/api/integration_content_http.go)、[内容模型](../apps/api/integration_content.go)和[本地执行授权守卫](../apps/api/integration_guard.go)为依据。PostBridge 侧实现、调用方接入、真实平台端到端和生产验收分别记录；真实调用方与生产接入仍待验证。
 
@@ -96,7 +96,7 @@ PostBridge 独立部署，任意调用方按本手册的固定 HTTP 接口和固
 | POST /api/integrations/v1/distributions/{id}/cancel | distributions:write | 当前父分发与子任务状态 |
 | POST /api/integrations/v1/source-events | source-events:write | 可选主动通知，received、applied |
 
-scope、accounts、operations 共同生效。targets 只返回当前账号与操作授权允许的能力；调用方应读取返回的 account_id，而不是传入真实平台用户名。当前恰好一个目标，platform 为 csdn、operation 为 save_draft、body_formats 只有 markdown、images 为 false；标题为 5 至 100 个 Unicode 字符，正文非空且最多 200000 个字符。
+scope、accounts、operations 共同生效。targets 只返回当前账号与操作授权允许的能力；调用方应读取返回的 account_id，而不是传入真实平台用户名。当前恰好一个目标，platform 为 csdn、operation 为 save_draft、body_formats 只有 markdown，images 由配置决定；标题为 5 至 100 个 Unicode 字符，正文非空且最多 200000 个字符。
 
 接入未配置时，外部接入接口返回 503、integration_disabled；管理员入口仍先校验管理员会话。管理员应完成服务配置后再签发邀请。时间字段使用 RFC 3339；版本和序列使用正整数，不使用浮点数或字符串代替。
 
@@ -213,3 +213,9 @@ PostBridge 根据本地已保存的数据决定执行：应用仍启用且未到
 调用方至少覆盖签名固定用例、过期与重复 nonce、审批与激活、权限收紧、密钥交接、准备稿修订并发、旧确认拒绝、提交响应丢失、重复与乱序事件、主动取消、授权到期、来源撤回和未知外站结果。PostBridge 本地测试和合成界面检查不能替代真实调用方与真实平台验收。
 
 联调时只使用独立本地私有配置与合成材料；实际地址、账号、凭据和运行目录不进入仓库。联调应分别验证调用方可靠发送、无反向服务的完整提交、人工确认、任务取消、真实平台草稿及生产部署；当前真实跨系统验收仍待完成。
+
+## CSDN 正文图片
+
+目标返回 `images: true` 时，获批来源可在正文中提交普通 Markdown 内联图片。地址使用经批准的专用公开图片域名及 HTTPS 路径，不能包含凭据、查询参数、片段或显式端口。每份稿件最多 20 处图片引用和 10 个不同地址。调用方先逐张确认图片仍为长期公开资源。目标能力由 API 的 `CSDN_IMAGE_HOSTS` 控制，值为逗号分隔的专用公开图片域名。空配置只接受文字稿。
+
+来源快照和内容指纹保留原地址。PostBridge 按经确认的正文将图片交由 CSDN 转存，保存前记录换成副本地址的平台正文。读回与该正文核对，结果未知时沿用原任务只读核对。现有内容签名规则及正式发布授权不受图片能力影响。

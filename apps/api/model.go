@@ -23,49 +23,55 @@ type CreateInput struct {
 	Markdown  string `json:"markdown"`
 }
 type Job struct {
-	IntegrationDistributionID string     `json:"integration_distribution_id,omitempty"`
-	ArticleID                 string     `json:"article_id,omitempty"`
-	AccountUsername           string     `json:"account_username,omitempty"`
-	ID                        string     `json:"id"`
-	RequestID                 string     `json:"request_id"`
-	Platform                  string     `json:"platform"`
-	AccountID                 string     `json:"account_id"`
-	Kind                      string     `json:"kind"`
-	Title                     string     `json:"title"`
-	Markdown                  string     `json:"markdown,omitempty"`
-	Status                    string     `json:"status"`
-	Outcome                   string     `json:"outcome"`
-	Stage                     string     `json:"stage"`
-	Attempts                  int        `json:"attempts"`
-	ReconcileCount            int        `json:"reconcile_count"`
-	AutoReconcileStarted      bool       `json:"auto_reconcile_started"`
-	AbsenceChecks             int        `json:"absence_checks"`
-	LastAbsenceAt             time.Time  `json:"last_absence_at"`
-	RetryCount                int        `json:"retry_count"`
-	MaxRetries                int        `json:"max_retries"`
-	RunMode                   string     `json:"run_mode"`
-	ExternalStarted           bool       `json:"external_started"`
-	RemoteID                  string     `json:"remote_id"`
-	ReconcileCandidateID      string     `json:"reconcile_candidate_id"`
-	ManualResolved            bool       `json:"manual_resolved"`
-	RemoteURL                 string     `json:"remote_url"`
-	CancelRequested           bool       `json:"cancel_requested"`
-	ErrorCode                 string     `json:"error_code"`
-	ErrorMessage              string     `json:"error_message"`
-	RetryAllowed              bool       `json:"retry_allowed"`
-	CreatedAt                 time.Time  `json:"created_at"`
-	UpdatedAt                 time.Time  `json:"updated_at"`
-	StartedAt                 *time.Time `json:"started_at"`
-	FinishedAt                *time.Time `json:"finished_at"`
-	AvailableAt               time.Time  `json:"available_at"`
+	PublishedHTMLSHA256       string              `json:"published_html_sha256,omitempty"`
+	PublishFromJobID          string              `json:"publish_from_job_id,omitempty"`
+	PublishOptions            *CSDNPublishOptions `json:"publish_options,omitempty"`
+	ImageURLs                 []string            `json:"image_urls,omitempty"`
+	PlatformMarkdown          string              `json:"platform_markdown,omitempty"`
+	IntegrationDistributionID string              `json:"integration_distribution_id,omitempty"`
+	ArticleID                 string              `json:"article_id,omitempty"`
+	AccountUsername           string              `json:"account_username,omitempty"`
+	ID                        string              `json:"id"`
+	RequestID                 string              `json:"request_id"`
+	Platform                  string              `json:"platform"`
+	AccountID                 string              `json:"account_id"`
+	Kind                      string              `json:"kind"`
+	Title                     string              `json:"title"`
+	Markdown                  string              `json:"markdown,omitempty"`
+	Status                    string              `json:"status"`
+	Outcome                   string              `json:"outcome"`
+	Stage                     string              `json:"stage"`
+	Attempts                  int                 `json:"attempts"`
+	ReconcileCount            int                 `json:"reconcile_count"`
+	AutoReconcileStarted      bool                `json:"auto_reconcile_started"`
+	AbsenceChecks             int                 `json:"absence_checks"`
+	LastAbsenceAt             time.Time           `json:"last_absence_at"`
+	RetryCount                int                 `json:"retry_count"`
+	MaxRetries                int                 `json:"max_retries"`
+	RunMode                   string              `json:"run_mode"`
+	ExternalStarted           bool                `json:"external_started"`
+	RemoteID                  string              `json:"remote_id"`
+	ReconcileCandidateID      string              `json:"reconcile_candidate_id"`
+	ManualResolved            bool                `json:"manual_resolved"`
+	RemoteURL                 string              `json:"remote_url"`
+	CancelRequested           bool                `json:"cancel_requested"`
+	ErrorCode                 string              `json:"error_code"`
+	ErrorMessage              string              `json:"error_message"`
+	RetryAllowed              bool                `json:"retry_allowed"`
+	CreatedAt                 time.Time           `json:"created_at"`
+	UpdatedAt                 time.Time           `json:"updated_at"`
+	StartedAt                 *time.Time          `json:"started_at"`
+	FinishedAt                *time.Time          `json:"finished_at"`
+	AvailableAt               time.Time           `json:"available_at"`
 }
 type record struct {
 	Job
-	SourceGuardBlocked bool `json:"source_guard_blocked,omitempty"`
-	Ready              bool
-	LeaseToken         string
-	LeaseExpiresAt     time.Time
-	WorkerID           string
+	PublishConfirmation string `json:"publish_confirmation,omitempty"`
+	SourceGuardBlocked  bool   `json:"source_guard_blocked,omitempty"`
+	Ready               bool
+	LeaseToken          string
+	LeaseExpiresAt      time.Time
+	WorkerID            string
 }
 type Observation struct {
 	Phase    string `json:"phase"`
@@ -76,22 +82,25 @@ type Observation struct {
 }
 
 type ProgressInput struct {
-	Observation     *Observation `json:"observation,omitempty"`
-	LeaseToken      string       `json:"lease_token"`
-	Stage           string       `json:"stage"`
-	RemoteID        string       `json:"remote_id"`
-	ExternalStarted bool         `json:"external_started"`
-	Message         string       `json:"message"`
+	PublishedHTMLSHA256 string       `json:"published_html_sha256,omitempty"`
+	PlatformMarkdown    string       `json:"platform_markdown,omitempty"`
+	Observation         *Observation `json:"observation,omitempty"`
+	LeaseToken          string       `json:"lease_token"`
+	Stage               string       `json:"stage"`
+	RemoteID            string       `json:"remote_id"`
+	ExternalStarted     bool         `json:"external_started"`
+	Message             string       `json:"message"`
 }
 type CompleteInput struct {
-	Articles     *ArticleSnapshot `json:"articles,omitempty"`
-	Article      *ArticleBody     `json:"article,omitempty"`
-	LeaseToken   string           `json:"lease_token"`
-	Status       string           `json:"status"`
-	RemoteID     string           `json:"remote_id"`
-	ErrorCode    string           `json:"error_code"`
-	ErrorMessage string           `json:"error_message"`
-	Retryable    bool             `json:"retryable"`
+	PublishAccepted bool             `json:"publish_accepted,omitempty"`
+	Articles        *ArticleSnapshot `json:"articles,omitempty"`
+	Article         *ArticleBody     `json:"article,omitempty"`
+	LeaseToken      string           `json:"lease_token"`
+	Status          string           `json:"status"`
+	RemoteID        string           `json:"remote_id"`
+	ErrorCode       string           `json:"error_code"`
+	ErrorMessage    string           `json:"error_message"`
+	Retryable       bool             `json:"retryable"`
 }
 type ActionInput struct {
 	RemoteID                string `json:"remote_id"`
@@ -108,10 +117,21 @@ func ValidateCreate(in CreateInput) error {
 	if in.ArticleID != "" || !validKey(in.RequestID) || in.Kind != "save_draft" || in.Platform != "csdn" || utf8.RuneCountInString(strings.TrimSpace(in.Title)) < 5 || utf8.RuneCountInString(in.Title) > 100 || strings.TrimSpace(in.Markdown) == "" || utf8.RuneCountInString(in.Markdown) > 200000 || !utf8.ValidString(in.Markdown) {
 		return ErrInvalid
 	}
+	markdown := strings.ReplaceAll(strings.ReplaceAll(in.Markdown, "\r\n", "\n"), "\r", "\n")
+	unsupported := false
+	walkMarkdownLines(strings.Split(markdown, "\n"), func(_ int, line string) {
+		unsupported = unsupported || unsupportedContent.MatchString(line)
+	})
+	if unsupported {
+		return ErrInvalid
+	}
+	return nil
+}
+
+func walkMarkdownLines(lines []string, visit func(int, string)) {
 	fence := byte(0)
 	length := 0
-	markdown := strings.ReplaceAll(strings.ReplaceAll(in.Markdown, "\r\n", "\n"), "\r", "\n")
-	for _, line := range strings.Split(markdown, "\n") {
+	for i, line := range lines {
 		// 围栏至多缩进三个字面空格，不能把缩进代码或其他空白当成围栏。
 		spaces := 0
 		for spaces < len(line) && line[spaces] == ' ' {
@@ -142,14 +162,12 @@ func ValidateCreate(in CreateInput) error {
 		if fence != 0 {
 			continue
 		}
-		if unsupportedContent.MatchString(line) {
-			return ErrInvalid
-		}
+		visit(i, line)
 	}
-	return nil
 }
 
 var unsupportedContent = regexp.MustCompile(`!\[|<\s*/?\s*[A-Za-z]|\{|\}|^\s*(import|export)\s`)
+var publishHTMLSHA256 = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var numericID = regexp.MustCompile(`^[0-9]{1,32}$`)
 var requestKey = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
@@ -168,6 +186,12 @@ func (r *record) bind(id string) error {
 	if id == "" {
 		return nil
 	}
+	if r.Kind == "publish" {
+		if r.RemoteID != id || !numericID.MatchString(id) {
+			return ErrConflict
+		}
+		return nil
+	}
 	if !numericID.MatchString(id) || !r.ExternalStarted || (r.RemoteID != "" && r.RemoteID != id) {
 		return ErrConflict
 	}
@@ -184,6 +208,12 @@ var stages = map[string]int{"queued": 0, "checking_login": 1, "opening_editor": 
 func (r *record) progress(in ProgressInput, now time.Time) error {
 	rank, ok := stages[in.Stage]
 	if !ok || in.Stage == "queued" || in.Stage == "finished" || r.Status != "running" {
+		return ErrConflict
+	}
+	if r.Kind == "publish" && r.RunMode != "reconcile" {
+		return r.publishProgress(in, now, rank)
+	}
+	if in.PublishedHTMLSHA256 != "" {
 		return ErrConflict
 	}
 	if readKind(r.Kind) {
@@ -215,29 +245,47 @@ func (r *record) progress(in ProgressInput, now time.Time) error {
 			return err
 		}
 	}
+	if in.PlatformMarkdown != "" {
+		if r.RunMode != "execute" || in.Stage != "saving" || len(r.ImageURLs) == 0 ||
+			(r.PlatformMarkdown != "" && r.PlatformMarkdown != in.PlatformMarkdown) ||
+			!convertedImageMarkdown(r.Markdown, in.PlatformMarkdown, r.ImageURLs) {
+			return ErrConflict
+		}
+		r.PlatformMarkdown = in.PlatformMarkdown
+	}
+	if in.Stage == "saving" && len(r.ImageURLs) > 0 && r.PlatformMarkdown == "" {
+		return ErrConflict
+	}
 	r.Stage = in.Stage
 	r.UpdatedAt = now
 	return nil
 }
 
 var safeErrors = map[string]string{
-	"article_read_unavailable": "平台文章读取暂不可用",
-	"article_not_found":        "文章已不存在或无法读取",
-	"draft_absent":             "平台完整查询未找到同名草稿",
-	"draft_conflict":           "草稿存在重复或不完整内容，自动恢复已停止",
-	"reconcile_unavailable":    "平台草稿查询暂不可用",
-	"reconcile_exhausted":      "自动核对次数已用尽，平台结果仍未确认",
-	"network_error":            "平台连接暂时失败",
-	"timeout":                  "平台操作超时",
-	"needs_login":              "需要人工登录",
-	"account_mismatch":         "平台账号与配置不符",
-	"adapter_mismatch":         "平台页面结构已变化",
-	"draft_mismatch":           "草稿内容与任务快照不匹配",
-	"draft_not_found":          "未找到匹配草稿",
-	"browser_busy":             "账号浏览器仍在使用",
-	"lease_expired":            "执行器领取已失效",
-	"cancelled":                "执行器已停止",
-	"shutdown":                 "执行器已停止",
+	"article_read_unavailable":   "平台文章读取暂不可用",
+	"article_not_found":          "文章已不存在或无法读取",
+	"draft_absent":               "平台完整查询未找到同名草稿",
+	"draft_conflict":             "草稿存在重复或不完整内容，自动恢复已停止",
+	"reconcile_unavailable":      "平台草稿查询暂不可用",
+	"reconcile_exhausted":        "自动核对次数已用尽，平台结果仍未确认",
+	"network_error":              "平台连接暂时失败",
+	"timeout":                    "平台操作超时",
+	"needs_login":                "需要人工登录",
+	"account_mismatch":           "平台账号与配置不符",
+	"adapter_mismatch":           "平台页面结构已变化",
+	"image_source_unavailable":   "公开图片域名未能通过网络检查",
+	"image_transfer_unconfirmed": "CSDN 图片转存结果尚未确认",
+	"publish_draft_mismatch":     "CSDN 草稿或账号与确认记录不符",
+	"publish_options_mismatch":   "CSDN 原生发布设置与确认记录不符",
+	"publish_unavailable":        "暂时无法完成 CSDN 发布表单",
+	"publish_pending":            "CSDN 发布尚待核对",
+	"publish_unconfirmed":        "CSDN 发布结果尚未确认",
+	"draft_mismatch":             "草稿内容与任务快照不匹配",
+	"draft_not_found":            "未找到匹配草稿",
+	"browser_busy":               "账号浏览器仍在使用",
+	"lease_expired":              "执行器领取已失效",
+	"cancelled":                  "执行器已停止",
+	"shutdown":                   "执行器已停止",
 }
 
 func safeError(code string) (string, string) {
@@ -261,7 +309,14 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 	if readKind(r.Kind) && (in.Status == "reconciling" || in.RemoteID != "" || r.ExternalStarted || r.RunMode != "execute") {
 		return ErrInvalid
 	}
-	unwritten := !r.ExternalStarted && r.RunMode != "reconcile" && r.Outcome != "unknown" && r.RemoteID == "" && r.ReconcileCandidateID == ""
+	if in.PublishAccepted && (r.Kind != "publish" || !r.ExternalStarted || !publishHTMLSHA256.MatchString(r.PublishedHTMLSHA256) || in.Status != "reconciling" || in.RemoteID != r.RemoteID || !numericID.MatchString(r.RemoteID)) {
+		return ErrConflict
+	}
+	if r.Kind == "publish" && in.RemoteID != "" && in.RemoteID != r.RemoteID {
+		return ErrConflict
+	}
+	unwritten := !r.ExternalStarted && r.RunMode != "reconcile" && r.Outcome != "unknown" &&
+		(r.RemoteID == "" || r.Kind == "publish") && r.ReconcileCandidateID == ""
 	if r.CancelRequested && (readKind(r.Kind) || unwritten) && in.Status != "succeeded" {
 		in.Status = "cancelled"
 		in.ErrorCode = "cancelled"
@@ -271,7 +326,7 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 		if readKind(r.Kind) && r.Stage != "verifying" {
 			return ErrConflict
 		}
-		if r.CancelRequested && r.RunMode != "reconcile" {
+		if r.CancelRequested && r.RunMode != "reconcile" && r.Kind != "publish" {
 			return ErrConflict
 		}
 		if r.Kind == "save_draft" {
@@ -283,13 +338,22 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 			if err := r.bind(in.RemoteID); err != nil {
 				return err
 			}
-			if !r.ExternalStarted || r.RemoteID == "" || r.Stage != "verifying" {
+			if !r.ExternalStarted || r.RemoteID == "" || r.Stage != "verifying" || (len(r.ImageURLs) > 0 && r.PlatformMarkdown == "") {
 				return ErrConflict
 			}
 			r.Outcome = "draft_saved"
 		}
+		if r.Kind == "publish" {
+			if !r.ExternalStarted || !publishHTMLSHA256.MatchString(r.PublishedHTMLSHA256) || r.Stage != "verifying" || in.RemoteID != r.RemoteID || !numericID.MatchString(r.RemoteID) {
+				return ErrConflict
+			}
+			r.Outcome = "published"
+			if csdnUsername.MatchString(r.AccountUsername) {
+				r.RemoteURL = "https://blog.csdn.net/" + r.AccountUsername + "/article/details/" + r.RemoteID
+			}
+		}
 		r.Status = "succeeded"
-		if r.CancelRequested {
+		if r.CancelRequested && r.Kind != "publish" {
 			r.Status = "cancelled"
 		}
 		r.ErrorCode, r.ErrorMessage = "", ""
@@ -298,7 +362,7 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 		r.Ready = false
 	} else {
 		if in.RemoteID != "" {
-			if r.RunMode == "reconcile" {
+			if r.RunMode == "reconcile" && r.Kind != "publish" {
 				return ErrConflict
 			}
 			if err := r.bind(in.RemoteID); err != nil {
@@ -309,7 +373,12 @@ func (r *record) complete(in CompleteInput, now time.Time) error {
 		r.Ready = false
 		if r.ExternalStarted {
 			wasReconcile := r.RunMode == "reconcile"
-			r.Status, r.Outcome, r.RunMode = "reconciling", "unknown", "reconcile"
+			r.Status, r.RunMode = "reconciling", "reconcile"
+			if in.PublishAccepted {
+				r.Outcome = "submitted"
+			} else if r.Outcome != "submitted" {
+				r.Outcome = "unknown"
+			}
 			r.AutoReconcileStarted = true
 			if in.Status == "waiting_user" {
 				r.Status = "waiting_user"
@@ -361,11 +430,14 @@ func (r *record) action(action string, in ActionInput, now time.Time, proof *wor
 	active := r.LeaseToken != "" && r.LeaseExpiresAt.After(now)
 	switch action {
 	case "cancel":
+		if r.Kind == "publish" && r.ExternalStarted {
+			return ErrConflict
+		}
 		if r.Status == "running" {
 			r.CancelRequested = true
 			break
 		}
-		if (r.Status != "queued" && !(readKind(r.Kind) && r.Status == "waiting_user")) || r.ExternalStarted {
+		if (r.Status != "queued" && !((readKind(r.Kind) || r.Kind == "publish") && r.Status == "waiting_user")) || r.ExternalStarted {
 			return ErrConflict
 		}
 		r.Status = "cancelled"
@@ -400,7 +472,7 @@ func (r *record) action(action string, in ActionInput, now time.Time, proof *wor
 			r.CancelRequested = false
 		}
 	case "reconcile":
-		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user" || (r.Status == "failed" && r.Outcome == "unknown")) {
+		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user" || (r.Status == "failed" && r.unresolvedResult())) {
 			return ErrConflict
 		}
 		if in.RemoteID == "" && r.RemoteID == "" {
@@ -420,16 +492,21 @@ func (r *record) action(action string, in ActionInput, now time.Time, proof *wor
 		r.AutoReconcileStarted = true
 		r.AvailableAt = now
 	case "resolve":
-		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user" || (r.Status == "failed" && r.Outcome == "unknown")) || !in.ConfirmedBrowserStopped || utf8.RuneCountInString(strings.TrimSpace(in.Note)) < 1 || utf8.RuneCountInString(in.Note) > 500 || proof == nil || now.Sub(proof.SeenAt) > 45*time.Second || proof.SeenAt.After(now) || !proof.BrowserIdle || !proof.ProfileAvailable {
+		if !r.ExternalStarted || r.ManualResolved || active || !(r.Status == "reconciling" || r.Status == "waiting_user" || (r.Status == "failed" && r.unresolvedResult())) || !in.ConfirmedBrowserStopped || utf8.RuneCountInString(strings.TrimSpace(in.Note)) < 1 || utf8.RuneCountInString(in.Note) > 500 || proof == nil || now.Sub(proof.SeenAt) > 45*time.Second || proof.SeenAt.After(now) || !proof.BrowserIdle || !proof.ProfileAvailable {
 			return ErrConflict
 		}
 		r.ManualResolved = true
 		r.Status = "failed"
-		r.Outcome = "unknown"
+		if r.Outcome != "submitted" {
+			r.Outcome = "unknown"
+		}
 		r.Ready = false
 		r.FinishedAt = &now
 		r.ErrorCode = "manual_resolved"
 		r.ErrorMessage = "管理员确认保留已有或可能存在的草稿，人工结束任务"
+		if r.Kind == "publish" {
+			r.ErrorMessage = "管理员确认保留 CSDN 现有状态，人工结束发布任务"
+		}
 		r.LeaseToken = ""
 	default:
 		return ErrInvalid
@@ -445,7 +522,9 @@ func (r *record) recover(now time.Time) {
 	if r.ExternalStarted {
 		r.Status = "reconciling"
 		r.RunMode = "reconcile"
-		r.Outcome = "unknown"
+		if r.Outcome != "submitted" {
+			r.Outcome = "unknown"
+		}
 		r.AutoReconcileStarted = true
 		r.Ready = true
 		r.AvailableAt = now.Add(20 * time.Second)
@@ -484,7 +563,7 @@ func (r *record) recover(now time.Time) {
 // 核对只消费读取预算；只有两次间隔完整空结果才能重新排队写入。
 func (r *record) finishReconcile(in CompleteInput, now time.Time) {
 	r.ReconcileCount++
-	if in.ErrorCode == "draft_absent" && r.Stage == "verifying" && r.RemoteID == "" && r.ReconcileCandidateID == "" {
+	if r.Kind != "publish" && in.ErrorCode == "draft_absent" && r.Stage == "verifying" && r.RemoteID == "" && r.ReconcileCandidateID == "" {
 		if r.AbsenceChecks == 0 || !now.Before(r.LastAbsenceAt.Add(20*time.Second)) {
 			r.AbsenceChecks++
 			r.LastAbsenceAt = now

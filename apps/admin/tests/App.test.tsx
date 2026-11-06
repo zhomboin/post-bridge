@@ -465,7 +465,7 @@ describe('远程登录输入与销毁边界',()=>{
   window.history.replaceState({},'', '/account?tab=settings');const fallback=handler;let finish:(r:Response)=>void=()=>{};
   handler=(url,init)=>url==='/api/account/login'?(init?.method==='POST'?new Promise<Response>(r=>{finish=r}):response({id:'',status:'idle',width:1280,height:800,expires_at:''})):url==='/api/account/login/late-id'?response({status:'cancelled'}):fallback(url,init);
   render(<App/>);const start=await screen.findByRole('button',{name:'开始远程登录'});await waitFor(()=>expect((start as HTMLButtonElement).disabled).toBe(false));fireEvent.click(start);
-  fireEvent.click(screen.getByRole('link',{name:'草稿任务'}));finish(response({id:'late-id',status:'pending',width:1280,height:800,expires_at:''},202));
+  fireEvent.click(screen.getByRole('link',{name:'平台任务'}));finish(response({id:'late-id',status:'pending',width:1280,height:800,expires_at:''},202));
   await waitFor(()=>expect(calls.some(c=>c.url==='/api/account/login/late-id'&&c.init?.method==='DELETE')).toBe(true));
  });
 });
@@ -702,11 +702,11 @@ describe('接入文档入口', () => {
       window.history.replaceState({}, '', '/jobs?page=2');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    await screen.findByRole('heading', { level: 1, name: '草稿任务' });
+    await screen.findByRole('heading', { level: 1, name: '平台任务' });
     fireEvent.click(screen.getByRole('link', { name: '接入文档' }));
     await screen.findByRole('heading', { level: 1, name: '外部系统接入' });
     await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 50)); });
-    await screen.findByRole('heading', { level: 1, name: '草稿任务' });
+    await screen.findByRole('heading', { level: 1, name: '平台任务' });
     expect(window.location.search).toBe('?page=2');
   });
 

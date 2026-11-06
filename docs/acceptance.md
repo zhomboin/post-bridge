@@ -15,7 +15,7 @@
 
 ## PostBridge 外部来源子范围验收
 
-当前完成 PostBridge 侧 CSDN 文字 Markdown save_draft 接入；CMS 项目未改，真实调用方 → PostBridge → 真实平台、跨网络和生产仍待。公开发布、图片、MDX、其他平台及已有外站副本的显式再次新建未交付。证据与[现行契约](../contracts/cms.openapi.yaml)、[外部手册](external-integration.md)对应。
+PostBridge 支持 CSDN Markdown 草稿及受控图片转存，并提供管理员独立确认正式发布的入口。真实调用方端到端、跨网络和生产验收以[总体进度](progress.md)为准。MDX、其他平台及已有外站副本的显式再次新建仍待。证据与[现行契约](../contracts/cms.openapi.yaml)、[外部手册](external-integration.md)对应。
 
 | 检查 | 已运行证据与边界 |
 | --- | --- |

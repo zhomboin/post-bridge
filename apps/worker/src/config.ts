@@ -9,11 +9,49 @@ export function safeRequestURL(value: string): boolean {
   try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && (url.port === '' || url.port === '443') && allowedHosts.has(url.hostname); }
   catch { return false; }
 }
-export function validContent(title: string, markdown: string): boolean {
-  if ([...title].length < 5 || [...title].length > 100 || !markdown.trim() || [...markdown].length > 200000) return false;
-  let fence = '';
+export interface ImageDestination { url: string; start: number; end: number }
+
+function nestedImage(line: string, position: number): boolean {
+  let label = 0;
+  let destination = 0;
+  let code = 0;
+  for (let index = 0; index < position; index++) {
+    const token = line[index];
+    if (token === '\\' && !code) { index++; continue; }
+    if (token === '`' && !destination) {
+      const start = index;
+      while (line[index + 1] === '`') index++;
+      const length = index - start + 1;
+      if (!code) code = length;
+      else if (code === length) code = 0;
+      continue;
+    }
+    if (code) continue;
+    if (destination) {
+      if (token === '(') destination++;
+      else if (token === ')') destination--;
+      continue;
+    }
+    if (token === '[') label++;
+    else if (token === ']' && label) {
+      label--;
+      if (line[index + 1] === '(') { destination = 1; index++; }
+    }
+  }
+  return label > 0 || destination > 0 || code > 0;
+}
+
+export function contentImages(title: string, markdown: string, fixtureCopyOrigin?: string): ImageDestination[] | undefined {
+  if ([...title].length < 5 || [...title].length > 100 || !markdown.trim() || [...markdown].length > 200000) return undefined;
+  const images: ImageDestination[] = [];
   const outside: string[] = [];
-  for (const line of markdown.replace(/\r\n?/g, '\n').split('\n')) {
+  const inline = /(?<!\\)!\[([^\[\]\\\r\n]*)\]\((https?:\/\/[^\s()[\]\\<>"]+)\)/gd;
+  let fence = '';
+  let offset = 0;
+  for (const entry of markdown.matchAll(/[^\r\n]*(?:\r\n|\r|\n|$)/g)) {
+    const line = entry[0].replace(/[\r\n]+$/, '');
+    const position = offset;
+    offset += entry[0].length;
     if (fence) {
       const closing = line.match(/^ {0,3}(`+|~+)[ \t]*$/);
       if (closing && closing[1][0] === fence[0] && closing[1].length >= fence.length) fence = '';
@@ -21,10 +59,23 @@ export function validContent(title: string, markdown: string): boolean {
     }
     const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (opening && (opening[1][0] !== '`' || !opening[2].includes('`'))) { fence = opening[1]; continue; }
-    outside.push(line);
+    outside.push(line.replace(inline, (_, alt: string) => alt));
+    for (const match of line.matchAll(inline)) {
+      if (images.length >= 20 || nestedImage(line, match.index)) return undefined;
+      let url: URL;
+      try { url = new URL(match[2]); } catch { return undefined; }
+      if ((url.protocol !== 'https:' && url.origin !== fixtureCopyOrigin) || url.username || url.password || (url.port && url.origin !== fixtureCopyOrigin) || url.pathname === '/' ||
+          match[2].length > 2048 || /[?#]|%(?:5c|0d|0a|09)/i.test(match[2]) || match[2] !== url.href) return undefined;
+      const [start, end] = match.indices![2]!;
+      images.push({ url: match[2], start: position + start, end: position + end });
+    }
   }
-  const text = outside.join('\n');
-  return !/!\s*\[|<\s*\/?\s*[a-zA-Z]|\b(?:javascript|vbscript|data)\s*:/i.test(text);
+  if (/!\s*\[|<\s*\/?\s*[a-zA-Z]|\b(?:javascript|vbscript|data)\s*:/i.test(outside.join('\n'))) return undefined;
+  return images;
+}
+
+export function validContent(title: string, markdown: string): boolean {
+  return contentImages(title, markdown)?.length === 0;
 }
 export interface Config {
   apiBaseURL: string; tokenFile: string; username: string; displayName: string; profileDir: string;

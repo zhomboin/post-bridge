@@ -3,10 +3,12 @@ import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import ProcessTimeline from './ProcessTimeline';
 import ContentComparison from './ContentComparison';
-import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, isSourcePaused, jobHref, jobOutcome, queryPage, stageLabels, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
+import ManualJobResolution, { manualResolutionConflictHint } from './ManualJobResolution';
+import { canReviewPublication, PublishDraftAction, PublishJobActions, publishedArticleURL } from './CSDNPublication';
+import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, isSourcePaused, jobHref, jobOutcome, queryPage, stageLabel, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
 
 const readOnlyJob = (job: Job) => job.kind === 'sync_articles' || job.kind === 'read_article';
-const kindText = (job: Job) => ({ sync_articles: '文章同步', read_article: '正文读取', check_account: '账号检查' } as Record<string, string>)[job.kind] || '文字草稿';
+const kindText = (job: Job) => ({ sync_articles: '文章同步', read_article: '正文读取', check_account: '账号检查', publish: '正式发布', save_draft: '保存草稿' } as Record<string, string>)[job.kind] || '未知操作';
 function autoReconcileActive(job: Job) {
   return !job.manual_resolved && job.run_mode === 'reconcile' && ['queued', 'reconciling', 'running'].includes(job.status);
 }
@@ -29,7 +31,7 @@ export function Jobs() {
     navigate('/jobs' + (next.size ? '?' + next : ''));
   }
   return <div className="page">
-    <div className="page-heading"><div><h1>草稿任务</h1></div><RouteLink className="button primary" href="/jobs/new"><Plus size={16} aria-hidden="true" />新建草稿</RouteLink></div>
+    <div className="page-heading"><div><h1>平台任务</h1></div><RouteLink className="button primary" href="/jobs/new"><Plus size={16} aria-hidden="true" />新建草稿</RouteLink></div>
     <section className="surface">
       <form className="toolbar" onSubmit={submit}>
         <label className="search">搜索任务<input value={q} onChange={event => setQ(event.target.value)} placeholder="文章标题或任务ID" /></label>
@@ -39,10 +41,10 @@ export function Jobs() {
       <RefreshBar resource={resource} />
       <ResourceError error={resource.error} stale={!!resource.data} />
       {resource.data?.items.length ? <table className="data-table"><thead><tr><th className="title-cell">文章 / 任务</th><th>执行状态</th><th>执行结果</th><th>最近更新</th></tr></thead><tbody>{resource.data.items.map(job => <tr key={job.id}>
-        <td className="title-cell"><RouteLink className="title-link" href={jobHref(job.id, route)}>{job.title || (readOnlyJob(job) ? 'CSDN ' + kindText(job) : 'CSDN 登录状态检查')}</RouteLink><div className="job-subline"><span>CSDN</span><span>{kindText(job)}</span><span className="mono">{job.id}</span></div></td>
-        <td><Status value={job.status} label={isSourcePaused(job) ? '来源待处理' : undefined} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /><div className="table-title-note">{stageLabels[job.stage] || '步骤待确认'}</div></td>
+        <td className="title-cell"><RouteLink className="title-link" href={jobHref(job.id, route)}>{job.title || 'CSDN ' + kindText(job)}</RouteLink><div className="job-subline"><span>CSDN</span><span>{kindText(job)}</span><span className="mono">{job.id}</span></div></td>
+        <td><Status value={job.status} label={isSourcePaused(job) ? '来源待处理' : undefined} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /><div className="table-title-note">{stageLabel(job.stage, job.kind) || '步骤待确认'}</div></td>
         <td>{jobOutcome(job)}</td><td><time dateTime={job.updated_at}>{time(job.updated_at)}</time></td>
-      </tr>)}</tbody></table> : <Empty loading={resource.loading}><strong>{params.size ? '暂无符合条件的任务' : '还没有草稿任务'}</strong></Empty>}
+      </tr>)}</tbody></table> : <Empty loading={resource.loading}><strong>{params.size ? '暂无符合条件的任务' : '还没有平台任务'}</strong></Empty>}
       {resource.data && <Pagination total={resource.data.total} page={page} pageSize={50} onPage={value => { params.set('page', String(value)); navigate('/jobs?' + params); }} />}
     </section>
   </div>;
@@ -70,7 +72,7 @@ export function NewJob() {
     if (result) navigate(jobHref(result.id));
   }
   return <div className="page">
-    <RouteLink className="back-link" href="/jobs"><ArrowLeft size={14} aria-hidden="true" />返回草稿任务</RouteLink>
+    <RouteLink className="back-link" href="/jobs"><ArrowLeft size={14} aria-hidden="true" />返回平台任务</RouteLink>
     <div className="page-heading"><div><h1>新建 CSDN 草稿</h1></div></div>
     <div><section className="surface"><div className="surface-body">
       <form className="form-grid" onSubmit={submit} noValidate>
@@ -95,9 +97,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   const action = useAction();
   const [candidate, setCandidate] = useState(job.reconcile_candidate_id || '');
   const [loggedIn, setLoggedIn] = useState(false);
-  const [stopped, setStopped] = useState(false);
   const [cancelConfirmed, setCancelConfirmed] = useState(false);
-  const [note, setNote] = useState('');
   const [reconcileAccepted, setReconcileAccepted] = useState(false);
   useEffect(() => { setReconcileAccepted(false); }, [job]);
   const sourcePaused = isSourcePaused(job);
@@ -106,7 +106,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   const conflict = /conflict|mismatch/.test(job.error_code || '');
   async function perform(name: string, body: object = {}) {
     if (sourcePaused && ['resume', 'retry'].includes(name)) return;
-    const result = await action.run(signal => api<Job>('/api/jobs/' + encodeURIComponent(job.id) + '/' + name, { method: 'POST', body: JSON.stringify(body), signal }), name === 'resolve' ? '请先刷新当前状态；任务仍在执行，或服务尚未确认最近 45 秒内的浏览器空闲状态。' : undefined);
+    const result = await action.run(signal => api<Job>('/api/jobs/' + encodeURIComponent(job.id) + '/' + name, { method: 'POST', body: JSON.stringify(body), signal }), name === 'resolve' ? manualResolutionConflictHint : undefined);
     if (result) {
       if (name === 'reconcile') setReconcileAccepted(true);
       onUpdate();
@@ -119,6 +119,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
     void perform('reconcile', candidate.trim() && !job.remote_id ? { remote_id: candidate.trim() } : {});
   }
   return <section className="surface detail-actions-surface"><div className="surface-header"><h2>任务处理</h2></div><div className="surface-body action-panel">
+    {canReviewPublication(job) && <PublishDraftAction job={job} />}
     {job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status) && <div className="notice warning"><strong>取消中</strong><p>正在等待后台停止本任务。可能存在的草稿仍需核对，请勿重新创建。</p></div>}
     {job.status === 'waiting_user' && !sourcePaused && <><RouteLink className="button primary" href="/account?tab=settings">登录 CSDN</RouteLink><label className="checkbox"><input type="checkbox" checked={loggedIn} onChange={event => setLoggedIn(event.target.checked)} />我已完成指定账号登录</label><button className="primary" disabled={!loggedIn || action.pending} onClick={() => void perform('resume')}>登录完成，继续任务</button></>}
     {sourcePaused && <RouteLink className="button primary" href={'/integrations?tab=distributions&distribution_id=' + encodeURIComponent(job.integration_distribution_id!)}>处理来源授权</RouteLink>}
@@ -130,11 +131,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
     </div>
       {!job.remote_id && <label>候选草稿ID（可选，仅数字）<input aria-label="候选草稿ID（可选，仅数字）" maxLength={32} inputMode="numeric" value={candidate} disabled={action.pending || checking} onChange={event => setCandidate(event.target.value)} placeholder="可留空，由后台自动查找" /></label>}
       <button className="primary" disabled={action.pending || checking} onClick={reconcile}>{checking ? '正在自动核对…' : job.remote_id ? '仅核对既有草稿' : '重新自动核对'}</button>
-      <details><summary>无法匹配完整稿件</summary>
-        <label className="checkbox"><input type="checkbox" checked={stopped} onChange={event => setStopped(event.target.checked)} disabled={action.pending || checking} />我已确认本任务浏览器停止，并保留可能存在的草稿</label>
-        <label>人工结束原因<textarea rows={3} maxLength={500} value={note} onChange={event => setNote(event.target.value)} disabled={action.pending || checking} placeholder="说明保留草稿和结束任务的原因" /></label>
-        <button className="danger" disabled={!stopped || !note.trim() || action.pending || checking} onClick={() => void perform('resolve', { confirmed_browser_stopped: true, note: note.trim() })}>保留草稿并结束任务</button>
-      </details></>}
+      <ManualJobResolution disabled={action.pending || checking} onResolve={input => void perform('resolve', input)} /></>}
     {job.retry_allowed && !uncertain && !sourcePaused && <><button disabled={action.pending} onClick={() => void perform('retry')}>重试任务</button></>}
     {['queued', 'running'].includes(job.status) && !job.cancel_requested && <details><summary>取消此任务</summary><label className="checkbox"><input type="checkbox" checked={cancelConfirmed} onChange={event => setCancelConfirmed(event.target.checked)} />确认取消并保留可能已保存的草稿</label><button className="danger" disabled={!cancelConfirmed || action.pending} onClick={() => void perform('cancel')}>确认取消任务</button></details>}
     {action.pending && <p role="status">正在提交操作，请等待服务端确认…</p>}
@@ -146,22 +143,26 @@ export function JobDetail({ id }: { id: string }) {
   const { route } = useWorkspace();
   const resource = useResource<Job>('/api/jobs/' + encodeURIComponent(id));
   const back = new URLSearchParams(route.split('?')[1]).get('back');
-  const backHref = back && (/^\/jobs(?:\?|$)/.test(back) || /^\/logs(?:\/[A-Za-z0-9._:-]+)?(?:\?|$)/.test(back) || /^\/articles(?:\?|$)/.test(back) || /^\/account(?:\?|$)/.test(back)) ? back : '/jobs';
-  const backLabel = backHref.startsWith('/articles') ? '返回账号文章' : backHref.startsWith('/logs/') ? '返回处理详情' : backHref.startsWith('/logs') ? '返回处理记录' : backHref.startsWith('/account') ? '返回账号设置' : '返回任务列表';
   const job = resource.data;
+  const isPublication = job?.kind === 'publish';
+  const parentHref = isPublication && job.publish_from_job_id ? jobHref(job.publish_from_job_id) : undefined;
+  const validBack = back && (/^\/jobs(?:\?|$)/.test(back) || back === parentHref || /^\/logs(?:\/[A-Za-z0-9._:-]+)?(?:\?|$)/.test(back) || /^\/articles(?:\?|$)/.test(back) || /^\/account(?:\?|$)/.test(back));
+  const backHref = validBack ? back : parentHref || '/jobs';
+  const backLabel = backHref === parentHref ? '返回关联草稿' : backHref.startsWith('/articles') ? '返回账号文章' : backHref.startsWith('/logs/') ? '返回处理详情' : backHref.startsWith('/logs') ? '返回处理记录' : backHref.startsWith('/account') ? '返回账号设置' : '返回任务列表';
   if (!job) return <div className="page"><RouteLink className="back-link" href={backHref}><ArrowLeft size={14} />{backLabel}</RouteLink><section className="surface"><ResourceError error={resource.error} /><Empty loading={resource.loading}>无法读取任务，请刷新或返回列表。</Empty><RefreshBar resource={resource} /></section></div>;
-  const remote = readOnlyJob(job) ? undefined : draftURL(job.remote_url);
+  const remote = isPublication ? publishedArticleURL(job) : readOnlyJob(job) ? undefined : draftURL(job.remote_url);
+  const execution = isPublication ? job.run_mode === 'reconcile' ? '只读核对发布结果' : '正式发布' : readOnlyJob(job) ? kindText(job) : job.kind === 'check_account' ? '检查账号' : job.run_mode === 'reconcile' ? '自动查询草稿' : '保存草稿';
   return <div className="page">
     <RouteLink className="back-link" href={backHref}><ArrowLeft size={14} aria-hidden="true" />{backLabel}</RouteLink>
-    <div className="page-heading"><div><h1 className="detail-title">{job.title || (readOnlyJob(job) ? 'CSDN ' + kindText(job) : 'CSDN 登录状态检查')}</h1><p><span className="mono">{job.id}</span></p></div><Status value={job.status} label={isSourcePaused(job) ? '来源待处理' : undefined} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /></div>
+    <div className="page-heading"><div><h1 className="detail-title">{job.title || 'CSDN ' + kindText(job)}</h1><p><span className="mono">{job.id}</span></p></div><Status value={job.status} label={isSourcePaused(job) ? '来源待处理' : undefined} cancelling={job.cancel_requested && job.run_mode !== 'reconcile' && ['queued', 'running'].includes(job.status)} /></div>
     <ResourceError error={resource.error} stale />
     <div className="detail-layout">
       <section className="surface detail-result"><div className="surface-header"><h2>执行结果</h2><span className="muted" style={{ fontSize: 12 }}>CSDN</span></div><RefreshBar resource={resource} /><div className="surface-body">
-        <div className="result-line"><strong>{jobOutcome(job)}</strong>{remote && <a href={remote} target="_blank" rel="noopener noreferrer">查看CSDN草稿 <ArrowUpRight size={13} aria-hidden="true" /></a>}</div>
-        <dl className="detail-facts"><div><dt>当前步骤</dt><dd>{stageLabels[job.stage] || '步骤待确认'}</dd></div><div><dt>执行次数</dt><dd>{job.attempts ?? 0} 次</dd></div><div><dt>安全重试</dt><dd>{job.retry_count ?? 0} / {job.max_retries ?? 3} 次</dd></div><div><dt>创建时间</dt><dd>{time(job.created_at)}</dd></div><div><dt>最近确认</dt><dd>{time(job.updated_at)}</dd></div><div><dt>执行方式</dt><dd>{readOnlyJob(job) ? kindText(job) : job.kind === 'check_account' ? '检查账号' : job.run_mode === 'reconcile' ? '自动查询草稿' : '保存草稿'}</dd></div>{job.remote_id && <div><dt>已关联草稿ID</dt><dd className="mono">{job.remote_id}</dd></div>}</dl>
+        <div className="result-line"><strong>{jobOutcome(job)}</strong>{remote && <a href={remote} target="_blank" rel="noopener noreferrer">{isPublication ? '查看 CSDN 文章' : '查看CSDN草稿'} <ArrowUpRight size={13} aria-hidden="true" /></a>}</div>
+        <dl className="detail-facts"><div><dt>当前步骤</dt><dd>{stageLabel(job.stage, job.kind) || '步骤待确认'}</dd></div><div><dt>执行次数</dt><dd>{job.attempts ?? 0} 次</dd></div><div><dt>安全重试</dt><dd>{job.retry_count ?? 0} / {job.max_retries ?? 3} 次</dd></div><div><dt>创建时间</dt><dd>{time(job.created_at)}</dd></div><div><dt>最近确认</dt><dd>{time(job.updated_at)}</dd></div><div><dt>执行方式</dt><dd>{execution}</dd></div>{job.remote_id && <div><dt>{isPublication ? 'CSDN 文章 ID' : '已关联草稿ID'}</dt><dd className="mono">{job.remote_id}</dd></div>}{parentHref && backHref !== parentHref && <div><dt>关联草稿</dt><dd><RouteLink href={parentHref}>查看关联草稿</RouteLink></dd></div>}</dl>
         {job.error_message && <div className="notice error section-gap"><strong>最近错误</strong><p>{job.error_message}</p>{job.error_code && <p className="mono">{job.error_code}</p>}</div>}
       </div></section>
-      <JobActions key={job.id} job={job} onUpdate={resource.refresh} />
+      {isPublication ? <PublishJobActions key={job.id} job={job} onUpdate={resource.refresh} /> : <JobActions key={job.id} job={job} onUpdate={resource.refresh} />}
       <div className="detail-history">
       {job.markdown !== undefined && <section className="surface section-gap"><div className="surface-header"><h2>已确认的原稿</h2></div><div className="surface-body"><pre className="snapshot">{job.markdown}</pre></div></section>}
       <ContentComparison kind={job.kind} jobId={job.id} active={['queued','running','reconciling','waiting_user'].includes(job.status)} /><ProcessTimeline jobId={job.id} job={job} />

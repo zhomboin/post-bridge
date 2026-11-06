@@ -1,5 +1,9 @@
 import type { BrowserContext, Page, Request, Response } from 'playwright';
-import { safeRequestURL, validContent } from './config.js';
+import { safeRequestURL } from './config.js';
+import { approvedImages, copiedImageOrigin, copiedImageURL, forwardWithoutRedirect, frozenCopies, imagePreviewPath, replaceDestinations, richMarkdown, waitForImagePreviews } from './csdn-images.js';
+import { forwardPreviewImage } from './csdn-preview.js';
+import { verifyImageSourceDNS } from './csdn-image-dns.js';
+import { runCSDNPublish } from './csdn-publish.js';
 import { nativeReadRequest } from './native-read.js';
 import type { Hooks, Job, JobResult, Observation, Progress } from './types.js';
 
@@ -9,7 +13,8 @@ interface FixtureSite { origin: string; accountPath: string; editorPath: string;
 class CheckpointFailure extends Error {}
 class AdapterFailure extends Error { constructor(readonly code: string) { super(code); } }
 const numericID = (value: unknown): string | undefined => typeof value === 'string' || typeof value === 'number' ? /^\d{1,30}$/.test(String(value)) ? String(value) : undefined : undefined;
-const normalizedMarkdown = (value: string): string => value.replace(/\r\n?/g, '\n').trim();
+const withLF = (value: string): string => value.replace(/\r\n?/g, '\n');
+const normalizedMarkdown = (value: string): string => withLF(value).trim();
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 export class CSDNAdapter {
@@ -51,9 +56,28 @@ export class CSDNAdapter {
     return login ? 'needs_login' : 'account_mismatch';
   }
   async run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult> {
+    if (job.kind === 'publish') return runCSDNPublish(this.context, job, hooks, signal, {
+      username: this.identity.username, timeout: this.timeout, fixtureOrigin: this.fixture ? this.site.origin : undefined,
+      account: page => this.account(page, signal), editorURL: id => this.editorURL(id), allowed: url => this.allowed(url),
+    });
+    if (job.kind === 'save_draft' && job.account_username && job.account_username !== this.identity.username) {
+      return { status: job.external_started ? 'reconciling' : 'failed', error_code: 'account_mismatch', error_message: '平台账号与任务不一致', retryable: false };
+    }
+    const images = job.kind === 'check_account' ? [] : approvedImages(job.title, job.markdown, job.image_urls ?? []);
+    if (!images) return { status: 'failed', error_code: 'adapter_mismatch', error_message: '任务内容不符合当前草稿范围', retryable: false };
+    const rich = images.length > 0;
+    const sources = new Set(images.map(image => image.url));
+    const copyOrigin = this.fixture ? this.site.origin : copiedImageOrigin;
+    const transfers = new Map<string, Promise<void>>();
+    const copies = new Map<string, string>();
+    const copyPaths = new Set<string>();
+    let transferring = false;
+    let saveArmed = false;
+    let saveOperation: Promise<void> | undefined;
+    let platformMarkdown = job.run_mode === 'reconcile' ? job.platform_markdown : undefined;
     let external = job.external_started;
     let writesAllowed = false;
-    let saveTitleMismatch = false;
+    let savePayloadMismatch = false;
     let remoteID = numericID(job.remote_id);
     let pendingID: string | undefined;
     let queue = Promise.resolve();
@@ -113,19 +137,65 @@ export class CSDNAdapter {
     };
     const abort = () => { void page?.close().catch(() => {}); };
     try {
-      if (job.kind !== 'check_account' && !validContent(job.title, job.markdown)) return { status: 'failed', error_code: 'adapter_mismatch', error_message: '任务内容不符合当前草稿范围', retryable: false };
       signal.throwIfAborted();
       await this.context.route('**/*', route => {
         const request = route.request();
         const target = new URL(request.url());
+        const read = this.readOnlyRequest(request.url(), request.method());
+        const imageTransfer = (
+          this.fixture ? target.origin === this.site.origin && target.pathname === '/v1/image/external/storage' :
+            ['https://bizapi.csdn.net', 'https://oms.csdn.net'].includes(target.origin) && target.pathname.endsWith('/v1/image/external/storage')
+        );
+        const block = () => route.abort('blockedbyclient');
+        if (imageTransfer) {
+          if (transferring && request.method() === 'OPTIONS') return forwardWithoutRedirect(route, this.timeout);
+          if (request.method() !== 'POST' || !transferring || signal.aborted || request.frame() !== page?.mainFrame()) return block();
+          let payload: { imgUrl?: unknown; type?: unknown } | undefined;
+          try { payload = request.postDataJSON() as typeof payload; } catch { return block(); }
+          const source = payload?.imgUrl;
+          if (payload?.type !== 'blog' || typeof source !== 'string' || !sources.has(source) || transfers.has(source)) return block();
+          const operation = forwardWithoutRedirect(route, this.timeout, text => {
+            const body = JSON.parse(text) as { code?: unknown; data?: { url?: unknown } };
+            const copy = copiedImageURL(body.data?.url, copyOrigin);
+            if (body.code !== 200 || !copy || sources.has(copy.href)) throw new AdapterFailure('adapter_mismatch');
+            copyPaths.add(imagePreviewPath(copy.href));
+            copies.set(source, copy.href);
+          });
+          transfers.set(source, operation);
+          return operation;
+        }
+        if (rich && sources.has(request.url())) return block();
+        if (rich && request.resourceType() === 'image') {
+          const copy = copiedImageURL(request.url(), copyOrigin, true);
+          if (copy && copyPaths.has(imagePreviewPath(copy.href)) && request.method() === 'GET') return forwardPreviewImage(route, copy, this.timeout, signal);
+        }
+        if (rich && !this.fixture && target.origin === copyOrigin) return block();
         const draftSave = this.fixture ? target.origin === this.site.origin && target.pathname === '/save' :
           ['https://bizapi.csdn.net', 'https://editor.csdn.net'].includes(target.origin) && /^\/blog-console-api\/v3\/(?:mdeditor|editor)\/(?:saveArticle|autoSave)$/.test(target.pathname);
-        if (writesAllowed && lastStage === 'saving' && request.method() === 'POST' && draftSave) {
-          let payload: { title?: unknown } | undefined;
-          try { payload = request.postDataJSON() as { title?: unknown }; } catch { /* 无法确认标题的请求不能写入平台。 */ }
-          if (payload?.title !== job.title) { saveTitleMismatch = true; return route.abort('blockedbyclient'); }
+        if (rich && !read) {
+          if (saveArmed && draftSave && request.method() === 'OPTIONS') return forwardWithoutRedirect(route, this.timeout);
+          if (!saveArmed || signal.aborted || saveOperation || request.frame() !== page?.mainFrame() ||
+              request.method() !== 'POST' || !draftSave || target.pathname.endsWith('/autoSave')) return block();
+          let payload: { title?: unknown; markdowncontent?: unknown; status?: unknown; id?: unknown; articleId?: unknown; article_id?: unknown } | undefined;
+          try { payload = request.postDataJSON() as typeof payload; } catch { return block(); }
+          if (payload?.title !== job.title || typeof payload.markdowncontent !== 'string' || platformMarkdown === undefined ||
+              richMarkdown(payload.markdowncontent) !== richMarkdown(platformMarkdown) || (payload.status !== 2 && payload.status !== '2')) return block();
+          const ids = [payload.id, payload.articleId, payload.article_id, target.searchParams.get('articleId')].map(numericID);
+          if (remoteID && ids.some(id => id && id !== '0' && id !== remoteID)) return block();
+          saveOperation = forwardWithoutRedirect(route, this.timeout);
+          return saveOperation;
         }
-        const allowed = this.allowed(request.url()) && (writesAllowed || this.readOnlyRequest(request.url(), request.method()));
+        if (writesAllowed && request.method() === 'POST' && draftSave) {
+          const manual = !target.pathname.endsWith('/autoSave');
+          let payload: { title?: unknown; status?: unknown } | undefined;
+          try { payload = request.postDataJSON() as typeof payload; } catch { /* 无法确认有效载荷。 */ }
+          const saving = lastStage === 'saving';
+          if ((manual && payload?.status !== 2 && payload?.status !== '2') || (saving && payload?.title !== job.title)) {
+            if (saving) savePayloadMismatch = true;
+            return block();
+          }
+        }
+        const allowed = this.allowed(request.url()) && (writesAllowed || read);
         return allowed ? route.continue() : route.abort('blockedbyclient');
       });
       await this.context.routeWebSocket('**/*', socket => socket.close());
@@ -141,6 +211,10 @@ export class CSDNAdapter {
       if (account !== 'connected') return { status: account === 'needs_login' ? 'waiting_user' : 'failed', error_code: account, error_message: account === 'needs_login' ? '平台账号需要人工登录' : '平台账号与配置不一致', retryable: false };
       if (job.kind === 'check_account') return { status: 'succeeded' };
       if (job.run_mode === 'reconcile') {
+        const frozen = rich && platformMarkdown ? frozenCopies(job.title, job.markdown, platformMarkdown, images, copyOrigin) : undefined;
+        if (rich && !frozen) return { status: 'reconciling', error_code: 'reconcile_unavailable', error_message: '图文草稿缺少已确认的平台正文' };
+        const imageURLs = frozen ? images.map(image => frozen.get(image.url)!) : [];
+        for (const imageURL of imageURLs) copyPaths.add(imagePreviewPath(imageURL));
         const id = remoteID ?? numericID(job.reconcile_candidate_id);
         await progress({ stage: 'verifying', message: id ? '正在只读核对已有草稿' : '正在自动查询并核对平台草稿' });
         if (id) {
@@ -149,7 +223,8 @@ export class CSDNAdapter {
           const snapshot = await this.readSnapshot(readSnapshot, id, signal);
           if (!snapshot) return { status: 'reconciling', error_code: 'reconcile_unavailable', error_message: '平台草稿暂时无法读取' };
           await reportAfter(snapshot);
-          if (!this.matches(snapshot, job)) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '草稿内容或草稿状态未通过核对' };
+          if (!this.matches(snapshot, job.title, job.markdown, rich, platformMarkdown)) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '草稿内容或草稿状态未通过核对' };
+          if (rich) await waitForImagePreviews(page, imageURLs, this.timeout);
           return { status: 'succeeded', remote_id: id };
         }
         const candidates = await this.draftCandidates(page, job.title, signal);
@@ -164,7 +239,10 @@ export class CSDNAdapter {
           const snapshot = await this.readSnapshot(readSnapshot, candidate, signal);
           if (!snapshot) return { status: 'reconciling', error_code: 'reconcile_unavailable', error_message: '候选草稿暂时无法读取' };
           if (candidates.length === 1) soleCandidate = snapshot;
-          if (this.matches(snapshot, job)) matches.push(snapshot); else conflict = true;
+          if (this.matches(snapshot, job.title, job.markdown, rich, platformMarkdown)) {
+            if (rich) await waitForImagePreviews(page, imageURLs, this.timeout);
+            matches.push(snapshot);
+          } else conflict = true;
         }
         if (soleCandidate) await reportAfter(soleCandidate);
         if (matches.length !== 1 || conflict) return { status: 'reconciling', error_code: 'draft_conflict', error_message: '存在重复或不完整的同标题草稿，不能自动重写' };
@@ -172,6 +250,10 @@ export class CSDNAdapter {
         return { status: 'succeeded', remote_id: matches[0].id };
       }
       if (external || remoteID) return { status: 'reconciling', error_code: 'draft_mismatch', error_message: '任务已有外站操作，需要只读核对' };
+      if (rich && !this.fixture) {
+        try { await verifyImageSourceDNS([...sources], signal); }
+        catch { signal.throwIfAborted(); throw new AdapterFailure('image_source_unavailable'); }
+      }
       await progress({ stage: 'opening_editor', external_started: true, message: '即将打开平台草稿编辑器' });
       external = true;
       writesAllowed = true;
@@ -200,29 +282,61 @@ export class CSDNAdapter {
       await page.waitForTimeout(150);
       signal.throwIfAborted();
       await this.context.grantPermissions(['clipboard-write'], { origin: new URL(page.url()).origin });
-      await page.evaluate(text => navigator.clipboard.writeText(text), job.markdown);
-      try { await body.focus(); await page.keyboard.press('Control+A'); await page.keyboard.press('Control+V'); }
-      finally { await page.evaluate(() => navigator.clipboard.writeText('')).catch(() => {}); }
-      if ((await body.textContent())?.trim() !== job.markdown.trim() || await titleInput.inputValue() !== job.title) throw new AdapterFailure('adapter_mismatch');
+      const paste = async (text: string) => {
+        await page!.evaluate(value => navigator.clipboard.writeText(value), text);
+        try { await body.focus(); await page!.keyboard.press('Control+A'); await page!.keyboard.press('Control+V'); }
+        finally { await page!.evaluate(() => navigator.clipboard.writeText('')).catch(() => {}); }
+      };
+      if (rich) {
+        transferring = true;
+        try {
+          await paste(job.markdown);
+          const deadline = Date.now() + this.timeout;
+          while (copies.size !== sources.size && Date.now() < deadline) { signal.throwIfAborted(); await sleep(50); }
+          if (copies.size !== sources.size) throw new AdapterFailure('image_transfer_unconfirmed');
+          await Promise.all(transfers.values());
+        } finally { transferring = false; }
+        platformMarkdown = replaceDestinations(job.markdown, images, copies);
+        if ([...platformMarkdown].length > 200000) throw new AdapterFailure('adapter_mismatch');
+      }
+      const expectedMarkdown = platformMarkdown ?? job.markdown;
+      await paste(expectedMarkdown);
+      const editorText = await body.textContent();
+      // 编辑器 DOM 的空白可能随换行节点变化。实际保存请求必须与冻结正文一致。
+      const visibleMarkdown = (text: string) => rich ? text.replace(/[\s\u200b]+/g, '') : text.trim();
+      if (editorText === null || visibleMarkdown(editorText) !== visibleMarkdown(expectedMarkdown) ||
+          await titleInput.inputValue() !== job.title) throw new AdapterFailure('adapter_mismatch');
+      const imageURLs = images.map(image => copies.get(image.url)!);
+      if (rich) await waitForImagePreviews(page, imageURLs, this.timeout);
       captureURL(); await queue; if (checkpointFailure) throw checkpointFailure;
-      await progress({ stage: 'saving', message: '正在保存平台草稿' });
+      await progress({ stage: 'saving', message: '正在保存平台草稿', ...(rich ? { platform_markdown: platformMarkdown } : {}) });
+      signal.throwIfAborted();
+      saveArmed = true;
       await save.click();
+      if (rich) {
+        const deadline = Date.now() + this.timeout;
+        while (!saveOperation && Date.now() < deadline) { signal.throwIfAborted(); await sleep(50); }
+        if (!saveOperation) throw new AdapterFailure('adapter_mismatch');
+        await saveOperation;
+        saveArmed = false;
+      }
       const idDeadline = Date.now() + this.timeout;
-      while (!remoteID && Date.now() < idDeadline) { signal.throwIfAborted(); if (saveTitleMismatch) throw new AdapterFailure('adapter_mismatch'); captureURL(); await queue; if (checkpointFailure) throw checkpointFailure; await sleep(50); }
-      if (saveTitleMismatch) throw new AdapterFailure('adapter_mismatch');
+      while (!remoteID && Date.now() < idDeadline) { signal.throwIfAborted(); if (savePayloadMismatch) throw new AdapterFailure('adapter_mismatch'); captureURL(); await queue; if (checkpointFailure) throw checkpointFailure; await sleep(50); }
+      if (savePayloadMismatch) throw new AdapterFailure('adapter_mismatch');
       if (!remoteID) throw new AdapterFailure('timeout');
       // 保存按钮可能异步提交；重新载入前等待浏览器完成对应保存请求。
       await page.waitForLoadState('networkidle', { timeout: Math.min(this.timeout, 5000) }).catch(() => {});
       signal.throwIfAborted();
-      if (saveTitleMismatch) throw new AdapterFailure('adapter_mismatch');
+      if (savePayloadMismatch) throw new AdapterFailure('adapter_mismatch');
       writesAllowed = false;
       await progress({ stage: 'verifying', message: '正在从平台重新读取草稿' });
       snapshotState.value = undefined;
       await page.reload({ waitUntil: 'domcontentloaded' });
-      const matched = await this.waitSnapshot(readSnapshot, job, signal);
+      const matched = await this.waitSnapshot(readSnapshot, snapshot => this.matches(snapshot, job.title, job.markdown, rich, platformMarkdown), signal);
       const actual = readSnapshot();
       if (actual?.id === remoteID) await reportAfter(actual);
       if (!matched || (actual?.id && actual.id !== remoteID)) throw new AdapterFailure('draft_mismatch');
+      if (rich) await waitForImagePreviews(page, imageURLs, this.timeout);
       await queue; if (checkpointFailure) throw checkpointFailure;
       return { status: 'succeeded', remote_id: remoteID };
     } catch (error) {
@@ -238,8 +352,11 @@ export class CSDNAdapter {
       await page?.close().catch(() => {});
     }
   }
-  private matches(snapshot: Snapshot, job: Job): boolean {
-    return (snapshot.status === 2 || snapshot.status === '2') && snapshot.title === job.title && normalizedMarkdown(snapshot.markdown) === normalizedMarkdown(job.markdown);
+  private matches(snapshot: Snapshot, title: string, markdown: string, rich: boolean, platformMarkdown?: string): boolean {
+    const expected = rich ? platformMarkdown : markdown;
+    const normalize = rich ? richMarkdown : normalizedMarkdown;
+    return expected !== undefined && (snapshot.status === 2 || snapshot.status === '2') &&
+      snapshot.title === title && normalize(snapshot.markdown) === normalize(expected);
   }
   private async readSnapshot(snapshot: () => Snapshot | undefined, id: string, signal: AbortSignal): Promise<Snapshot | undefined> {
     const deadline = Date.now() + this.timeout;
@@ -299,10 +416,9 @@ export class CSDNAdapter {
       ]);
     } finally { if (timer) clearTimeout(timer); }
   }
-  private async waitSnapshot(snapshot: () => Snapshot | undefined, job: Job, signal: AbortSignal): Promise<boolean> {
+  private async waitSnapshot(snapshot: () => Snapshot | undefined, matches: (value: Snapshot) => boolean, signal: AbortSignal): Promise<boolean> {
     const deadline = Date.now() + this.timeout;
-    while (Date.now() < deadline) { signal.throwIfAborted(); const value = snapshot(); // 状态2仅作为目标账号已实测的适配条件；其他或缺失值均停止核对。
-      if (value && (value.status === 2 || value.status === '2') && value.title === job.title && normalizedMarkdown(value.markdown) === normalizedMarkdown(job.markdown)) return true; await sleep(50); }
+    while (Date.now() < deadline) { signal.throwIfAborted(); const value = snapshot(); if (value && matches(value)) return true; await sleep(50); }
     return false;
   }
 }

@@ -60,8 +60,11 @@ def write_private(path, value):
 def validate_config(value):
     keys = ['DATABASE_URL', 'PUBLIC_ORIGIN', 'ADMIN_USERNAME', 'CSDN_USERNAME', 'CSDN_DISPLAY_NAME']
     optional = {'INTEGRATION_ENVIRONMENT', 'INTEGRATION_SERVICE_ID'}
-    if not isinstance(value, dict) or not set(keys) <= set(value) or not set(value) <= set(keys) | optional:
-        raise ValueError('请填写必要部署字段，只允许额外配置接入环境和服务标识')
+    if not isinstance(value, dict) or not set(keys) <= set(value) or not set(value) <= set(keys) | optional | {"CSDN_IMAGE_HOSTS"}:
+        raise ValueError('请填写必要部署字段，只允许额外配置接入环境、服务标识和 CSDN 图片域名')
+    hosts = value.get("CSDN_IMAGE_HOSTS", "")
+    if not isinstance(hosts, str) or (hosts and not re.fullmatch(r"[A-Za-z0-9.-]+(?:[ \t]*,[ \t]*[A-Za-z0-9.-]+)*", hosts)):
+        raise ValueError("CSDN 图片域名须使用逗号分隔的域名")
     selected = set(value) & optional
     if selected and selected != optional:
         raise ValueError('接入环境和服务标识必须同时配置')
@@ -154,6 +157,8 @@ def environments(config):
               'WORKER_HEADLESS': 'true', 'PLAYWRIGHT_BROWSERS_PATH': str(BROWSERS), 'HOME': str(STATE / 'worker')}
     if config.get('INTEGRATION_ENVIRONMENT'):
         api.update({'INTEGRATION_ENVIRONMENT': config['INTEGRATION_ENVIRONMENT'], 'INTEGRATION_SERVICE_ID': config['INTEGRATION_SERVICE_ID'], 'INTEGRATION_MASTER_KEY_FILE': str(STATE / 'api/integration-master-key')})
+    if config.get("CSDN_IMAGE_HOSTS"):
+        api["CSDN_IMAGE_HOSTS"] = config["CSDN_IMAGE_HOSTS"]
     return api, worker
 
 

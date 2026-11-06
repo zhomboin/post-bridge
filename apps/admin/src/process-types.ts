@@ -11,6 +11,6 @@ export type ProcessSnapshot = {
   title?: string; markdown?: string; status?: string; remote_id?: string; username?: string; display_name?: string; captured_at: string;
 };
 export type ContentChanges = { submitted: { title: string; markdown: string }; snapshots: ProcessSnapshot[]; attempts: number[]; content_retained: boolean };
-export const operationName = (kind: string) => ({ check_account: '检查账号', save_draft: '保存草稿', sync_articles: '同步文章', read_article: '读取正文' } as Record<string, string>)[kind] || '未知操作';
+export const operationName = (kind: string) => ({ check_account: '检查账号', save_draft: '保存草稿', publish: '正式发布', sync_articles: '同步文章', read_article: '读取正文' } as Record<string, string>)[kind] || '未知操作';
 export const platformName = (value: string) => value === 'csdn' ? 'CSDN' : value || '平台未记录';
 export const processHref = (id: string, back: string) => '/logs/' + encodeURIComponent(id) + '?back=' + encodeURIComponent(back);

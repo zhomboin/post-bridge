@@ -5,12 +5,17 @@ export type IntegrationClient = {
 };
 export type Registration = Partial<IntegrationClient> & { id: string; name: string; status: string; created_at: string };
 export type IssuedSecret = { client_id?: string; key_id?: string; client_secret?: string; invitation_id?: string; invitation_token?: string; expires_at?: string };
-export type PlatformDraft = { id: string; platform: string; account_id: string; operation: string; title: string; markdown: string; revision: number };
+export type CSDNPublishOptions = {
+  tags: string[]; summary: string; categories: string[]; article_type: string; creation_declaration: string;
+  visibility: string; template: string; cover_image_url: string;
+  original_url?: string; rights_confirmed?: boolean;
+};
+export type PlatformDraft = { id: string; platform: string; account_id: string; operation: string; title: string; markdown: string; revision: number; publish_options?: CSDNPublishOptions };
 export type Preparation = {
   id: string; request_id: string; source_id: string; client_id: string; article_id: string; source_version: number;
   state_seq: number; content_fingerprint: string; revision: number; confirmed: boolean; status: string;
-  expires_at: string; created_at: string; confirmation_fingerprint?: string; draft_revision_ids?: string[];
-  snapshot: { title: string; summary: string; body: string; body_format: string; tags: string[] }; drafts: PlatformDraft[];
+  expires_at: string; created_at: string; confirmation_fingerprint?: string; draft_revision_ids?: string[]; preview_image_urls?: string[];
+  snapshot: { title: string; summary: string; body: string; body_format: string; tags: string[]; cover_image_url?: string }; drafts: PlatformDraft[];
 };
 export const integrationStatuses: Record<string, string> = {
   in_progress: '处理中', needs_attention: '需要处理', completed: '处理完成', prepared: '待确认', confirmed: '已确认', submitted: '已提交', revoked: '已撤销', expired: '已过期',

@@ -14,6 +14,15 @@ func (s *Store) integrationGuardAllowed(ctx context.Context, tx pgx.Tx, r *recor
 	if s.integrations == nil || r.SourceGuardBlocked {
 		return ErrIntegrationAuthentication
 	}
+	if r.AccountUsername != "" {
+		matches, err := csdnJobAccountMatches(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		if !matches {
+			return ErrIntegrationPermission
+		}
+	}
 	d, err := integrationReadDistribution(ctx, tx, r.IntegrationDistributionID)
 	if err != nil {
 		return err
@@ -43,6 +52,11 @@ func (s *Store) integrationGuardAllowed(ctx context.Context, tx pgx.Tx, r *recor
 	}
 	if !matched || r.Kind != "save_draft" {
 		return ErrIntegrationPermission
+	}
+	if len(r.ImageURLs) != 0 {
+		if _, err := approvedImageMarkdown(r.Title, r.Markdown, r.ImageURLs); err != nil {
+			return ErrIntegrationSourceChanged
+		}
 	}
 	latest, err := integrationLatestEvent(ctx, tx, d.SourceID, d.ArticleID)
 	if err != nil {
@@ -82,10 +96,17 @@ func integrationGuardPause(ctx context.Context, tx pgx.Tx, r *record, now time.T
 }
 
 func (s *Store) integrationClaimAllowed(ctx context.Context, tx pgx.Tx, r *record, now time.Time) (bool, error) {
-	if r.IntegrationDistributionID == "" || r.RunMode == "reconcile" || readKind(r.Kind) {
+	if r.Kind == "publish" && r.RunMode == "reconcile" {
+		// Source revocation stops writes, not verification of the same account's article.
+		return csdnJobAccountMatches(ctx, tx, r)
+	}
+	if !sourceGuardedJob(r) || r.RunMode == "reconcile" || readKind(r.Kind) {
 		return true, nil
 	}
-	if err := s.integrationGuardAllowed(ctx, tx, r, now); err != nil {
+	if r.Kind == "publish" && r.ExternalStarted {
+		return false, integrationGuardPause(ctx, tx, r, now)
+	}
+	if err := s.jobSourceGuardAllowed(ctx, tx, r, now); err != nil {
 		if err = integrationGuardPause(ctx, tx, r, now); err != nil {
 			return false, err
 		}
@@ -95,13 +116,23 @@ func (s *Store) integrationClaimAllowed(ctx context.Context, tx pgx.Tx, r *recor
 }
 
 func (s *Store) integrationActionAllowed(ctx context.Context, tx pgx.Tx, r *record, action string, now time.Time) error {
-	if r.IntegrationDistributionID == "" || action != "resume" && action != "retry" {
+	if r.Kind == "publish" && action == "reconcile" {
+		matches, err := csdnJobAccountMatches(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		if !matches {
+			return ErrConflict
+		}
 		return nil
 	}
-	if r.SourceGuardBlocked || r.ErrorCode == "source_guard_failed" || r.ErrorCode == "source_changed" {
+	if !sourceGuardedJob(r) || action != "resume" && action != "retry" {
+		return nil
+	}
+	if (r.Kind == "publish" && r.ExternalStarted) || r.SourceGuardBlocked || r.ErrorCode == "source_guard_failed" || r.ErrorCode == "source_changed" {
 		return ErrConflict
 	}
-	if err := s.integrationGuardAllowed(ctx, tx, r, now); err != nil {
+	if err := s.jobSourceGuardAllowed(ctx, tx, r, now); err != nil {
 		return ErrConflict
 	}
 	return nil
@@ -114,7 +145,7 @@ func (s *Store) integrationProgress(ctx context.Context, id string, in ProgressI
 		if err != nil {
 			return err
 		}
-		if r.IntegrationDistributionID == "" || r.RunMode == "reconcile" || readKind(r.Kind) {
+		if !sourceGuardedJob(r) || r.RunMode == "reconcile" || readKind(r.Kind) {
 			return nil
 		}
 		rank, known := stages[in.Stage]
@@ -129,13 +160,13 @@ func (s *Store) integrationProgress(ctx context.Context, id string, in ProgressI
 		if err = candidate.progress(in, now); err != nil {
 			return err
 		}
-		if err = s.integrationGuardAllowed(ctx, tx, r, now); err != nil {
+		if err = s.jobSourceGuardAllowed(ctx, tx, r, now); err != nil {
 			blocked = true
 			return integrationGuardPause(ctx, tx, r, now)
 		}
 		if in.RemoteID != "" {
-			var exists bool
-			if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id<>$1 AND record->>'remote_id'=$2)", id, in.RemoteID).Scan(&exists); err != nil {
+			exists, err := remoteIDInUse(ctx, tx, r, in.RemoteID)
+			if err != nil {
 				return err
 			}
 			if exists {
