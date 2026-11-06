@@ -208,6 +208,39 @@ class UbuntuDeploymentTests(unittest.TestCase):
                     self.assertEqual(worker_starts, 1)
                 self.assertGreaterEqual(len(health_calls), 2)
                 self.assertEqual(control_health.call_count, 1 if worker_active else 0)
+
+    def test_source_snapshot_includes_admin_documentation_assets(self):
+        deploy = self.load()
+        assets = (
+            'docs/external-integration.md',
+            'contracts/cms.openapi.yaml',
+            'tests/fixtures/integration-contract.json',
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            release = Path(temp) / 'release'
+            deploy.copy_source(ROOT, release)
+            for asset in assets:
+                with self.subTest(asset=asset):
+                    self.assertTrue((release / asset).is_file(), asset)
+                    self.assertEqual((release / asset).read_bytes(), (ROOT / asset).read_bytes())
+
+    def test_source_snapshot_rejects_asset_directory_symlink(self):
+        deploy = self.load()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / 'source'
+            (source / 'apps').mkdir(parents=True)
+            for manifest in ('package.json', 'package-lock.json'):
+                (source / manifest).write_text('{}')
+            external = root / 'external'
+            external.mkdir()
+            (external / 'external-integration.md').write_text('synthetic')
+            (source / 'docs').symlink_to(external, target_is_directory=True)
+            release = root / 'release'
+            with self.assertRaisesRegex(ValueError, '符号链接'):
+                deploy.copy_source(source, release)
+            self.assertFalse((release / 'docs/external-integration.md').exists())
+
     def test_source_snapshot_rejects_symlinks(self):
         deploy = self.load()
         with tempfile.TemporaryDirectory() as temp:
