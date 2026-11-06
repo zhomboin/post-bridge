@@ -113,6 +113,7 @@ export async function runCSDNPublish(context: BrowserContext, job: Job, hooks: H
   const copyPaths = new Set((contentImages(job.title, job.markdown, site.fixtureOrigin) ?? [])
     .filter(image => copiedImageURL(image.url, copyOrigin)).map(image => imagePreviewPath(image.url)));
   let page: Page | undefined;
+  let draftRecheckPage: Page | undefined;
   let filling = false;
   let armed = false;
   let external = job.external_started;
@@ -122,11 +123,20 @@ export async function runCSDNPublish(context: BrowserContext, job: Job, hooks: H
   let expectedHTML = readonly && /^[a-f0-9]{64}$/.test(job.published_html_sha256 ?? '') ? job.published_html_sha256 : undefined;
   let submission: Promise<void> | undefined;
   let checkpointFailure: unknown;
+  let draftChanged = false;
   const checkpoint = async (value: Progress) => {
     signal.throwIfAborted();
     try { await hooks.progress(value); } catch { throw new PublishCheckpointFailure('任务检查点未确认'); }
   };
-  const closePage = () => { void page?.close().catch(() => {}); };
+  const configurePage = (currentPage: Page) => {
+    currentPage.setDefaultTimeout(site.timeout);
+    currentPage.setDefaultNavigationTimeout(site.timeout);
+    currentPage.on('dialog', dialog => { void dialog.dismiss().catch(() => {}); });
+  };
+  const closePages = () => {
+    void page?.close().catch(() => {});
+    void draftRecheckPage?.close().catch(() => {});
+  };
 
   const gate = (route: Route): Promise<void> => {
     const request = route.request();
@@ -142,6 +152,21 @@ export async function runCSDNPublish(context: BrowserContext, job: Job, hooks: H
       // 保留当前请求，直到服务端确认本次不可逆提交边界。
       submission = (async () => {
         try {
+          // 原生表单可能已打开数秒，提交前使用同一会话重新只读核对原稿。
+          draftRecheckPage = await context.newPage();
+          configurePage(draftRecheckPage);
+          let latest: Snapshot | undefined;
+          try {
+            if (await site.account(draftRecheckPage) === 'connected') latest = await openSnapshot(draftRecheckPage);
+          } finally {
+            await draftRecheckPage.close().catch(() => {});
+            draftRecheckPage = undefined;
+          }
+          if (!latest || !statusIs(latest.status, 2) || !sameContent(latest.title, latest.markdown, job) ||
+              htmlDigest(latest.html) !== expectedHTML) {
+            draftChanged = true;
+            return await block();
+          }
           await checkpoint({
             stage: 'saving', external_started: true, remote_id: id, published_html_sha256: expectedHTML,
             message: '正在提交平台发布请求',
@@ -160,7 +185,9 @@ export async function runCSDNPublish(context: BrowserContext, job: Job, hooks: H
       return submission;
     }
     if (isRead(url)) {
-      if (request.frame() !== page?.mainFrame() || (method !== 'OPTIONS' && !isSnapshotRequest(request))) return block();
+      const frame = request.frame();
+      if ((frame !== page?.mainFrame() && frame !== draftRecheckPage?.mainFrame()) ||
+          (method !== 'OPTIONS' && !isSnapshotRequest(request))) return block();
       return forwardWithoutRedirect(route, site.timeout);
     }
     if (method === 'POST' || method === 'OPTIONS') {
@@ -237,10 +264,8 @@ export async function runCSDNPublish(context: BrowserContext, job: Job, hooks: H
     await context.routeWebSocket('**/*', socket => socket.close());
     await Promise.all(context.pages().map(existing => existing.close()));
     page = await context.newPage();
-    page.setDefaultTimeout(site.timeout);
-    page.setDefaultNavigationTimeout(site.timeout);
-    page.on('dialog', dialog => { void dialog.dismiss().catch(() => {}); });
-    signal.addEventListener('abort', closePage, { once: true });
+    configurePage(page);
+    signal.addEventListener('abort', closePages, { once: true });
     await checkpoint({ stage: 'checking_login', message: '正在核验平台账号' });
     const account = await site.account(page);
     if (account !== 'connected') return {
@@ -271,6 +296,7 @@ export async function runCSDNPublish(context: BrowserContext, job: Job, hooks: H
     await submission;
     armed = false;
     if (checkpointFailure) throw checkpointFailure;
+    if (draftChanged) return readOnlyFailure('publish_draft_mismatch', '提交前重新读取的草稿或账号未通过核对');
     await checkpoint({ stage: 'verifying', message: '正在重新读取平台发布状态' });
     return outcome(await openSnapshot(page));
   } catch (error) {
@@ -282,7 +308,8 @@ export async function runCSDNPublish(context: BrowserContext, job: Job, hooks: H
     if (signal.aborted) return { status: 'cancelled', remote_id: id, error_code: 'cancelled', error_message: '浏览器操作已停止' };
     return readOnlyFailure('publish_unavailable', '无法安全完成平台发布设置');
   } finally {
-    signal.removeEventListener('abort', closePage);
+    signal.removeEventListener('abort', closePages);
+    await draftRecheckPage?.close().catch(() => {});
     await page?.close().catch(() => {});
     await context.unroute('**/*', gate).catch(() => {});
   }

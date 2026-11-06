@@ -89,6 +89,12 @@ func TestMaintainRetainsRetryableSnapshotAndExpiresTerminalData(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	for _, id := range []string{recentTerminal.ID, retainedTerminal.ID, unknown.ID} {
+		if _, err := s.pool.Exec(ctx, "UPDATE jobs SET record=jsonb_set(record,'{platform_markdown}',to_jsonb($2::text)) WHERE id=$1", id, "已转存的图文正文"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	s.now = func() time.Time { return now }
 	if err = s.Maintain(ctx); err != nil {
 		t.Fatal(err)
@@ -105,15 +111,15 @@ func TestMaintainRetainsRetryableSnapshotAndExpiresTerminalData(t *testing.T) {
 		t.Fatal("terminal snapshot was not expired", err)
 	}
 	unresolved, err := s.Get(ctx, unknown.ID)
-	if err != nil || unresolved.Markdown != unknown.Markdown {
+	if err != nil || unresolved.Markdown != unknown.Markdown || unresolved.PlatformMarkdown == "" {
 		t.Fatal("unknown snapshot was discarded", err)
 	}
 	cleared, err := s.Get(ctx, recentTerminal.ID)
-	if err != nil || cleared.Markdown != "" {
+	if err != nil || cleared.Markdown != "" || cleared.PlatformMarkdown != "" {
 		t.Fatal("terminal content exceeded 30-day retention", err)
 	}
 	kept, err := s.Get(ctx, retainedTerminal.ID)
-	if err != nil || kept.Markdown != retainedTerminal.Markdown {
+	if err != nil || kept.Markdown != retainedTerminal.Markdown || kept.PlatformMarkdown == "" {
 		t.Fatal("terminal content expired before 30 days", err)
 	}
 

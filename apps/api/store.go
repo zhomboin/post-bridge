@@ -534,7 +534,7 @@ func (s *Store) Action(ctx context.Context, id, action string, in ActionInput) (
 		if err = save(ctx, tx, r); err != nil {
 			return err
 		}
-		if err = appendLog(ctx, tx, r, "info", map[string]string{"cancel": "管理员请求停止任务", "retry": "管理员请求安全重试", "resume": "管理员恢复等待任务", "reconcile": "管理员请求只读核对", "resolve": "管理员保留草稿并人工结束任务"}[action], now); err != nil {
+		if err = appendLog(ctx, tx, r, "info", map[string]string{"cancel": "管理员请求停止任务", "retry": "管理员请求安全重试", "resume": "管理员恢复等待任务", "reconcile": "管理员请求只读核对", "resolve": "管理员保留平台现有状态并人工结束任务"}[action], now); err != nil {
 			return err
 		}
 		result = r.Job
@@ -693,7 +693,7 @@ func (s *Store) Maintain(ctx context.Context) error {
 			return err
 		}
 		// 仅清理不可重试终结记录的正文，未决和仍可重试的快照始终保留。
-		_, err = tx.Exec(ctx, "UPDATE jobs SET record=jsonb_set(record,'{markdown}','\"\"'::jsonb) WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome' NOT IN ('unknown','submitted') AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1", now.Add(-30*24*time.Hour))
+		_, err = tx.Exec(ctx, "UPDATE jobs SET record=jsonb_set(record - 'platform_markdown','{markdown}','\"\"'::jsonb) WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome' NOT IN ('unknown','submitted') AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1", now.Add(-30*24*time.Hour))
 		return err
 	})
 }

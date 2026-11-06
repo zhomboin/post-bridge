@@ -20,6 +20,7 @@ let context: BrowserContext;
 let origin: string;
 let mode = 'normal';
 let draftStatus = 2;
+let draftEditedDuringForm = false;
 let editorVisits = 0;
 const writes: Record<string, unknown>[] = [];
 const tagLookups: string[] = [];
@@ -89,9 +90,11 @@ beforeAll(async () => {
     } else if (url.pathname.endsWith('/getArticle')) {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ code: 200, data: {
-        article_id: mode === 'wrong-id' ? '456' : '123', title: job.title, markdowncontent: job.markdown, content: mode === 'changed-html-readback' ? '<p>其他内容</p>' : '<p>内容</p>', status: draftStatus, read_type: mode === 'wrong-visibility' ? 'private' : readType,
+        article_id: mode === 'wrong-id' ? '456' : '123', title: job.title, markdowncontent: job.markdown, content: mode === 'changed-html-readback' || draftEditedDuringForm ? '<p>其他内容</p>' : '<p>内容</p>', status: draftStatus, read_type: mode === 'wrong-visibility' ? 'private' : readType,
       } }));
     } else if (url.pathname.endsWith('/check-images')) {
+      if (mode === 'draft-published-during-form') draftStatus = 1;
+      if (mode === 'draft-edited-during-form') draftEditedDuringForm = true;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ code: 200, data: mode === 'image-check-failed' ? ['unexpected'] : [] }));
     } else if (url.pathname.endsWith('/search-recommend-tag')) {
@@ -125,7 +128,7 @@ afterAll(async () => {
   await browser?.close();
   await new Promise<void>(resolve => server?.close(() => resolve()));
 });
-beforeEach(() => { mode = 'normal'; draftStatus = 2; editorVisits = 0; writes.length = 0; tagLookups.length = 0; readType = 'public'; checkpoints.length = 0; timeline = []; });
+beforeEach(() => { mode = 'normal'; draftStatus = 2; draftEditedDuringForm = false; editorVisits = 0; writes.length = 0; tagLookups.length = 0; readType = 'public'; checkpoints.length = 0; timeline = []; });
 const adapter = () => new CSDNAdapter(context, { username: 'test-account', timeoutMs: 900 }, { origin, accountPath: '/account', editorPath: '/md/' });
 const hooks = { progress: async (checkpoint: Progress) => { checkpoints.push(checkpoint); if (checkpoint.external_started) timeline.push('checkpoint'); } };
 const run = (input = job) => adapter().run(input, hooks, new AbortController().signal);
@@ -133,7 +136,7 @@ const run = (input = job) => adapter().run(input, hooks, new AbortController().s
 describe('CSDN 正式发布模拟站', () => {
   it('核对已有草稿，持久化写入边界，只提交一次，重新打开确认已发布', async () => {
     expect(await run()).toMatchObject({ status: 'succeeded', remote_id: '123' });
-    expect(editorVisits).toBe(2);
+    expect(editorVisits).toBe(3);
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({ id: '123', status: 0, pubStatus: 'publish', Description: '文章摘要', tags: 'Go', template_id: 4, sync_git_code: 0 });
     expect(timeline).toEqual(['checkpoint', 'write']);
@@ -178,6 +181,13 @@ describe('CSDN 正式发布模拟站', () => {
       visibility: 'fans' as const, template: 'moyan' as const };
     expect(await run({ ...job, publish_options })).toMatchObject({ status: 'succeeded', remote_id: '123' });
     expect(writes[0]).toMatchObject({ categories: '已有专栏', creation_statement: 1, readType: 'read_need_fans', template_id: 3 });
+  });
+  it.each(['draft-published-during-form', 'draft-edited-during-form'])('表单填写后原稿已改变，阻止正式提交：%s', async value => {
+    mode = value;
+    expect(await run()).toMatchObject({ status: 'failed', error_code: 'publish_draft_mismatch', remote_id: '123' });
+    expect(editorVisits).toBe(2);
+    expect(writes).toEqual([]);
+    expect(timeline).toEqual([]);
   });
   it('副作用检查点失败时不会将原生请求转发到平台', async () => {
     await expect(adapter().run(job, { progress: async value => { if (value.external_started) throw new Error('lease lost'); } }, new AbortController().signal)).rejects.toThrow();

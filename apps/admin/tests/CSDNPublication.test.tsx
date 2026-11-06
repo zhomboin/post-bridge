@@ -163,3 +163,58 @@ it('非原创确认窗显示原文链接和已确认授权', async () => {
   expect(within(modal).getByText('已确认')).toBeTruthy();
   expect(within(modal).getByRole('button', { name: '确认发布' })).toBeTruthy();
 });
+
+it.each([
+  ['unknown', '已人工结束，发布结果未确认'],
+  ['submitted', '已人工结束，CSDN 已受理'],
+])('可人工结束 %s 发布任务并保留平台结果', async (outcome, label) => {
+  const job: Job = { ...publish, status: 'failed', outcome, external_started: true };
+  const jobPath = '/api/jobs/' + job.id;
+  let resolved = false;
+  const calls = openJob(job, ({ url }) => {
+    if (url === jobPath + '/resolve') {
+      resolved = true;
+      return json({ ...job, manual_resolved: true });
+    }
+    if (url === jobPath && resolved) return json({ ...job, manual_resolved: true });
+  });
+  const reconcile = await screen.findByRole('button', { name: '仅核对发布结果' });
+  expect((reconcile as HTMLButtonElement).disabled).toBe(false);
+  const disclosure = screen.getByText('人工结束发布任务');
+  expect(disclosure.closest('details')?.open).toBe(false);
+  fireEvent.click(disclosure);
+  const confirm = screen.getByRole<HTMLButtonElement>('button', { name: '保留平台状态并结束任务' });
+  expect(confirm.disabled).toBe(true);
+  fireEvent.click(screen.getByRole('checkbox', { name: /本任务浏览器停止/ }));
+  expect(confirm.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText('人工结束原因'), { target: { value: '  浏览器已停止，保留当前平台状态  ' } });
+  fireEvent.click(confirm);
+  await screen.findByText(label);
+  const writes = calls.filter(call => call.init?.method === 'POST');
+  expect(writes).toHaveLength(1);
+  expect(writes[0].url).toBe(jobPath + '/resolve');
+  expect(JSON.parse(String(writes[0].init?.body))).toEqual({
+    confirmed_browser_stopped: true,
+    note: '浏览器已停止，保留当前平台状态',
+  });
+  expect(screen.queryByRole('button', { name: '仅核对发布结果' })).toBeNull();
+});
+
+it('人工结束需要服务端验证空闲证明，并保留冲突后的原因', async () => {
+  const job: Job = { ...publish, status: 'failed', outcome: 'unknown', external_started: true };
+  openJob(job, ({ url }) => url.endsWith('/resolve') ? json({ message: '当前无法结束任务' }, 409) : undefined);
+  fireEvent.click(await screen.findByText('人工结束发布任务'));
+  fireEvent.click(screen.getByRole('checkbox', { name: /本任务浏览器停止/ }));
+  const note = screen.getByLabelText<HTMLTextAreaElement>('人工结束原因');
+  fireEvent.change(note, { target: { value: '保留当前状态' } });
+  fireEvent.click(screen.getByRole('button', { name: '保留平台状态并结束任务' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('浏览器空闲状态');
+  expect(note.value).toBe('保留当前状态');
+  expect(screen.getByText('发布结果待核对')).toBeTruthy();
+});
+
+it('正在执行的发布任务没有人工结束入口', async () => {
+  openJob({ ...publish, status: 'running', outcome: 'unknown', external_started: true });
+  await screen.findByText('发布结果待核对');
+  expect(screen.queryByText('人工结束发布任务')).toBeNull();
+});

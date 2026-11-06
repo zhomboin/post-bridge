@@ -168,6 +168,7 @@ export function useAction() {
 export function jobOutcome(job: Job) {
   if (job.kind === 'publish') {
     if (job.outcome === 'published') return '已发布到 CSDN';
+    if (job.manual_resolved) return job.outcome === 'submitted' ? '已人工结束，CSDN 已受理' : '已人工结束，发布结果未确认';
     if (job.outcome === 'submitted') return 'CSDN 已受理，等待发布结果';
     if (job.run_mode === 'reconcile' && ['queued', 'reconciling', 'running'].includes(job.status)) return '后台正在核对发布结果';
     if (job.outcome === 'unknown') return '发布结果待核对';

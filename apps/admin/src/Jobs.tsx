@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import ProcessTimeline from './ProcessTimeline';
 import ContentComparison from './ContentComparison';
+import ManualJobResolution, { manualResolutionConflictHint } from './ManualJobResolution';
 import { canReviewPublication, PublishDraftAction, PublishJobActions, publishedArticleURL } from './CSDNPublication';
 import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, isSourcePaused, jobHref, jobOutcome, queryPage, stageLabel, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
 
@@ -96,9 +97,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   const action = useAction();
   const [candidate, setCandidate] = useState(job.reconcile_candidate_id || '');
   const [loggedIn, setLoggedIn] = useState(false);
-  const [stopped, setStopped] = useState(false);
   const [cancelConfirmed, setCancelConfirmed] = useState(false);
-  const [note, setNote] = useState('');
   const [reconcileAccepted, setReconcileAccepted] = useState(false);
   useEffect(() => { setReconcileAccepted(false); }, [job]);
   const sourcePaused = isSourcePaused(job);
@@ -107,7 +106,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   const conflict = /conflict|mismatch/.test(job.error_code || '');
   async function perform(name: string, body: object = {}) {
     if (sourcePaused && ['resume', 'retry'].includes(name)) return;
-    const result = await action.run(signal => api<Job>('/api/jobs/' + encodeURIComponent(job.id) + '/' + name, { method: 'POST', body: JSON.stringify(body), signal }), name === 'resolve' ? '请先刷新当前状态；任务仍在执行，或服务尚未确认最近 45 秒内的浏览器空闲状态。' : undefined);
+    const result = await action.run(signal => api<Job>('/api/jobs/' + encodeURIComponent(job.id) + '/' + name, { method: 'POST', body: JSON.stringify(body), signal }), name === 'resolve' ? manualResolutionConflictHint : undefined);
     if (result) {
       if (name === 'reconcile') setReconcileAccepted(true);
       onUpdate();
@@ -132,11 +131,7 @@ function JobActions({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
     </div>
       {!job.remote_id && <label>候选草稿ID（可选，仅数字）<input aria-label="候选草稿ID（可选，仅数字）" maxLength={32} inputMode="numeric" value={candidate} disabled={action.pending || checking} onChange={event => setCandidate(event.target.value)} placeholder="可留空，由后台自动查找" /></label>}
       <button className="primary" disabled={action.pending || checking} onClick={reconcile}>{checking ? '正在自动核对…' : job.remote_id ? '仅核对既有草稿' : '重新自动核对'}</button>
-      <details><summary>无法匹配完整稿件</summary>
-        <label className="checkbox"><input type="checkbox" checked={stopped} onChange={event => setStopped(event.target.checked)} disabled={action.pending || checking} />我已确认本任务浏览器停止，并保留可能存在的草稿</label>
-        <label>人工结束原因<textarea rows={3} maxLength={500} value={note} onChange={event => setNote(event.target.value)} disabled={action.pending || checking} placeholder="说明保留草稿和结束任务的原因" /></label>
-        <button className="danger" disabled={!stopped || !note.trim() || action.pending || checking} onClick={() => void perform('resolve', { confirmed_browser_stopped: true, note: note.trim() })}>保留草稿并结束任务</button>
-      </details></>}
+      <ManualJobResolution disabled={action.pending || checking} onResolve={input => void perform('resolve', input)} /></>}
     {job.retry_allowed && !uncertain && !sourcePaused && <><button disabled={action.pending} onClick={() => void perform('retry')}>重试任务</button></>}
     {['queued', 'running'].includes(job.status) && !job.cancel_requested && <details><summary>取消此任务</summary><label className="checkbox"><input type="checkbox" checked={cancelConfirmed} onChange={event => setCancelConfirmed(event.target.checked)} />确认取消并保留可能已保存的草稿</label><button className="danger" disabled={!cancelConfirmed || action.pending} onClick={() => void perform('cancel')}>确认取消任务</button></details>}
     {action.pending && <p role="status">正在提交操作，请等待服务端确认…</p>}

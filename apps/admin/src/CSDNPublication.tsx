@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { IntegrationModal } from './Integrations';
+import ManualJobResolution, { manualResolutionConflictHint } from './ManualJobResolution';
 import { csdnPublishOptionGroups, hasCSDNOriginalURL } from './CSDNPublishSettings';
 import { RouteLink, errorText, isSourcePaused, jobHref, useAction, useWorkspace, type Job } from './runtime';
 import type { CSDNPublishOptions } from './integration-types';
@@ -108,20 +109,26 @@ export function PublishJobActions({ job, onUpdate }: { job: Job; onUpdate: () =>
   const { api } = useWorkspace();
   const action = useAction();
   const [accepted, setAccepted] = useState(false);
+  const [resolved, setResolved] = useState(false);
   useEffect(() => { setAccepted(false); }, [job]);
   const sourcePaused = isSourcePaused(job);
   const needsReconciliation = job.outcome === 'unknown' || job.outcome === 'submitted';
   const active = ['queued', 'reconciling', 'running'].includes(job.status);
+  const canResolve = needsReconciliation && job.external_started && ['reconciling', 'waiting_user', 'failed'].includes(job.status);
   const canResume = job.status === 'waiting_user' && job.outcome === 'not_submitted' &&
     !job.external_started && !sourcePaused && job.run_mode !== 'reconcile';
   const canCancel = (job.status === 'queued' || job.status === 'waiting_user') &&
     job.outcome === 'not_submitted' && !job.external_started;
-  if (!needsReconciliation && !canResume && !canCancel && !sourcePaused && !active) return null;
-  async function perform(name: 'reconcile' | 'resume' | 'cancel') {
+  if (job.manual_resolved || resolved || (!needsReconciliation && !canResume && !canCancel && !sourcePaused && !active)) return null;
+  async function perform(name: 'reconcile' | 'resume' | 'cancel' | 'resolve', body: object = {}) {
     const result = await action.run(signal => api<Job>('/api/jobs/' + encodeURIComponent(job.id) + '/' + name, {
-      method: 'POST', body: '{}', signal,
-    }));
-    if (result) { setAccepted(true); onUpdate(); }
+      method: 'POST', body: JSON.stringify(body), signal,
+    }), name === 'resolve' ? manualResolutionConflictHint : undefined);
+    if (result) {
+      if (name === 'resolve') setResolved(true);
+      else setAccepted(true);
+      onUpdate();
+    }
   }
   return <section className="surface detail-actions-surface">
     <div className="surface-header"><h2>任务处理</h2></div>
@@ -129,8 +136,10 @@ export function PublishJobActions({ job, onUpdate }: { job: Job; onUpdate: () =>
       {needsReconciliation ? <>
         {job.status === 'waiting_user' && <RouteLink className="button" href="/account?tab=settings">登录 CSDN</RouteLink>}
         <button type="button" className="primary" disabled={action.pending || active || accepted} onClick={() => void perform('reconcile')}>
-          {action.pending || active || accepted ? '正在核对发布结果…' : '仅核对发布结果'}
+          {active || accepted ? '正在核对发布结果…' : '仅核对发布结果'}
         </button>
+        {canResolve && <ManualJobResolution publication disabled={action.pending || accepted}
+          onResolve={input => void perform('resolve', input)} />}
       </> : canResume ? <>
         <RouteLink className="button" href="/account?tab=settings">登录 CSDN</RouteLink>
         <button type="button" className="primary" disabled={action.pending || accepted} onClick={() => void perform('resume')}>登录完成，继续发布</button>
