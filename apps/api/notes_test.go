@@ -217,11 +217,51 @@ func TestPlatformAccountHTTPIsolation(t *testing.T) {
 	if w = request("POST", "/internal/worker/claim", `{"worker_id":"xhs"}`, syntheticXHS().WorkerToken, false, false); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	var claimed Claim
+	if err = json.Unmarshal(w.Body.Bytes(), &claimed); err != nil {
+		t.Fatal(err)
+	}
+	completion, _ := json.Marshal(CompleteInput{LeaseToken: claimed.LeaseToken, Status: "waiting_user", ErrorCode: "needs_login"})
+	if w = request("POST", "/internal/worker/jobs/"+job.ID+"/complete", string(completion), syntheticXHS().WorkerToken, false, false); w.Code != 200 {
+		t.Fatal("wait login", w.Code, w.Body.String())
+	}
 	for _, path := range []string{"/api/accounts/xhs-main/notes/upload", "/api/accounts/xhs-main/notes/draft", "/api/accounts/xhs-main/publish"} {
 		if w = request("POST", path, "{}", "", true, true); w.Code != 404 {
 			t.Fatal("unexpected write route", w.Code)
 		}
 	}
+	h, err = NewHandler(ctx, Config{Store: s, AdminUsername: "admin", AdminPassword: "test-password-long", WorkerToken: strings.Repeat("w", 32), Origin: "http://localhost"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w = request("GET", "/api/accounts", "", "", true, false)
+	var disabled struct {
+		Items []struct {
+			Account Account `json:"account"`
+		} `json:"items"`
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &disabled); err != nil || w.Code != 200 || len(disabled.Items) != 1 || disabled.Items[0].Account.ID != "csdn-main" {
+		t.Fatal("disabled account listed", w.Code, err)
+	}
+	for _, path := range []string{"/api/accounts/xhs-main", "/api/accounts/xhs-main/notes"} {
+		if w = request("GET", path, "", "", true, false); w.Code != 404 {
+			t.Fatal("disabled account readable", w.Code)
+		}
+	}
+	if w = request("POST", "/api/accounts/xhs-main/notes/sync", `{"request_id":"disabled"}`, "", true, true); w.Code != 404 {
+		t.Fatal("disabled task created", w.Code)
+	}
+	if w = request("POST", "/internal/worker/claim", `{"worker_id":"disabled-worker"}`, syntheticXHS().WorkerToken, false, false); w.Code != 401 {
+		t.Fatal("disabled worker authorized", w.Code)
+	}
+	if w = request("POST", "/api/jobs/"+job.ID+"/resume", "{}", "", true, true); w.Code != 409 {
+		t.Fatal("disabled task resumed", w.Code)
+	}
+	accounts, err := s.Accounts(ctx)
+	if err != nil || len(accounts) != 2 {
+		t.Fatal("disabled account metadata deleted", err)
+	}
+
 }
 func TestPlatformAccountsPrivateConfig(t *testing.T) {
 	dir := t.TempDir()

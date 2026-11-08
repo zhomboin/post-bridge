@@ -85,6 +85,8 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 
 笔记返回 items、total、page、page_size、snapshot 和 sync_job。snapshot 为 null 表示从未同步，空 items 且 snapshot 非空表示已同步空账号。笔记含 id、title、status、platform_status、posted_at、views、likes、comments、favorites。时间可为空，统计可为 null；未知状态保持 unknown。无正文、上传或发布链接。
 
+账号列表和账号专属路由仅开放当前配置的账号。停用账号的专属路由返回 404，重试或恢复任务返回 409；历史任务和本地快照不删除。
+
 每个账号使用不同执行器凭据，服务端按凭据决定可领取与上报的账号；客户端不能通过请求参数更改归属。sync_notes 成功上报需同时包含 account_identity 与 notes，二者 username、user_id 必须匹配任务冻结身份和当前绑定。仅完整、未取消且租约有效的结果可原子替换快照。异常不会覆盖旧快照；跨账号上报拒绝。
 
 ## 账号文章契约

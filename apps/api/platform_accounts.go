@@ -121,7 +121,7 @@ func accountCapabilities(a Account) map[string]bool {
 	return map[string]bool{"check_login": true, "sync_articles": a.Platform == "csdn", "read_article": a.Platform == "csdn", "sync_notes": a.Platform == "xiaohongshu", "remote_login": a.Platform == "csdn", "save_draft": a.Platform == "csdn", "publish": a.Platform == "csdn"}
 }
 func (h *handler) platformAccountRoutes() {
-	h.mux.HandleFunc("GET /api/accounts", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/accounts", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		accounts, err := h.store.Accounts(r.Context())
 		if err != nil {
 			replyError(w, err)
@@ -129,11 +129,14 @@ func (h *handler) platformAccountRoutes() {
 		}
 		items := []map[string]any{}
 		for _, a := range accounts {
+			if !h.configuredAccount(a.ID) {
+				continue
+			}
 			items = append(items, map[string]any{"account": a, "capabilities": accountCapabilities(a)})
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))
-	h.mux.HandleFunc("GET /api/accounts/{account}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/accounts/{account}", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		a, err := h.store.AccountByID(r.Context(), r.PathValue("account"))
 		if err != nil {
 			replyError(w, err)
@@ -141,7 +144,7 @@ func (h *handler) platformAccountRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"account": a, "capabilities": accountCapabilities(a)})
 	}))
-	h.mux.HandleFunc("POST /api/accounts/{account}/check", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/accounts/{account}/check", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			RequestID string `json:"request_id"`
 		}
@@ -159,7 +162,7 @@ func (h *handler) platformAccountRoutes() {
 		}
 		writeJSON(w, status, job)
 	}))
-	h.mux.HandleFunc("GET /api/accounts/{account}/notes", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/accounts/{account}/notes", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		page, size, ok := pagination(w, r)
 		if !ok {
 			return
@@ -171,7 +174,7 @@ func (h *handler) platformAccountRoutes() {
 		}
 		writeJSON(w, 200, out)
 	}))
-	h.mux.HandleFunc("POST /api/accounts/{account}/notes/sync", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/accounts/{account}/notes/sync", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			RequestID string `json:"request_id"`
 		}
@@ -195,4 +198,23 @@ func jobAccountMatches(ctx context.Context, tx pgx.Tx, r *record) (bool, error) 
 	var current, native, platform string
 	err := tx.QueryRow(ctx, "SELECT username,native_user_id,platform FROM account WHERE id=$1", r.AccountID).Scan(&current, &native, &platform)
 	return current == r.AccountUsername && current != "" && platform == r.Platform && (platform != "xiaohongshu" || native == r.AccountNativeID), err
+}
+
+func (h *handler) configuredAccount(id string) bool {
+	for _, accountID := range h.workerAccounts {
+		if accountID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *handler) platformAccountAdmin(next func(http.ResponseWriter, *http.Request, session)) http.HandlerFunc {
+	return h.admin(func(w http.ResponseWriter, r *http.Request, current session) {
+		if id := r.PathValue("account"); id != "" && !h.configuredAccount(id) {
+			fail(w, http.StatusNotFound, "not_found", "未找到已配置的平台账号")
+			return
+		}
+		next(w, r, current)
+	})
 }

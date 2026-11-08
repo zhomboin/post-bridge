@@ -6,7 +6,7 @@
 
 命令逐条执行，失败后先排查，不继续后续步骤。“〈…〉”全部替换为目标环境值；真实账号、地址、目录、连接和密钥只保存在目标机器的私有配置中。安装、停止、启动、升级及 Nginx 重载会修改系统或影响服务，应由管理员确认目标、备份及操作时机后执行。
 
-管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.2，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg、远程桌面或模型密钥。
+管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.10，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg、远程桌面或模型密钥。
 
 | 操作 | 命令 | 行为 |
 | --- | --- | --- |
@@ -309,7 +309,7 @@ curl --fail --show-error '〈PUBLIC_ORIGIN 的 HTTPS 地址〉/healthz'
 sudo ./scripts/ubuntu-deploy.sh upgrade --config '〈仓库外私有配置文件〉'
 ```
 
-upgrade 自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
+upgrade 会下载并校验 Go 1.26.10，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
 
 安装器不会覆盖已存在的 /etc/post-bridge/nginx.conf，也不会更新启用站点；仅当本次需要调整 Nginx 时，人工核对模板并编辑实际站点，再校验和重载：
 
@@ -349,7 +349,7 @@ sudo journalctl --unit nginx --lines 100 --no-pager
 | 位置 | 所有权与用途 |
 | --- | --- |
 | /opt/post-bridge/releases 与 current | root 管理的代码快照及当前指向；服务不能改写代码 |
-| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.2；下载校验后使用 |
+| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.10；下载校验后使用 |
 | /etc/post-bridge | root 私有配置目录，配置及服务环境文件 0600 |
 | /var/lib/post-bridge/api | 独立 API 用户的 0700 目录；后台密码与内部密钥 0600 |
 | /var/lib/post-bridge/worker/profile | 独立执行器用户的 0700 持久浏览器目录；升级保留，不与本地登录助手或其他项目共享 |

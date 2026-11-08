@@ -39,7 +39,7 @@ git status --short
 
 ### 2. 准备基础工具
 
-固定环境为 Ubuntu 24.04、Python 3.12、Node.js 22.22.1、npm 10.9.4、Go 1.26.2、PostgreSQL 16 和 Playwright 1.64.1。以下工具下载命令面向 x86_64 WSL；先确认架构。已有匹配工具时跳过对应安装步骤。
+固定环境为 Ubuntu 24.04、Python 3.12、Node.js 22.22.1、npm 10.9.4、Go 1.26.10、PostgreSQL 16 和 Playwright 1.64.1。以下工具下载命令面向 x86_64 WSL；先确认架构。已有匹配工具时跳过对应安装步骤。
 
 ```bash
 uname -m
@@ -73,22 +73,24 @@ npm --version
 
 ### 4. 安装固定 Go
 
-下载归档及官方版本目录。用 less 查看格式化后的目录，找到 version 为 go1.26.2、filename 为 go1.26.2.linux-amd64.tar.gz 的 sha256，按 q 退出，再输入该摘要进行校验。
+模块最低工具链要求为 Go 1.26.10，本地启动器、服务器安装器及 CI 使用同一补丁版本。官方[兼容性说明](https://go.dev/doc/go1compat)以源码兼容为原则；升级后需重新构建，[补丁发布说明](https://go.dev/doc/devel/release#go1.26.0)包含标准库与证书校验修复。
+
+下载归档及官方版本目录。用 less 查看格式化后的目录，找到 version 为 go1.26.10、filename 为 go1.26.10.linux-amd64.tar.gz 的 sha256，按 q 退出，再输入该摘要进行校验。
 
 ```bash
 cd "$PB_TOOLS/downloads"
-curl --fail --location --output go1.26.2.linux-amd64.tar.gz https://go.dev/dl/go1.26.2.linux-amd64.tar.gz
+curl --fail --location --output go1.26.10.linux-amd64.tar.gz https://go.dev/dl/go1.26.10.linux-amd64.tar.gz
 curl --fail --location --output go-downloads.json 'https://go.dev/dl/?mode=json&include=all'
 python3 -m json.tool go-downloads.json | less
 read -r -p '请输入上述 Go 文件的官方 SHA-256：' PB_GO_SHA256
-printf '%s  %s\n' "$PB_GO_SHA256" go1.26.2.linux-amd64.tar.gz | sha256sum --check
-install -d -m 755 "$PB_TOOLS/go-1.26.2"
-tar --extract --gzip --file go1.26.2.linux-amd64.tar.gz --strip-components=1 --directory "$PB_TOOLS/go-1.26.2"
-export PATH="$PB_TOOLS/go-1.26.2/bin:$PATH"
+printf '%s  %s\n' "$PB_GO_SHA256" go1.26.10.linux-amd64.tar.gz | sha256sum --check
+install -d -m 755 "$PB_TOOLS/go-1.26.10"
+tar --extract --gzip --file go1.26.10.linux-amd64.tar.gz --strip-components=1 --directory "$PB_TOOLS/go-1.26.10"
+export PATH="$PB_TOOLS/go-1.26.10/bin:$PATH"
 go version
 ```
 
-输出应包含 go1.26.2 和 linux/amd64。工具下载缓存可留在私有工具目录，不属于项目运行数据。
+输出应包含 go1.26.10 和 linux/amd64。工具下载缓存可留在私有工具目录，不属于项目运行数据。
 
 ### 5. 设置当前终端的工具路径
 
@@ -96,7 +98,7 @@ go version
 
 ```bash
 export PB_TOOLS="$HOME/.local/share/post-bridge/tools"
-export PATH="$PB_TOOLS/node-v22.22.1-linux-x64/bin:$PB_TOOLS/go-1.26.2/bin:$PATH"
+export PATH="$PB_TOOLS/node-v22.22.1-linux-x64/bin:$PB_TOOLS/go-1.26.10/bin:$PATH"
 export POST_BRIDGE_PG_BIN=/usr/lib/postgresql/16/bin
 cd '〈WSL 源码目录〉'
 command -v node npm go python3
@@ -231,11 +233,12 @@ tar --create --gzip --file "$PB_BACKUP_DIR/account.tar.gz" --directory "$(dirnam
 git status --short
 git switch main
 git pull --ff-only origin main
+go version
 npm ci --no-audit --no-fund
 npx --no-install playwright install --with-deps chromium
 ```
 
-只修改代码时不必拉取；只修改配置时不必重装依赖。私有配置在本机编辑，不提交到仓库：
+更新后确认 Go 为 1.26.10；工具缺失或版本不符时，先按本页固定 Go 安装步骤准备新工具并重新设置 PATH，再继续构建。只修改代码时不必拉取；只修改配置时不必重装依赖。私有配置在本机编辑，不提交到仓库：
 
 ```bash
 nano "$PB_STATE/runtime.json"

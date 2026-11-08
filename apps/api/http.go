@@ -386,6 +386,17 @@ func (h *handler) routes() {
 				replyError(w, ErrInvalid)
 				return
 			}
+			if action == "resume" || action == "retry" {
+				existing, err := h.store.Get(r.Context(), r.PathValue("id"))
+				if err != nil {
+					replyError(w, err)
+					return
+				}
+				if !h.configuredAccount(existing.AccountID) {
+					fail(w, http.StatusConflict, "account_disabled", "账号未配置，请先恢复私有账号配置")
+					return
+				}
+			}
 			job, err := h.store.Action(r.Context(), r.PathValue("id"), action, in)
 			if err != nil {
 				replyError(w, err)

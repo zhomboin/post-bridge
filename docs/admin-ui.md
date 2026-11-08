@@ -143,5 +143,6 @@
 | 固定 CSDN 工作台 | [账号选择与隔离视图](../apps/admin/src/PlatformAccount.tsx) | 同一后台管理两个平台，避免串号 |
 | 文章模型与草稿操作 | [小红书笔记只读列表](../apps/admin/src/XiaohongshuAccount.tsx) | 仅展示本次开放能力 |
 | 固定平台任务标签 | [按任务显示平台](../apps/admin/src/Jobs.tsx) | 明确检查与同步的账号归属 |
+| 停用账号的旧链接 | [显示未配置选项并可切回 CSDN](../apps/admin/src/PlatformAccount.tsx) | 避免选项与页面账号不一致 |
 
 合成账号端到端用例已检查 1440、390、320 视口、键盘选择、减少动态效果、搜索与分页。窄屏表格在内部横向滚动，页面不整体溢出；截图由[多平台用例](../tests/e2e/platform-accounts.spec.ts)生成并由 CI 保存，不包含真实账号。

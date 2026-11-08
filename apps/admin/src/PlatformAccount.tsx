@@ -64,10 +64,56 @@ function CSDNAccount({ picker }: { picker: ReactNode }) {
 
 export default function PlatformAccount() {
   const { route, navigate } = useWorkspace();
-  const accounts = useResource<{ items: { account: Account; capabilities: Record<string, boolean> }[] }>('/api/accounts');
+  const accounts = useResource<{
+    items: { account: Account; capabilities: Record<string, boolean> }[];
+  }>('/api/accounts');
   const id = new URLSearchParams(route.split('?')[1]).get('account') || 'csdn-main';
-  const selected = accounts.data?.items.find(item => item.account.id === id)?.account;
-  const picker = <label className="account-picker">平台账号<select aria-label="选择平台账号" value={id} onChange={event => navigate('/account?account=' + encodeURIComponent(event.target.value))}>{(accounts.data?.items || [{ account: { id: 'csdn-main', platform: 'csdn', display_name: 'CSDN', username: '' } }]).map(({ account }) => <option key={account.id} value={account.id}>{account.platform === 'xiaohongshu' ? '小红书' : 'CSDN'} · {account.display_name || account.username || account.id}</option>)}</select></label>;
-  if (id !== 'csdn-main' && !selected) return <div className="page"><div className="page-heading"><h1>平台账号</h1>{picker}</div><ResourceError error={accounts.error} /><Empty loading={accounts.loading}>未找到平台账号</Empty></div>;
-  return <><ResourceError error={accounts.error} stale={!!accounts.data} />{selected?.platform === 'xiaohongshu' ? <XiaohongshuAccount key={id} id={id} picker={picker} /> : <CSDNAccount key={id} picker={picker} />}</>;
+  const selected = accounts.data?.items.find((item) => item.account.id === id)?.account;
+  const picker = (
+    <label className="account-picker">
+      平台账号
+      <select
+        aria-label="选择平台账号"
+        value={id}
+        onChange={(event) => navigate('/account?account=' + encodeURIComponent(event.target.value))}
+      >
+        {id !== 'csdn-main' && accounts.data && !selected && (
+          <option value={id} disabled>
+            账号未配置
+          </option>
+        )}
+        {(
+          accounts.data?.items || [
+            { account: { id: 'csdn-main', platform: 'csdn', display_name: 'CSDN', username: '' } },
+          ]
+        ).map(({ account }) => (
+          <option key={account.id} value={account.id}>
+            {account.platform === 'xiaohongshu' ? '小红书' : 'CSDN'} ·{' '}
+            {account.display_name || account.username || account.id}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  if (id !== 'csdn-main' && !selected)
+    return (
+      <div className="page">
+        <div className="page-heading">
+          <h1>平台账号</h1>
+          {picker}
+        </div>
+        <ResourceError error={accounts.error} />
+        <Empty loading={accounts.loading}>未找到平台账号</Empty>
+      </div>
+    );
+  return (
+    <>
+      <ResourceError error={accounts.error} stale={!!accounts.data} />
+      {selected?.platform === 'xiaohongshu' ? (
+        <XiaohongshuAccount key={id} id={id} picker={picker} />
+      ) : (
+        <CSDNAccount key={id} picker={picker} />
+      )}
+    </>
+  );
 }
