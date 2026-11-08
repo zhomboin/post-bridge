@@ -8,7 +8,7 @@ Ubuntu systemd 安装器、升级与停止入口及 HTTPS 模板已实现，见[
 
 前置：B01、B03、B08，正式切换等待 C、D 通过。
 
-实际部署入口为 [ubuntu_deploy.py](../../scripts/ubuntu_deploy.py)、[systemd 单元](../../deploy/systemd)、[Nginx 模板](../../deploy/nginx)和[部署说明](../ubuntu-deployment.md)。
+实际部署入口为 [ubuntu-deploy.sh](../../scripts/ubuntu-deploy.sh)、[systemd 单元](../../deploy/systemd)、[Nginx 模板](../../deploy/nginx)和[部署说明](../ubuntu-deployment.md)。
 
 - [x] 实现可选来源环境/服务配置、API 私有存储密钥生成与升级保留，接入配置不传 worker；本地新增配置用例通过。
 - [ ] 在目标环境验证首次启用、密钥缺失、禁用再启用、升级与受控恢复；代码完成不替代生产演练。
@@ -37,7 +37,7 @@ Ubuntu systemd 安装器、升级与停止入口及 HTTPS 模板已实现，见[
 
 ## E03：备份恢复、密钥轮换与升级回退
 
-前置：E01、E02、D03。拟建：`scripts/backup.ps1`、`scripts/restore.ps1`、`scripts/upgrade.ps1`、`tests/integration/restore.test.ts`；维护运维及安全文档。
+前置：E01、E02、D03。拟建：`scripts/backup.sh`、`scripts/restore.sh`、`scripts/upgrade.sh`、`tests/integration/restore.test.ts`；维护运维及安全文档。
 
 - [ ] 列出数据库、必要浏览器会话文件、加密密钥及配置的独立受限备份方式；备份不进入仓库或普通日志。
 - [ ] 在隔离环境恢复备份并验证来源、账号、任务与外站关联；密钥缺失或会话过期明确提示，不能将仅恢复数据库判定为全部恢复。

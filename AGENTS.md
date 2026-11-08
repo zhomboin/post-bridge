@@ -9,7 +9,7 @@
 - apps/worker/src：Node.js/Playwright 固定 CSDN 执行器。
 - tests/e2e、tests/runtime：跨服务与启动安全测试；单元测试随应用组织。
 - contracts/cms.openapi.yaml：外部接入机器契约；tests/fixtures/integration-contract.json：共享合成签名与指纹向量。
-- scripts：PowerShell、WSL 和 Ubuntu 部署入口；.github/workflows：CI。
+- scripts：WSL 本地开发和 Ubuntu 部署的 Shell 入口；.github/workflows：CI。
 
 来源接入开放 CSDN Markdown save_draft，图源域名配置启用后支持转存批准的正文图片，管理员可从绑定账号和有效来源的已核对草稿发起独立发布，外部接入仍只开放保存草稿。接口以 [外部手册](docs/external-integration.md) 和机器契约为准。调用方按固定接口和签名协议接入，无需反向服务；调用方数据库及可靠发送由其自行实现，CMS 事务发件箱仅是建议。可选接入配置与存储密钥仅传给 API，worker 不接收；运行数据与凭据置于仓库外私有配置。
 
@@ -17,9 +17,9 @@
 
 ## 开发、构建与测试
 
-环境固定 Linux Node.js 22.22.1、npm 10.9.4、Go 1.26.2、PostgreSQL 16 与 Playwright 1.64.1。完整入口见 [开发说明](docs/development.md)。Windows PowerShell 可执行 `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1` 构建并启动，使用 scripts/stop.ps1 安全停止。
+环境固定 Linux Node.js 22.22.1、npm 10.9.4、Go 1.26.2、PostgreSQL 16 与 Playwright 1.64.1。完整入口见 [开发说明](docs/development.md)。在 WSL 或 Ubuntu 的 Bash 中执行 scripts/dev.sh 构建并启动，使用 scripts/stop.sh 安全停止。服务器常驻部署使用 scripts/ubuntu-deploy.sh。
 
-Linux 工作区的 `npm run build`、`npm run typecheck`、`npm test` 分别构建、检查类型和运行应用用例；Go 使用 go test、go vet。不要在 PowerShell 中用 Bash 的串联符，命令分开执行。任务结束关闭本次临时进程、服务和容器，保留无关服务。
+Linux 工作区的 `npm run build`、`npm run typecheck`、`npm test` 分别构建、检查类型和运行应用用例；Go 使用 go test、go vet。项目入口使用 Bash，命令示例按 Linux Shell 编写。任务结束关闭本次临时进程、服务和容器，保留无关服务。
 
 ## 编码与测试规范
 

@@ -36,7 +36,7 @@ API 是数据库唯一业务写入入口。执行器通过独立内部身份领�
 | [外部契约](../contracts/cms.openapi.yaml)、[共享向量](../tests/fixtures/integration-contract.json) | 当前来源接口和可校验合成数据 |
 | [tests/e2e](../tests/e2e)、[tests/runtime](../tests/runtime) | 跨服务、浏览器与启动部署安全验证 |
 | [deploy/systemd](../deploy/systemd)、[deploy/nginx](../deploy/nginx)、[Ubuntu 安装器](../scripts/ubuntu_deploy.py) | 常驻单元、HTTPS 入口与私有配置 |
-| [scripts](../scripts)、[CI](../.github/workflows/ci.yml) | PowerShell/WSL 入口、清理和全量验证 |
+| [scripts](../scripts)、[CI](../.github/workflows/ci.yml) | Linux Shell 入口、清理和全量验证 |
 | [docs](.) | 当前接口、能力、部署、运维、验收与剩余计划 |
 
 ## 顺序、依赖与阶段关口
@@ -98,15 +98,15 @@ X01 官方入口、X02 指定账号登录与浏览器重启会话恢复已实测
 
 每项开发先补能复现行为、边界或异常的用例，确认失败原因，再实现并运行受影响范围；配置和文档只做对应静态检查。单次任务可拆成多个小提交，提交前核对相关文档。GitHub CI 承担全量类型检查、单元、集成、模拟端到端及构建，真实平台发布不进入自动 CI。
 
-当前 PowerShell 入口、工具环境和使用方式见[开发说明](development.md)。入口已可执行；命令单独运行，失败立即停止，不使用 Bash 串联语法。
+当前 Shell 入口、工具环境和使用方式见[开发说明](development.md)。入口在 WSL 或 Ubuntu 中直接执行，失败立即停止。
 
 | 当前入口 | 用途 |
 | --- | --- |
-| scripts/setup.ps1 | 初始化私有配置与本项目数据库 |
-| scripts/dev.ps1 | 构建并启动本地后台、API 和执行器 |
-| scripts/login-csdn.ps1 | 在 WSLg 隔离窗口人工登录指定账号 |
-| scripts/status.ps1、scripts/stop.ps1 | 查看状态、安全关闭本项目服务与登录助手 |
-| scripts/test.ps1 | Go 与 Node 测试集入口；日常优先在对应应用选择具体用例 |
+| scripts/setup.sh | 初始化私有配置与本项目数据库 |
+| scripts/dev.sh | 构建并启动本地后台、API 和执行器 |
+| scripts/login-csdn.sh | 在 WSLg 或 Linux 图形窗口人工登录指定账号 |
+| scripts/status.sh、scripts/stop.sh | 查看状态、安全关闭本项目服务与登录助手 |
+| scripts/test.sh | Go 与 Node 测试集入口；日常优先在对应应用选择具体用例 |
 | .github/workflows/ci.yml | Linux 上执行全量类型检查、测试、E2E 与构建，不连接真实平台 |
 
 局部验证使用各应用测试工具的文件或名称过滤，只执行改动可能影响的范围；不得用完整集替代必要的目标定位。真实平台验收按单独授权进行，不复用 CI 开关。容器和生产验收继续按对应任务实施；无桌面远程验证的当前证据见[验收记录](acceptance.md)。

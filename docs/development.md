@@ -8,22 +8,22 @@
 
 ## 环境与入口
 
-在 Windows PowerShell 中从项目根目录运行。使用 Ubuntu WSL、Python 3.12、Linux Node.js 22.22.1、npm 10.9.4、Go 1.26.2、PostgreSQL 16 和 Playwright 1.64.1；具体依赖由锁文件固定。需准备 Chromium 与对应 Linux 运行库，中文显示需 Noto CJK 字体。
+在 WSL 或 Ubuntu 的 Bash 中从项目根目录运行。使用 Python 3.12、Linux Node.js 22.22.1、npm 10.9.4、Go 1.26.2、PostgreSQL 16 和 Playwright 1.64.1；具体依赖由锁文件固定。需准备 Chromium 与对应 Linux 运行库，中文显示需 Noto CJK 字体。
 
 启动器优先使用当前用户私有工具目录中的固定工具，其次使用 Linux PATH；不会调用 Windows npm。工具安装位置见 [runtime.py](../scripts/runtime.py)。可通过 POST_BRIDGE_PG_BIN 指定 PostgreSQL 服务端工具目录。浏览器可在私有运行配置中用 PLAYWRIGHT_EXECUTABLE_PATH 指定。
 
-| PowerShell 命令 | 作用 |
+| Shell 入口 | 作用 |
 | --- | --- |
-| `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1` | 初始化私有配置与独立本地数据库 |
-| `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1` | 构建后台、API 和执行器，启动服务 |
-| `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/status.ps1` | 查看本项目进程状态 |
-| `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/stop.ps1` | 依次安全停止执行器、API 和独立数据库 |
-| `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/login-csdn.ps1` | 暂停执行器，在 WSLg 隔离窗口人工登录 |
-| `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1` | 执行 Go 与 Node 完整测试，日常按改动范围选择用例 |
+| [scripts/setup.sh](../scripts/setup.sh) | 初始化私有配置与独立本地数据库 |
+| [scripts/dev.sh](../scripts/dev.sh) | 构建后台、API 和执行器，启动服务 |
+| [scripts/status.sh](../scripts/status.sh) | 查看本项目进程状态 |
+| [scripts/stop.sh](../scripts/stop.sh) | 依次安全停止登录助手、执行器、API 和独立数据库 |
+| [scripts/login-csdn.sh](../scripts/login-csdn.sh) | 停止执行器，在 WSLg 或 Linux 图形窗口人工登录 |
+| [scripts/test.sh](../scripts/test.sh) | 执行 Go API 与 Node 工作区测试，不含 E2E 和 Python 运行安全测试；日常选择受影响用例 |
 
-ExecutionPolicy 仅作用于本次 PowerShell 进程，解决 UNC 脚本签名限制，不修改系统策略。首次初始化前，将 CSDN_USERNAME、CSDN_DISPLAY_NAME 设为目标账号；如通过 Windows 调用 WSL，需使用 WSLENV 传递这两个变量，也可直接在 WSL 设置。已有私有配置会复用。修改代码或配置后先停止服务，再运行启动入口，使新构建生效。
+入口直接在当前 Linux 环境执行，不调用 Windows 工具。Shell 入口通过 [invoke-runtime.sh](../scripts/invoke-runtime.sh) 调用 Python 运行管理器，参数原样传递。首次初始化前，在 Linux 环境设置 CSDN_USERNAME、CSDN_DISPLAY_NAME 为目标账号；已有私有配置会复用。初始化会启动独立数据库。修改代码或配置后先停止服务，再运行启动入口，使新构建生效。测试入口需要已有私有配置和运行中的独立数据库。
 
-管理地址、数据库端口、管理员账号和状态目录以本地私有配置为准，文档中分别使用〈管理地址〉、〈数据库端口〉、〈管理员账号〉和〈私有状态目录〉。密码只写入启动结果列出的私有文件，不在终端打印；在本机读取后输入登录表单，禁止粘贴到聊天或提交 Git。状态目录权限 0700，凭据文件 0600；可用 StateDir 参数指定专属状态目录。
+管理地址、数据库端口、管理员账号和状态目录以本地私有配置为准，文档中分别使用〈管理地址〉、〈数据库端口〉、〈管理员账号〉和〈私有状态目录〉。密码只写入启动结果列出的私有文件，不在终端打印；在本机读取后输入登录表单，禁止粘贴到聊天或提交 Git。状态目录权限 0700，凭据文件 0600；可用 --state 参数指定专属状态目录，相关入口需使用同一目录；dev.sh 可用 --skip-build 复用已有构建，--help 查看运行管理器参数。
 
 ## 可选外部来源配置
 
@@ -35,7 +35,7 @@ ExecutionPolicy 仅作用于本次 PowerShell 进程，解决 UNC 脚本签名�
 
 ## 草稿流程
 
-1. 登录管理后台，在“平台账号”的“账号设置”页签点击“开始远程登录”，在弹窗内扫码、填写手机号和验证码或拖动验证；服务器无需桌面。手机号不含国家区号；填入后在官方画面获取短信或确认登录。指定账号确认后关闭登录会话并恢复等待任务，弹窗保留结果。关闭按钮或 Escape 结束未完成会话并清空输入。本地登录助手作为可选方式，使用后重启执行器并手动继续。
+1. 登录管理后台，在“平台账号”的“账号设置”页签点击“开始远程登录”，在弹窗内扫码、填写手机号和验证码或拖动验证；服务器无需桌面。手机号不含国家区号；填入后在官方画面获取短信或确认登录。指定账号确认后关闭登录会话并恢复等待任务，弹窗保留结果。关闭按钮或 Escape 结束未完成会话并清空输入。本地登录助手作为可选方式，需要 WSLg 或 Linux 图形环境，使用后通过开发入口重启执行器并手动继续；无桌面服务器使用后台远程登录。
 2. 新建草稿，检查标题、Markdown 预览及范围提示，提交后保留任务详情链接。请求标识与内容快照一起去重，同标识不同内容会被拒绝。
 3. 执行器领取任务，核对账号后打开编辑器、记录草稿 ID、填写并确认标题同步，核对原生请求标题后保存。重新读取平台标题和正文一致后才显示“草稿已保存”，可跳转 CSDN 编辑器检查。
 4. 在“处理记录”按文章或账号查看每次提交，点击进入本次流程、结果、状态图及内容变更。整体对比取最早采集前值和最新采集后值，也可选择单轮执行；没有快照的已有任务显示未采集。全部日志入口继续支持级别、任务和时间筛选。
