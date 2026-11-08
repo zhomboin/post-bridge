@@ -32,7 +32,7 @@
 
 - [x] 当前 CSDN save_draft 的关键写入阶段已接入本地快照授权守卫、权限复查和来源暂停；未知结果保持核对，见 [integration_guard.go](../../apps/api/integration_guard.go)、[integration_guard_test.go](../../apps/api/integration_guard_test.go)。此项仅为文字草稿子范围。
 
-公开提交仍未开放，C03 整体及最终公开提交边界未验收。
+管理员从已核对 CSDN 来源草稿独立确认正式发布已实现；外部接入仍只开放保存草稿。CSDN 自动化正式发布真实验收、通用多平台提交与 C03 整体仍待。
 
 前置：B06—B08、C01、C02。拟建：`apps/worker/src/adapters/types.ts`、`adapters/registry.ts`、`runtime/publish.ts`、`runtime/reconcile.ts`、`apps/api/internal/publications/reconcile.go`。
 
@@ -71,6 +71,8 @@
 测试定位：`apps/worker/src/adapters/zhihu/*.test.ts`。通过：真实文章及已知限制均有可核对证据。
 
 ## C06：小红书真实适配
+
+路线见[小红书接入方案](../xiaohongshu-integration.md)，具体执行见[专项计划 X03—X07](xiaohongshu-integration.md)。匿名入口与环境已实测，真实账号待授权，适配尚未实现；平台账号、图文稿、素材和结果核对均需通过各自关口。
 
 前置：A04、C03，且当前操作已授权。拟建：`apps/worker/src/adapters/xiaohongshu/index.ts`、`xiaohongshu/editor.ts`、`xiaohongshu/result.ts` 及同目录测试。
 

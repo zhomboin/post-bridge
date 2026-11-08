@@ -46,7 +46,9 @@
 
 ## A04：小红书能力验证
 
-前置：A01 中小红书已授权。拟维护：`docs/platform-capabilities.md` 的小红书章节与 `docs/acceptance.md`。
+执行细化见[小红书实施计划 X01/X02](xiaohongshu-integration.md)，路线见[接入方案](../xiaohongshu-integration.md)。本轮匿名入口与环境检查已完成；真实账号与写入未授权，A04 未通过。
+
+前置：匿名检查可独立推进；真实账号操作要求 A01 中对应账号和操作已授权。维护[平台能力](../platform-capabilities.md)与[验收记录](../acceptance.md)。
 
 - [ ] 核实目标账号在官方页面支持的图文发布类型、授权权限及必要资格。
 - [ ] 验证登录、短信或扫码处理、会话隔离与重新进入方式。
