@@ -17,7 +17,7 @@
 
 ## 开发、构建与测试
 
-环境固定 Linux Node.js 22.22.1、npm 10.9.4、Go 1.26.2、PostgreSQL 16 与 Playwright 1.64.1。完整入口见 [开发说明](docs/development.md)。在 WSL 或 Ubuntu 的 Bash 中执行 scripts/dev.sh 构建并启动，使用 scripts/stop.sh 安全停止。服务器常驻部署使用 scripts/ubuntu-deploy.sh。
+环境固定 Linux Node.js 22.22.1、npm 10.9.4、Go 1.26.10、PostgreSQL 16 与 Playwright 1.64.1。完整入口见 [开发说明](docs/development.md)。在 WSL 或 Ubuntu 的 Bash 中执行 scripts/dev.sh 构建并启动，使用 scripts/stop.sh 安全停止。服务器常驻部署使用 scripts/ubuntu-deploy.sh。
 
 Linux 工作区的 `npm run build`、`npm run typecheck`、`npm test` 分别构建、检查类型和运行应用用例；Go 使用 go test、go vet。项目入口使用 Bash，命令示例按 Linux Shell 编写。任务结束关闭本次临时进程、服务和容器，保留无关服务。
 
