@@ -21,6 +21,8 @@
 
 Linux 工作区的 `npm run build`、`npm run typecheck`、`npm test` 分别构建、检查类型和运行应用用例；Go 使用 go test、go vet。项目入口使用 Bash，命令示例按 Linux Shell 编写。任务结束关闭本次临时进程、服务和容器，保留无关服务。
 
+本地开发与服务器部署分别维护 docs/development.md、docs/ubuntu-deployment.md，必须按步骤写明环境准备、初始化、启动、停止、升级和检查的完整命令；命令注明实际执行环境，文档不复制应用实现代码。
+
 ## 编码与测试规范
 
 Go 使用 gofmt；TypeScript 两空格缩进，组件 PascalCase，函数和变量 camelCase。当前检查工具为 TypeScript、go vet，未配置 ESLint。平台适配、调度和页面保持独立；执行器不直接连接数据库，不读取 CMS 数据库。
