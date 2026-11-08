@@ -2,7 +2,7 @@
 
 ## 范围与准备
 
-支持 Ubuntu 24.04 的 amd64、arm64 服务器。API 和执行器由 systemd 常驻，浏览器使用无头 Chromium，不安装桌面、不开放远程桌面。Windows 本地开发继续使用[开发入口](development.md)，服务器安装使用独立的 [Ubuntu 管理入口](../scripts/ubuntu_deploy.py)。
+支持 Ubuntu 24.04 的 amd64、arm64 服务器。API 和执行器由 systemd 常驻，浏览器使用无头 Chromium，不安装桌面、不开放远程桌面。WSL 本地开发使用[开发入口](development.md)，服务器安装使用独立的 [Ubuntu Shell 管理入口](../scripts/ubuntu-deploy.sh)。
 
 管理员需准备 Python 3.12、系统 CA 证书、可访问 Node.js、Go、npm、Ubuntu 软件源及 Playwright 下载源的网络，以及公开域名、HTTPS 证书和 Nginx。执行安装需要 root 权限。安装器会安装匹配当前 Playwright 的 Chromium 系统依赖、PostgreSQL 16 客户端和 Noto 中文字体；不会自动接管或重载现有 Nginx。
 
@@ -10,7 +10,7 @@
 
 ## 安装入口
 
-在已检出的源码根目录，通过 Python 3 启动 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。使用它的帮助参数可查看完整参数。
+在已检出的源码根目录，通过 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh) 执行下表子命令；入口调用当前服务器 Python 3 中的 [部署管理器](../scripts/ubuntu_deploy.py)，参数原样传递。--help 查看完整参数，--config 可指定管理员私有配置文件。
 
 | 操作 | 子命令与行为 |
 | --- | --- |
@@ -25,7 +25,7 @@
 3. 检查完成后，将生成的 /etc/post-bridge/nginx.conf 纳入管理员自己的 Nginx 站点配置，核对域名与证书路径；验证 Nginx 配置成功后再重载。模板首次生成后由管理员维护，升级不会覆盖。
 4. 仅向外开放 HTTPS；HTTP 只用于跳转，API、远程登录控制和数据库端口不得向公网开放。在后台“平台账号”的“账号设置”页签完成远程登录和指定身份检查，再开始草稿任务。
 
-可从 Windows PowerShell 通过 SSH 连接服务器，先切换到服务器源码目录，再由服务器的 Python 3 执行上述子命令。凭据在服务器私有配置中填写，不放入 PowerShell 参数、SSH 命令、环境传递列表或聊天。
+通过 SSH 连接服务器后，在服务器源码目录使用 Shell 入口执行上述子命令。除 check 和帮助外，部署操作需要 root 权限。凭据在服务器私有配置中填写，不放入命令参数、SSH 命令、环境传递列表或聊天。
 
 | 配置字段 | 内容 |
 | --- | --- |

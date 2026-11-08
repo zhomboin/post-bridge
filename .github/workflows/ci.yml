@@ -49,6 +49,11 @@ jobs:
       - name: Go 静态检查
         working-directory: apps/api
         run: go vet ./...
+      - name: Shell 入口语法检查
+        run: |
+          for script in scripts/*.sh; do
+            bash -n "$script"
+          done
       - name: 运行入口安全用例
         run: python3 -m unittest discover -s tests/runtime -v
       - name: Ubuntu 独立 systemd 生命周期验证

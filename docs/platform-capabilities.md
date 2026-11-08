@@ -56,11 +56,11 @@ A01、A02 整体均尚未通过。单篇公开提交与用户无痕阅读验证�
 | Windows 工具 | Git 2.45.1、Node.js 22.22.1、npm 11.11.0、Go 1.26.2 windows/amd64、Python 3.11.5；不能替代 Linux 工具验证 |
 | WSL 系统与资源 | Ubuntu 24.04.4 LTS，WSL2 内核 6.18.54.1；32 逻辑 CPU；内存总量 7937 MiB、可用 5972 MiB；交换空间 2048 MiB |
 | 磁盘 | WSL 显示总量 1007 G、可用 932 G，属于虚拟容量；虚拟盘所在宿主 D: 卷总量 839.5 GiB、采样可用 548.5 GiB；实际空间不能按 WSL 显示余量保证 |
-| WSL 工具 | Git 2.43.0、Python 3 可用；用户私有工具目录安装官方 Linux Node.js 22.22.1，使用绝对路径调用，未加入全局 PATH；私有 Linux Go 1.26.2、npm 10.9.4 与 PostgreSQL 16.15 已用于本地运行，PowerShell 入口在 Windows 执行，无需 Linux PowerShell |
+| WSL 工具 | Git 2.43.0、Python 3 可用；用户私有工具目录安装官方 Linux Node.js 22.22.1，使用绝对路径调用，未加入全局 PATH；私有 Linux Go 1.26.2、npm 10.9.4 与 PostgreSQL 16.15 已用于本地运行，开发入口直接在 WSL Bash 中执行 |
 | 浏览器工具 | @playwright/cli 0.1.23，依赖 Playwright 1.65.0-alpha-2026-10-30；实际使用既有缓存 Chromium 1248，1248 为缓存标识 |
 | 浏览器依赖与版本 | libnspr4 2:4.35-1.1build1、libnss3 2:3.98-1ubuntu0.3、libasound2t64 1.2.11-1ubuntu0.3 已安装；版本查询为 Google Chrome for Testing 156.0.8078.4，退出码 0 |
 | 中文显示 | 中文乱码根因为缺少中文字体：诊断时中文字体列表为空并回退 DejaVu Sans；CSDN 响应、页面元信息及 DOM 均为 UTF-8。已安装 fonts-noto-cjk 1:20230817+repack1-3，中文字体匹配 Noto Sans CJK SC；本地无账号中文页截图检查正常，用户亦确认窗口中文正常，测试截图已删除 |
-| 页面与交互入口 | WSLg（DISPLAY=:0、wayland-0）带沙箱有界面隔离 Chromium，经 Windows WSLg 图形启动器打开并置前；CSDN 官方登录、创作入口、Markdown 编辑及草稿读取已实测 |
+| 页面与交互入口 | WSLg（DISPLAY=:0、wayland-0）带沙箱有界面隔离 Chromium，通过 WSLg 显示；CSDN 官方登录、创作入口、Markdown 编辑及草稿读取已实测 |
 | Docker 与远程入口 | Docker 引擎与 Docker Desktop 当前不可用，未改动既有容器；使用项目私有 PostgreSQL 验证，保留无关数据库服务。Compose 及生产远程验证入口未验收；直接 WSL/WSLg 验证不代表 Docker 或生产远程入口通过 |
 | 网络 | 三平台入口匿名 HTTP 检查均 DNS 成功、HTTP 200，最终域名与原域名一致；不证明账号资格或发布能力 |
 | 临时资源 | 本轮 CLI 关闭完成，会话列表无本轮会话，进程检查无本轮配置对应的浏览器或 Node.js，诊断目录文件数为 0；字体测试截图已删除；仓库外受限持久化会话保留，Docker 未启动 |
@@ -119,7 +119,7 @@ A01、A02 整体均尚未通过。单篇公开提交与用户无痕阅读验证�
 | 待完成项 | 处理责任与影响 |
 | --- | --- |
 | CSDN 未验能力 | 执行人员补充图片、标题层级与长度边界、分类及必填字段、官方开放 API 资格和主动会话失效；指定文章提交已验，其他公开文章按授权范围执行；完整审核及自动化公开页核验继续待验 |
-| 常驻部署、容器及生产远程入口 | Linux Go 与 Windows PowerShell 入口已用于本地运行，常驻部署、容器、备份恢复及生产远程入口继续待验 |
+| 常驻部署、容器及生产远程入口 | Linux Go 已用于本地运行，开发入口使用 WSL Bash，常驻部署、容器、备份恢复及生产远程入口继续待验 |
 | 三平台完整样例 | 本轮 CSDN 文字、代码、表格和公式样例已验；图片、长文边界及独立小红书图文稿待准备和确认，A01 样例项未完成 |
 | 知乎、小红书与阶段结论 | 知乎暂不登录；小红书登录与会话恢复已验，内容及发布按明确范围继续；三平台总体范围不变，A01、A02、A04 整体仍未通过 |
 
