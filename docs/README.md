@@ -7,6 +7,8 @@
 - [验收记录](acceptance.md)：实际运行证据及未验边界。
 - [版本记录](version.md)：简要变更。
 - [完整实施计划](implementation-plan.md)：阶段依赖与剩余工作。
+- [小红书接入方案](xiaohongshu-integration.md)：图文笔记路线、开源参考、系统改动与提交核对边界。
+- [小红书实施计划](plans/xiaohongshu-integration.md)：匿名验证、账号能力、图文准备与正式发布的分层关口。
 - [外部接入总体方案](cms-integration.md)：双方职责、流程、当前实现和调用方剩余工作。
 - [外部系统接入手册](external-integration.md)：注册、签名、指纹、人工确认、轮询与主动取消；后台顶部文档图标可站内阅读，并下载契约与测试向量。
 - [外部接口机器契约](../contracts/cms.openapi.yaml)：实际开放接口、模型和权限。
