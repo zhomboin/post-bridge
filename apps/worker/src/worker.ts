@@ -56,6 +56,8 @@ export async function executeClaim(api: JobAPI, claim: Claim, open: () => Promis
   if (remoteID && claim.job.run_mode !== 'reconcile') result.remote_id = remoteID;
   if (result.status !== 'succeeded' || claim.job.kind !== 'sync_articles') delete result.articles;
   if (result.status !== 'succeeded' || claim.job.kind !== 'read_article') delete result.article;
+  if (result.status !== 'succeeded' || claim.job.kind !== 'sync_notes') delete result.notes;
+  if (result.status !== 'succeeded' || claim.job.platform !== 'xiaohongshu') delete result.account_identity;
   await api.complete(claim.job.id, claim.lease_token, result);
 }
 

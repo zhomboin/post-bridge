@@ -2,7 +2,7 @@
 
 ## 本轮交付边界
 
-实现独立管理员登录、CSDN 登录状态检查、文字 Markdown 草稿任务、账号文章只读快照与正文、持久队列、任务详情和日志。仅支持一个 CSDN 账号，公开发布和其他平台均不开放；PostBridge 侧来源接入已实现，真实调用方连接、图片上传及生产验收仍待。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
+实现独立管理员登录、CSDN 草稿与受控发布、账号文章快照与正文、持久队列、任务详情和日志，以及 CSDN 与小红书账号切换、小红书登录检查及笔记只读快照。每个平台绑定一个账号；小红书内容写入不开放。PostBridge 侧来源接入已实现，真实调用方连接及生产验收仍待。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
 
 API 管理数据库，执行器通过受限内部接口领取和上报，不直接访问数据库。管理界面只操作管理接口。本文为三单元共享契约，字段变化需同时更新实现与用例。
 
@@ -70,6 +70,22 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 后台统一入口为 /account，默认文章页签；数据统计使用 tab=stats，账号设置使用 tab=settings。q、status、page 保留文章筛选与分页；页签切换、刷新及浏览器历史恢复这些参数。独立正文 /articles/{id} 的返回地址指向账号文章页。已有 /articles 查询入口保留条件并归一到平台账号。
 
 页签复用本文现有管理接口，不新增平台写入或服务端能力。远程登录仅在账号设置挂载，离开时撤销未完成会话并停止请求。
+
+## 多平台账号与小红书只读接口
+
+全部接口需要管理员会话；POST 同时校验 Origin 和 CSRF。私有配置方式见[账号管理](platform-accounts.md)。
+
+| 方法与路径 | 结果 |
+| --- | --- |
+| GET /api/accounts | items 中每项包含 account 和 capabilities；不返回凭据、浏览器路径或 Cookie |
+| GET /api/accounts/{account} | 指定账号及能力开关 |
+| POST /api/accounts/{account}/check | 传入 request_id，创建 check_account 任务 |
+| GET /api/accounts/{account}/notes | 小红书本地快照；q、status、page、page_size 支持搜索和分页 |
+| POST /api/accounts/{account}/notes/sync | 传入 request_id，创建 sync_notes；同一账号活跃同步合并 |
+
+笔记返回 items、total、page、page_size、snapshot 和 sync_job。snapshot 为 null 表示从未同步，空 items 且 snapshot 非空表示已同步空账号。笔记含 id、title、status、platform_status、posted_at、views、likes、comments、favorites。时间可为空，统计可为 null；未知状态保持 unknown。无正文、上传或发布链接。
+
+每个账号使用不同执行器凭据，服务端按凭据决定可领取与上报的账号；客户端不能通过请求参数更改归属。sync_notes 成功上报需同时包含 account_identity 与 notes，二者 username、user_id 必须匹配任务冻结身份和当前绑定。仅完整、未取消且租约有效的结果可原子替换快照。异常不会覆盖旧快照；跨账号上报拒绝。
 
 ## 账号文章契约
 

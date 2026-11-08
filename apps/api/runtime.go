@@ -16,6 +16,7 @@ import (
 )
 
 type RuntimeConfig struct {
+	PlatformAccounts                                                                                                           []PlatformAccountConfig
 	DatabaseURL, Address, Origin, Username, Password, WorkerToken, CSDNUsername, CSDNDisplayName, AdminDistDir, RemoteLoginURL string
 	IntegrationMasterKey, IntegrationEnvironment, IntegrationServiceID                                                         string
 }
@@ -73,6 +74,9 @@ func LoadRuntimeConfig() (RuntimeConfig, error) {
 	if len(c.Password) < 12 || len(c.Password) > 72 || len(c.WorkerToken) < 32 || strings.ContainsAny(c.WorkerToken, " \t\n\r") {
 		return c, fmt.Errorf("私有凭据强度或格式不符合要求")
 	}
+	if c.PlatformAccounts, err = loadPlatformAccounts(os.Getenv("PLATFORM_ACCOUNTS_FILE"), c.WorkerToken); err != nil {
+		return c, fmt.Errorf("平台账号私有配置无效")
+	}
 	if path := os.Getenv("INTEGRATION_MASTER_KEY_FILE"); path != "" {
 		if c.IntegrationMasterKey, err = privateSecret(path); err != nil {
 			return c, err
@@ -104,7 +108,7 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 		cancel()
 		return fmt.Errorf("数据库初始化失败")
 	}
-	h, err := NewHandler(startup, Config{Store: store, AdminUsername: c.Username, AdminPassword: c.Password, WorkerToken: c.WorkerToken, Origin: c.Origin, AdminDistDir: c.AdminDistDir, RemoteLoginURL: c.RemoteLoginURL, IntegrationMasterKey: c.IntegrationMasterKey, IntegrationEnvironment: c.IntegrationEnvironment, IntegrationServiceID: c.IntegrationServiceID})
+	h, err := NewHandler(startup, Config{PlatformAccounts: c.PlatformAccounts, Store: store, AdminUsername: c.Username, AdminPassword: c.Password, WorkerToken: c.WorkerToken, Origin: c.Origin, AdminDistDir: c.AdminDistDir, RemoteLoginURL: c.RemoteLoginURL, IntegrationMasterKey: c.IntegrationMasterKey, IntegrationEnvironment: c.IntegrationEnvironment, IntegrationServiceID: c.IntegrationServiceID})
 	cancel()
 	if err != nil {
 		return fmt.Errorf("管理接口初始化失败")

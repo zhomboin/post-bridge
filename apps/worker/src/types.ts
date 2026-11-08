@@ -82,7 +82,8 @@ export interface PublishOptions {
 }
 export interface Job {
   id: string;
-  kind: 'save_draft' | 'publish' | 'check_account' | 'sync_articles' | 'read_article';
+  platform?: string; account_id?: string; account_native_id?: string;
+  kind: 'sync_notes' | 'save_draft' | 'publish' | 'check_account' | 'sync_articles' | 'read_article';
   title: string;
   markdown: string;
   image_urls?: string[];
@@ -112,6 +113,8 @@ export interface JobResult {
   error_code?: string;
   error_message?: string;
   retryable?: boolean;
+  notes?: NotesSnapshot;
+  account_identity?: AccountIdentity;
   articles?: ArticleSnapshot;
   article?: ArticleBody;
 }
@@ -122,3 +125,7 @@ export interface JobAPI {
   progress(id: string, token: string, value: Progress): Promise<void>;
   complete(id: string, token: string, value: JobResult): Promise<void>;
 }
+
+export interface AccountIdentity { username: string; user_id: string }
+export interface Note { id: string; title: string; status: 'published' | 'reviewing' | 'rejected' | 'unknown'; platform_status: string; posted_at: string; views: number | null; likes: number | null; comments: number | null; favorites: number | null }
+export interface NotesSnapshot extends AccountIdentity { items: Note[] }

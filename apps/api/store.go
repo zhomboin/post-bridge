@@ -126,6 +126,9 @@ func fingerprint(in CreateInput) string {
 	return hex.EncodeToString(h[:])
 }
 func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
+	if in.Kind == "sync_notes" || in.AccountID != "" && in.AccountID != "csdn-main" {
+		return Job{}, false, ErrInvalid
+	}
 	if readKind(in.Kind) {
 		if !validKey(in.RequestID) || in.Platform != "csdn" || in.Title != "" || in.Markdown != "" || (in.Kind == "sync_articles" && in.ArticleID != "") || (in.Kind == "read_article" && !numericID.MatchString(in.ArticleID)) {
 			return Job{}, false, ErrInvalid
@@ -235,12 +238,15 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 	return job, created, err
 }
 func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
+	return s.ClaimForAccount(ctx, worker, "csdn-main")
+}
+func (s *Store) ClaimForAccount(ctx context.Context, worker, accountID string) (*Claim, error) {
 	if !validKey(worker) {
 		return nil, ErrInvalid
 	}
 	var claim *Claim
 	err := s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
-		rows, err := tx.Query(ctx, "SELECT record FROM jobs ORDER BY created_at,id FOR UPDATE SKIP LOCKED")
+		rows, err := tx.Query(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=$1 ORDER BY created_at,id FOR UPDATE SKIP LOCKED", accountID)
 		if err != nil {
 			return err
 		}
@@ -264,7 +270,7 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 			return err
 		}
 		var currentUsername string
-		if err = tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&currentUsername); err != nil {
+		if err = tx.QueryRow(ctx, "SELECT username FROM account WHERE id=$1", accountID).Scan(&currentUsername); err != nil {
 			return err
 		}
 		active := false
@@ -350,8 +356,12 @@ func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 			if err = save(ctx, tx, r); err != nil {
 				return err
 			}
-			if _, err = tx.Exec(ctx, "INSERT INTO worker_proofs(worker_id,seen_at,browser_idle,profile_available) VALUES($1,$2,false,false) ON CONFLICT(worker_id) DO UPDATE SET seen_at=excluded.seen_at,browser_idle=false,profile_available=false", worker, now); err != nil {
-				return err
+			proof, proofErr := tx.Exec(ctx, "INSERT INTO worker_proofs(worker_id,seen_at,browser_idle,profile_available,account_id) VALUES($1,$2,false,false,$3) ON CONFLICT(worker_id) DO UPDATE SET seen_at=excluded.seen_at,browser_idle=false,profile_available=false WHERE worker_proofs.account_id=excluded.account_id", worker, now, accountID)
+			if proofErr != nil {
+				return proofErr
+			}
+			if proof.RowsAffected() != 1 {
+				return ErrConflict
 			}
 			if err = appendLog(ctx, tx, r, "info", "执行器已领取任务", now); err != nil {
 				return err
@@ -380,8 +390,8 @@ func (s *Store) mutateLease(ctx context.Context, id, token string, fn func(pgx.T
 		if !leaseValid(r, token, now) {
 			return ErrConflict
 		}
-		if readKind(r.Kind) || r.Kind == "publish" {
-			matches, err := csdnJobAccountMatches(ctx, tx, r)
+		if readKind(r.Kind) || r.Kind == "publish" || r.Platform == "xiaohongshu" {
+			matches, err := jobAccountMatches(ctx, tx, r)
 			if err != nil {
 				return err
 			}
@@ -420,6 +430,9 @@ func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error
 			if exists {
 				return ErrConflict
 			}
+		}
+		if r.Platform == "xiaohongshu" && (in.ExternalStarted || in.RemoteID != "" || in.Observation != nil || in.PlatformMarkdown != "" || in.PublishedHTMLSHA256 != "") {
+			return ErrInvalid
 		}
 		if in.Observation != nil {
 			if err := captureObservation(ctx, tx, r, in, now); err != nil {
@@ -463,7 +476,7 @@ func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error
 			status = "blocked"
 		}
 		if status != "" {
-			if _, err := tx.Exec(ctx, "UPDATE account SET status=$1,last_checked_at=$2,last_error=$3 WHERE id='csdn-main'", status, now, r.ErrorMessage); err != nil {
+			if _, err := tx.Exec(ctx, "UPDATE account SET status=$1,last_checked_at=$2,last_error=$3 WHERE id=$4", status, now, r.ErrorMessage, r.AccountID); err != nil {
 				return err
 			}
 		}
@@ -547,6 +560,9 @@ func (s *Store) Action(ctx context.Context, id, action string, in ActionInput) (
 	return result, err
 }
 func (s *Store) WorkerHeartbeat(ctx context.Context, worker string, idle, available bool) error {
+	return s.WorkerHeartbeatForAccount(ctx, worker, "csdn-main", idle, available)
+}
+func (s *Store) WorkerHeartbeatForAccount(ctx context.Context, worker, accountID string, idle, available bool) error {
 	if !validKey(worker) {
 		return ErrInvalid
 	}
@@ -562,8 +578,14 @@ func (s *Store) WorkerHeartbeat(ctx context.Context, worker string, idle, availa
 				available = false
 			}
 		}
-		_, err := tx.Exec(ctx, "INSERT INTO worker_proofs(worker_id,seen_at,browser_idle,profile_available) VALUES($1,$2,$3,$4) ON CONFLICT(worker_id) DO UPDATE SET seen_at=excluded.seen_at,browser_idle=excluded.browser_idle,profile_available=excluded.profile_available", worker, now, idle, available)
-		return err
+		tag, err := tx.Exec(ctx, "INSERT INTO worker_proofs(worker_id,seen_at,browser_idle,profile_available,account_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(worker_id) DO UPDATE SET seen_at=excluded.seen_at,browser_idle=excluded.browser_idle,profile_available=excluded.profile_available WHERE worker_proofs.account_id=excluded.account_id", worker, now, idle, available, accountID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return ErrConflict
+		}
+		return nil
 	})
 }
 func (s *Store) Account(ctx context.Context) (Account, error) {

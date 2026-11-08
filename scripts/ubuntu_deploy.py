@@ -60,8 +60,16 @@ def write_private(path, value):
 def validate_config(value):
     keys = ['DATABASE_URL', 'PUBLIC_ORIGIN', 'ADMIN_USERNAME', 'CSDN_USERNAME', 'CSDN_DISPLAY_NAME']
     optional = {'INTEGRATION_ENVIRONMENT', 'INTEGRATION_SERVICE_ID'}
-    if not isinstance(value, dict) or not set(keys) <= set(value) or not set(value) <= set(keys) | optional | {"CSDN_IMAGE_HOSTS"}:
+    if not isinstance(value, dict) or not set(keys) <= set(value) or not set(value) <= set(keys) | optional | {"CSDN_IMAGE_HOSTS", "API_PLATFORM_ACCOUNTS_FILE", "WORKER_PLATFORM_ACCOUNTS_FILE"}:
         raise ValueError('请填写必要部署字段，只允许额外配置接入环境、服务标识和 CSDN 图片域名')
+    account_keys = {'API_PLATFORM_ACCOUNTS_FILE', 'WORKER_PLATFORM_ACCOUNTS_FILE'}
+    if set(value) & account_keys:
+        if not account_keys <= set(value):
+            raise ValueError('平台账号配置必须同时指定 API 和 worker 私有文件')
+        for role in ('api', 'worker'):
+            item = value[role.upper() + '_PLATFORM_ACCOUNTS_FILE']
+            if not isinstance(item, str) or any(c in item for c in '\r\n\0') or not Path(item).is_absolute() or not Path(item).resolve().is_relative_to(STATE / role):
+                raise ValueError('平台账号配置必须位于对应服务的私有状态目录')
     hosts = value.get("CSDN_IMAGE_HOSTS", "")
     if not isinstance(hosts, str) or (hosts and not re.fullmatch(r"[A-Za-z0-9.-]+(?:[ \t]*,[ \t]*[A-Za-z0-9.-]+)*", hosts)):
         raise ValueError("CSDN 图片域名须使用逗号分隔的域名")
@@ -159,6 +167,9 @@ def environments(config):
         api.update({'INTEGRATION_ENVIRONMENT': config['INTEGRATION_ENVIRONMENT'], 'INTEGRATION_SERVICE_ID': config['INTEGRATION_SERVICE_ID'], 'INTEGRATION_MASTER_KEY_FILE': str(STATE / 'api/integration-master-key')})
     if config.get("CSDN_IMAGE_HOSTS"):
         api["CSDN_IMAGE_HOSTS"] = config["CSDN_IMAGE_HOSTS"]
+    if config.get('API_PLATFORM_ACCOUNTS_FILE'):
+        api['PLATFORM_ACCOUNTS_FILE'] = config['API_PLATFORM_ACCOUNTS_FILE']
+        worker['PLATFORM_ACCOUNTS_FILE'] = config['WORKER_PLATFORM_ACCOUNTS_FILE']
     return api, worker
 
 

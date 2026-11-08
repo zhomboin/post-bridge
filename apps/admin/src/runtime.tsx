@@ -174,8 +174,8 @@ export function jobOutcome(job: Job) {
     if (job.outcome === 'unknown') return '发布结果待核对';
     return ({ queued: '等待提交发布', running: '正在提交发布', cancelled: '发布任务已取消' } as Record<string, string>)[job.status] || '发布尚未提交';
   }
-  if (job.kind === 'sync_articles' || job.kind === 'read_article') {
-    const name = job.kind === 'sync_articles' ? '文章同步' : '正文读取';
+  if (job.kind === 'sync_notes' || job.kind === 'sync_articles' || job.kind === 'read_article') {
+    const name = job.kind === 'sync_notes' ? '笔记同步' : job.kind === 'sync_articles' ? '文章同步' : '正文读取';
     return name + (({ succeeded: '完成', failed: '失败', cancelled: '已取消', waiting_user: '等待登录', queued: '排队中', running: '中' } as Record<string, string>)[job.status] || '状态待确认');
   }
   if (job.manual_resolved) return '已人工结束，草稿可能保留';

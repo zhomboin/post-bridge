@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS account (
- id text PRIMARY KEY CHECK(id='csdn-main'),
+ id text PRIMARY KEY,
  username text NOT NULL,
  display_name text NOT NULL,
  status text NOT NULL DEFAULT 'unchecked',
@@ -55,6 +55,15 @@ CREATE TABLE IF NOT EXISTS admin_decisions (
 );
 
 ALTER TABLE account ADD COLUMN IF NOT EXISTS remote_login_id text NOT NULL DEFAULT '';
+ALTER TABLE account DROP CONSTRAINT IF EXISTS account_id_check;
+ALTER TABLE account ADD COLUMN IF NOT EXISTS platform text NOT NULL DEFAULT 'csdn';
+ALTER TABLE account ADD COLUMN IF NOT EXISTS native_user_id text NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS account_platform_idx ON account(platform);
+ALTER TABLE worker_proofs ADD COLUMN IF NOT EXISTS account_id text NOT NULL DEFAULT 'csdn-main';
+CREATE TABLE IF NOT EXISTS account_note_snapshots (
+ account_id text PRIMARY KEY REFERENCES account(id),
+ record jsonb NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS account_article_snapshots (
  account_id text PRIMARY KEY REFERENCES account(id),

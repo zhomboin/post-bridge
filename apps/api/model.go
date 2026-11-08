@@ -15,6 +15,7 @@ var ErrInvalid = errors.New("invalid")
 var ErrNotFound = errors.New("not_found")
 
 type CreateInput struct {
+	AccountID string `json:"account_id,omitempty"`
 	ArticleID string `json:"article_id,omitempty"`
 	RequestID string `json:"request_id"`
 	Kind      string `json:"kind"`
@@ -23,6 +24,7 @@ type CreateInput struct {
 	Markdown  string `json:"markdown"`
 }
 type Job struct {
+	AccountNativeID           string              `json:"account_native_id,omitempty"`
 	PublishedHTMLSHA256       string              `json:"published_html_sha256,omitempty"`
 	PublishFromJobID          string              `json:"publish_from_job_id,omitempty"`
 	PublishOptions            *CSDNPublishOptions `json:"publish_options,omitempty"`
@@ -92,6 +94,8 @@ type ProgressInput struct {
 	Message             string       `json:"message"`
 }
 type CompleteInput struct {
+	Notes           *NotesSnapshot   `json:"notes,omitempty"`
+	AccountIdentity *AccountIdentity `json:"account_identity,omitempty"`
 	PublishAccepted bool             `json:"publish_accepted,omitempty"`
 	Articles        *ArticleSnapshot `json:"articles,omitempty"`
 	Article         *ArticleBody     `json:"article,omitempty"`
@@ -114,6 +118,9 @@ type workerProof struct {
 }
 
 func ValidateCreate(in CreateInput) error {
+	if in.AccountID != "" && in.AccountID != "csdn-main" {
+		return ErrInvalid
+	}
 	if in.ArticleID != "" || !validKey(in.RequestID) || in.Kind != "save_draft" || in.Platform != "csdn" || utf8.RuneCountInString(strings.TrimSpace(in.Title)) < 5 || utf8.RuneCountInString(in.Title) > 100 || strings.TrimSpace(in.Markdown) == "" || utf8.RuneCountInString(in.Markdown) > 200000 || !utf8.ValidString(in.Markdown) {
 		return ErrInvalid
 	}

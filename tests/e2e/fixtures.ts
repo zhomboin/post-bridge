@@ -9,7 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-export type Stack = { url: string; username: string; password: string; workerToken: string; startWorker(): () => Promise<void> };
+export type Stack = { url: string; username: string; password: string; workerToken: string; xhsWorkerToken?: string; startWorker(): () => Promise<void> };
 const go = process.env.E2E_GO_BIN || 'go';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -30,9 +30,10 @@ async function stop(child?: ChildProcess) {
     await new Promise<void>(done => child.once('exit', () => done()));
   }
 }
-export const test = base.extend<{}, { stack: Stack; remoteLoginMethod: 'sms' | 'qr' }>({
+export const test = base.extend<{}, { stack: Stack; remoteLoginMethod: 'sms' | 'qr'; xiaohongshu: boolean }>({
+  xiaohongshu: [false, {scope:'worker',option:true}],
   remoteLoginMethod: ['sms', {scope: 'worker', option: true}],
-  stack: [async ({remoteLoginMethod}, use) => {
+  stack: [async ({remoteLoginMethod,xiaohongshu}, use) => {
     const database = process.env.TEST_DATABASE_URL;
     if (!database) throw Error('端到端验证必须提供 TEST_DATABASE_URL');
     const schema = 'e2e_' + randomBytes(12).toString('hex');
@@ -57,6 +58,13 @@ export const test = base.extend<{}, { stack: Stack; remoteLoginMethod: 'sms' | '
       const workerFile = resolve(directory, 'worker.secret');
       writeFileSync(passwordFile, password, { mode: 0o600 });
       writeFileSync(workerFile, workerToken, { mode: 0o600 });
+      const xhsWorkerToken = xiaohongshu ? randomBytes(32).toString('hex') : undefined;
+      const accountsFile = resolve(directory, 'accounts.json');
+      if (xhsWorkerToken) {
+        const tokenFile = resolve(directory, 'xhs.secret');
+        writeFileSync(tokenFile,xhsWorkerToken,{mode:0o600});
+        writeFileSync(accountsFile,JSON.stringify({accounts:[{id:'xhs-main',platform:'xiaohongshu',username:'synthetic-red',user_id:'aaaaaaaaaaaaaaaaaaaaaaaa',display_name:'合成小红书作者',profile_dir:resolve(directory,'xhs-profile'),worker_token_file:tokenFile}]}),{mode:0o600});
+      }
       const binary = resolve(directory, 'api');
       try { execFileSync(go, ['build', '-o', binary, './cmd/server'], { cwd: resolve(root, 'apps/api'), stdio: 'pipe', timeout: 120_000 }); }
       catch { throw Error('端到端 Go API 构建失败'); }
@@ -68,6 +76,7 @@ export const test = base.extend<{}, { stack: Stack; remoteLoginMethod: 'sms' | '
       if (!existsSync(resolve(dist, 'index.html'))) throw Error('请先构建后台，再运行端到端用例');
       child = spawn(binary, [], { cwd: root, stdio: 'ignore', env: {
         ...process.env, DATABASE_URL: isolatedDatabase.href, API_ADDR: address, API_BASE_URL: url, REMOTE_LOGIN_URL: remote.url,
+        PLATFORM_ACCOUNTS_FILE: xiaohongshu ? accountsFile : undefined,
         ADMIN_USERNAME: username, ADMIN_PASSWORD_FILE: passwordFile, WORKER_TOKEN_FILE: workerFile,
         CSDN_USERNAME: 'synthetic-csdn-account', CSDN_DISPLAY_NAME: '演示创作者', ADMIN_DIST_DIR: dist,
       } });
@@ -77,7 +86,7 @@ export const test = base.extend<{}, { stack: Stack; remoteLoginMethod: 'sms' | '
         if (count > 100) throw Error('隔离 API 启动超时');
         await delay(100);
       }
-      await use({ url, username, password, workerToken, startWorker: () => remote!.startWorker(url) });
+      await use({ url, username, password, workerToken, xhsWorkerToken, startWorker: () => remote!.startWorker(url) });
     } finally {
       try { await remote?.close(); }
       finally {

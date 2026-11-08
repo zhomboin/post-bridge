@@ -1,0 +1,13 @@
+{
+  "accounts": [
+    {
+      "id": "xiaohongshu-main",
+      "platform": "xiaohongshu",
+      "username": "<预期小红书号>",
+      "user_id": "<官方稳定用户标识>",
+      "display_name": "<后台显示名称>",
+      "profile_dir": "<仓库外已登录会话的绝对路径>",
+      "worker_token_file": "<小红书独立执行器凭据文件的绝对路径>"
+    }
+  ]
+}
