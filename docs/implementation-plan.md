@@ -32,7 +32,7 @@ API 是数据库唯一业务写入入口。执行器通过独立内部身份领�
 | [来源身份与注册](../apps/api/integration_auth.go)、[注册管理](../apps/api/integration_registry.go)、[签名](../apps/api/integration_signature.go) | 独立外部身份、权限、密钥和调用认证 |
 | [来源内容](../apps/api/integration_content_store.go)、[执行守卫](../apps/api/integration_guard.go) | 快照修订、父分发、生命周期与写入前检查 |
 | [apps/admin/src](../apps/admin/src) | 平铺后台路由、页面、通用交互与来源工作台 |
-| [apps/worker/src](../apps/worker/src) | 固定 CSDN 浏览器执行、只读核对、账号与登录控制 |
+| [apps/worker/src](../apps/worker/src) | CSDN 写入与小红书只读执行、按平台账号隔离调度和登录检查 |
 | [外部契约](../contracts/cms.openapi.yaml)、[共享向量](../tests/fixtures/integration-contract.json) | 当前来源接口和可校验合成数据 |
 | [tests/e2e](../tests/e2e)、[tests/runtime](../tests/runtime) | 跨服务、浏览器与启动部署安全验证 |
 | [deploy/systemd](../deploy/systemd)、[deploy/nginx](../deploy/nginx)、[Ubuntu 安装器](../scripts/ubuntu_deploy.py) | 常驻单元、HTTPS 入口与私有配置 |
@@ -63,7 +63,7 @@ A 发现某平台不可用时，先记录证据和影响，由用户决定是否
 
 小红书按[接入方案](xiaohongshu-integration.md)与[专项实施计划](plans/xiaohongshu-integration.md)推进：X01 匿名环境 → X02 授权账号只读 → X03 多平台基础 → X04 图文稿与素材 → X05 授权上传与草稿 → X06 授权单篇发布与恢复 → X07 外部接入及生产收口。X01/X02 对应 A04 的部分证据，X03/X04 补齐 B/C 基础，X05/X06 对应 C06，X07 对应 D/E；专项步骤不替代完整阶段关口。
 
-X01 官方入口、X02 指定账号登录与浏览器重启会话恢复已实测；多平台账号、小红书登录检查和笔记只读适配已实现，正式后台真实空列表通过，非空真实笔记、图文限制和写入结果识别待验。外站写入按指定范围另行授权；正式目标保持服务器图文发布，不以登录、填稿或草稿代替。
+X01 官方入口、X02 指定账号登录与浏览器重启会话恢复已实测；多平台账号、小红书登录检查和笔记只读适配已实现，正式后台真实空列表通过；四类原生状态筛选与图文上传前页面提示已有独立只读证据，非空真实笔记、上传后图文字段、实际素材与写入结果识别待验。外站写入按指定范围另行授权；正式目标保持服务器图文发布，不以登录、填稿或草稿代替。
 
 ## 接口、数据与安全必须共同遵守的规则
 
