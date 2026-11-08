@@ -17,6 +17,7 @@ import urllib.request
 
 REPO = Path(__file__).resolve().parents[1]
 TOOLS = Path.home() / '.local/share/post-bridge/tools'
+GO_VERSION = '1.26.10'
 DEFAULT_STATE = Path.home() / '.local/share/post-bridge/runtime/csdn-task-pipeline'
 
 def check_state(state):
@@ -88,13 +89,13 @@ def base_env():
     env = {k: os.environ[k] for k in keep if k in os.environ}
     env['LANG'] = 'C.UTF-8'
     node = Path(tool('node', 'node-v22.22.1-linux-x64/bin/node'))
-    go = Path(tool('go', 'go-1.26.2/bin/go'))
+    go = Path(tool('go', f'go-{GO_VERSION}/bin/go'))
     env['PATH'] = os.pathsep.join((str(node.parent), str(go.parent), env.get('PATH', '/usr/bin:/bin')))
     return env
 
 def child_env(config, worker=False):
     env = base_env()
-    keys = ('API_BASE_URL', 'WORKER_TOKEN_FILE', 'CSDN_USERNAME', 'CSDN_DISPLAY_NAME')
+    keys = ('API_BASE_URL', 'PLATFORM_ACCOUNTS_FILE', 'WORKER_TOKEN_FILE', 'CSDN_USERNAME', 'CSDN_DISPLAY_NAME')
     keys += ('CSDN_PROFILE_DIR', 'PLAYWRIGHT_EXECUTABLE_PATH', 'WORKER_HEADLESS', 'LOGIN_CONTROL_ADDR') if worker else ('DATABASE_URL', 'API_ADDR', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_FILE', 'ADMIN_DIST_DIR', 'PUBLIC_ORIGIN', 'REMOTE_LOGIN_URL', 'INTEGRATION_MASTER_KEY_FILE', 'INTEGRATION_ENVIRONMENT', 'INTEGRATION_SERVICE_ID', 'CSDN_IMAGE_HOSTS')
     env.update({k: str(config[k]) for k in keys if k in config})
     return env
@@ -193,7 +194,7 @@ def build(state):
         subprocess.run([npm, 'ci', '--no-audit', '--no-fund'], cwd=REPO, env=env, check=True)
     subprocess.run([npm, 'run', 'build'], cwd=REPO, env=env, check=True)
     (state / 'bin').mkdir(exist_ok=True)
-    subprocess.run([tool('go', 'go-1.26.2/bin/go'), 'build', '-o', str(state / 'bin/post-bridge-api'), './cmd/server'], cwd=REPO / 'apps/api', env=env, check=True)
+    subprocess.run([tool('go', f'go-{GO_VERSION}/bin/go'), 'build', '-o', str(state / 'bin/post-bridge-api'), './cmd/server'], cwd=REPO / 'apps/api', env=env, check=True)
 
 def spawn(state, name, args, env):
     if owned(process_record(state, name)):
@@ -280,7 +281,7 @@ def main():
     elif args.action == 'test':
         env = base_env()
         env['TEST_DATABASE_URL'] = configuration(state)['DATABASE_URL']
-        subprocess.run([tool('go', 'go-1.26.2/bin/go'), 'test', '-race', '-count=1', './...'], cwd=REPO / 'apps/api', env=env, check=True)
+        subprocess.run([tool('go', f'go-{GO_VERSION}/bin/go'), 'test', '-race', '-count=1', './...'], cwd=REPO / 'apps/api', env=env, check=True)
         subprocess.run([tool('npm', 'node-v22.22.1-linux-x64/bin/npm'), 'run', 'test'], cwd=REPO, env=env, check=True)
 
 if __name__ == '__main__':

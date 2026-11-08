@@ -1,42 +1,340 @@
 # Ubuntu 无桌面部署
 
-## 范围与准备
+## 使用约定与入口
 
-支持 Ubuntu 24.04 的 amd64、arm64 服务器。API 和执行器由 systemd 常驻，浏览器使用无头 Chromium，不安装桌面、不开放远程桌面。Windows 本地开发继续使用[开发入口](development.md)，服务器安装使用独立的 [Ubuntu 管理入口](../scripts/ubuntu_deploy.py)。
+支持 Ubuntu 24.04 amd64、arm64。以下命令在 **目标服务器的 Bash 终端**执行；首次 SSH 命令可在 WSL Bash 中执行。本地开发见[开发说明](development.md)，不要在服务器用 dev.sh 替代 systemd 常驻部署。
 
-管理员需准备 Python 3.12、系统 CA 证书、可访问 Node.js、Go、npm、Ubuntu 软件源及 Playwright 下载源的网络，以及公开域名、HTTPS 证书和 Nginx。执行安装需要 root 权限。安装器会安装匹配当前 Playwright 的 Chromium 系统依赖、PostgreSQL 16 客户端和 Noto 中文字体；不会自动接管或重载现有 Nginx。
+命令逐条执行，失败后先排查，不继续后续步骤。“〈…〉”全部替换为目标环境值；真实账号、地址、目录、连接和密钥只保存在目标机器的私有配置中。安装、停止、启动、升级及 Nginx 重载会修改系统或影响服务，应由管理员确认目标、备份及操作时机后执行。
 
-数据库由管理员预先创建专属 PostgreSQL 16 数据库和专属登录角色，再填写 DATABASE_URL。该角色需要连接目标库并在自己的默认 schema 创建、访问项目表的权限；不要使用其他业务库、postgres 默认库或超级用户。外部数据库应使用有效证书并启用连接校验。安装器只检查连接，API 在启动时执行项目自身的幂等表初始化；安装、升级和停止均不创建、重置或删除数据库及角色。数据库由其管理员独立备份、升级和停止。
+管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.10，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg、远程桌面或模型密钥。
 
-## 安装入口
+| 操作 | 命令 | 行为 |
+| --- | --- | --- |
+| 首次配置 | sudo ./scripts/ubuntu-deploy.sh configure | 生成 root 所有、0600 的私有配置，已有文件不覆盖 |
+| 首次安装 | sudo ./scripts/ubuntu-deploy.sh install | 构建独立代码快照并启用、启动两个 systemd 单元 |
+| 检查 | sudo ./scripts/ubuntu-deploy.sh check | 检查部署标记、API、执行器及登录控制接口 |
+| 停止 | sudo ./scripts/ubuntu-deploy.sh stop | 先停执行器，再停 API；保留数据库、配置与账号会话 |
+| 再次启动 | sudo systemctl start post-bridge-api.service post-bridge-worker.service | 启动已有部署，不重建代码 |
+| 升级 | sudo ./scripts/ubuntu-deploy.sh upgrade | 从当前源码构建并切换部署，复用凭据与账号会话 |
 
-在已检出的源码根目录，通过 Python 3 启动 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。使用它的帮助参数可查看完整参数。
+部署入口没有 start 或 restart 子命令；已有部署使用 systemctl 启停。check 推荐使用 sudo，因为它要读取 root 私有的部署标记。--help 不需要 sudo。
 
-| 操作 | 子命令与行为 |
+已有部署时，日常操作看第五节，升级看第六节；无需重复生成配置或首次安装。
+
+## 一、准备服务器与源码
+
+### 1. 连接并检查环境
+
+```bash
+ssh '〈部署用户〉@〈服务器地址〉'
+cat /etc/os-release
+uname -m
+sudo -v
+```
+
+确认 Ubuntu 24.04，架构为 x86_64 或 aarch64，部署用户具备 sudo 权限。
+
+### 2. 安装基础工具
+
+以下命令安装 Python 3.12、源码下载工具和 Nginx。安装 Nginx 可能启动默认站点；已有 Nginx 的服务器按管理员现有配置管理，不覆盖其他站点。
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3 ca-certificates git curl nginx nano less
+python3 --version
+systemctl --version
+```
+
+需要能访问 Node.js、Go、npm、Ubuntu 软件源及 Playwright 下载源。公开域名、DNS 记录、已签发的 HTTPS 完整证书与私钥由管理员提前准备；安装器不签发证书、不改防火墙，也不自动接管 Nginx。只开放 HTTPS；HTTP 用于跳转，数据库和内部控制端口不向公网开放。
+
+### 3. 获取源码
+
+源码与运行数据分开。已有仓库跳过 clone，进入原源码目录；源码目录不是 /opt/post-bridge/current。
+
+```bash
+git clone '〈仓库 SSH 地址〉' '〈服务器源码目录〉'
+cd '〈服务器源码目录〉'
+git switch main
+git status --short
+git pull --ff-only origin main
+./scripts/ubuntu-deploy.sh --help
+```
+
+工作区有未提交改动时先处理，不强制覆盖。安装器读取当前目录对应的源码，自动生成独立发布快照，服务不会直接运行源码工作区。
+
+## 二、准备专属 PostgreSQL 数据库
+
+数据库需要 PostgreSQL 16、专属数据库及非超级用户登录角色。安装器只检查连接；项目 API 首次启动时初始化自己的表，不创建、重置或删除数据库及角色。
+
+### 1. 新服务器使用本机数据库
+
+仅在需要新建本机数据库、且同名角色和库不存在时执行。下面 post_bridge 为示例专属名称；如使用其他名称，后续配置和备份命令保持一致。已有数据库或使用托管数据库时跳过这些创建命令，沿用数据库管理员提供的专属连接。
+
+```bash
+sudo apt-get install -y postgresql-16 postgresql-client-16
+sudo systemctl start postgresql
+sudo -u postgres createuser --pwprompt --no-superuser --no-createdb --no-createrole post_bridge
+sudo -u postgres createdb --owner=post_bridge post_bridge
+psql --host 127.0.0.1 --port 5432 --username post_bridge --dbname post_bridge --password --command 'SELECT current_database(), current_user;'
+```
+
+密码在交互提示中填写，不作为命令参数。不要给应用 postgres 超级用户权限，也不要指向 postgres、template0、template1 或其他业务库。已有数据库的角色需有目标 schema 的建表与访问权限。
+
+### 2. 外部数据库
+
+由数据库管理员提供主机、端口、专属角色、库名与 CA。使用可信 CA 和主机名校验；DATABASE_URL 中配置 sslmode=verify-full，所引用 CA 必须可被 API 服务用户读取。不要把数据库端口开放到公网。确认连接可用后继续，数据库备份和维护由其管理员负责。
+
+## 三、初始化私有配置并安装
+
+### 1. 生成并编辑配置
+
+在源码根目录执行；configure 仅首次使用，不在升级时重新生成。
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh configure
+sudoedit /etc/post-bridge/install.json
+sudo stat --format='%U %a %n' /etc/post-bridge/install.json
+```
+
+权限应为 root 所有、600。按 [配置模板](../deploy/ubuntu-config.example.json) 填写字段，不把真实配置复制回仓库。
+
+| 字段 | 填写要求 |
 | --- | --- |
-| 生成配置 | configure：首次生成 /etc/post-bridge/install.json，权限 0600，已有文件不覆盖 |
-| 安装 | install：读取私有配置，下载并校验固定工具、构建独立快照、安装浏览器并启动服务 |
-| 升级 | upgrade：从当前源码重新构建，复用原配置、凭据和浏览器状态，切换代码后启动服务 |
-| 检查 | check：确认两个服务、API 健康及回环登录控制服务的匿名拒绝状态 |
-| 停止 | stop：先停止执行器，再停止 API；仅操作本部署登记的两个单元 |
-
-1. 管理员先执行 configure，然后在服务器直接编辑生成的私有配置。字段含义见下表；[配置模板](../deploy/ubuntu-config.example.json)仅用于定位，不包含实际凭据。
-2. 填写真实值后执行 install。首次运行会生成后台密码和内部密钥，终端仅提示密码文件位置，不打印密码。管理员在服务器受保护终端读取 /var/lib/post-bridge/api/admin-password 后登录，禁止将密码复制到聊天、截图或仓库。
-3. 检查完成后，将生成的 /etc/post-bridge/nginx.conf 纳入管理员自己的 Nginx 站点配置，核对域名与证书路径；验证 Nginx 配置成功后再重载。模板首次生成后由管理员维护，升级不会覆盖。
-4. 仅向外开放 HTTPS；HTTP 只用于跳转，API、远程登录控制和数据库端口不得向公网开放。在后台“平台账号”的“账号设置”页签完成远程登录和指定身份检查，再开始草稿任务。
-
-可从 Windows PowerShell 通过 SSH 连接服务器，先切换到服务器源码目录，再由服务器的 Python 3 执行上述子命令。凭据在服务器私有配置中填写，不放入 PowerShell 参数、SSH 命令、环境传递列表或聊天。
-
-| 配置字段 | 内容 |
-| --- | --- |
-| DATABASE_URL | 管理员准备的专属数据库连接；仅 API 使用 |
-| PUBLIC_ORIGIN | 对外 HTTPS 站点来源，使用正式域名及默认 HTTPS 端口，不带路径 |
-| ADMIN_USERNAME | 后台管理员账号，密码由安装器单独生成 |
-| CSDN_USERNAME | 指定平台账号的稳定用户名 |
+| DATABASE_URL | 专属 PostgreSQL 连接；密码含特殊字符时对连接串密码部分进行 URL 编码；外部连接启用证书校验 |
+| PUBLIC_ORIGIN | 对外 HTTPS 域名来源，默认 HTTPS 端口，无路径、查询或账号信息 |
+| ADMIN_USERNAME | 后台管理员名；密码由安装器生成，不在此配置明文密码 |
+| CSDN_USERNAME | 指定账号的稳定用户名 |
 | CSDN_DISPLAY_NAME | 指定账号显示名，用于身份核对 |
-| INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID | 可选外部来源环境与接收服务标识，必须同时提供；省略则不启用来源接入 |
+| INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID | 可选，必须同时提供；不启用外部来源时省略 |
+| CSDN_IMAGE_HOSTS | 可选，允许转存的正文图片源域名，逗号分隔；未配置时不启用该图源能力 |
 
-API 和远程登录控制使用仅本机可访问的内部地址，具体以部署配置为准。PUBLIC_ORIGIN 用于校验公网来源，与执行器的回环 API_BASE_URL 分开。后台登录画面只通过已认证 API 转发，不直接暴露执行器控制接口。
+需要自定义输入文件时，configure、install、upgrade 均支持 --config；文件仍须位于仓库外、root 所有、权限 0600。该参数只改变输入配置位置，运行环境和安装目录仍使用本页默认部署布局。沿用默认文件最便于后续维护。
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh configure --config '〈仓库外私有配置文件〉'
+sudoedit '〈仓库外私有配置文件〉'
+```
+
+上述自定义步骤与默认 configure 二选一，后续 install、upgrade 需添加相同 --config 参数。
+
+### 2. 首次安装并启动
+
+默认配置使用以下命令。安装器会创建独立服务用户，下载并核对固定工具，安装浏览器与 Linux 依赖，构建快照，检查数据库连接，再启用并启动 API、执行器。
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh install
+sudo ./scripts/ubuntu-deploy.sh check
+sudo systemctl status post-bridge-api.service post-bridge-worker.service --no-pager
+sudo systemctl is-enabled post-bridge-api.service post-bridge-worker.service
+```
+
+使用自定义配置时，只将上述 install 命令替换为下列命令，不重复执行两次安装；check 命令保持不变。
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh install --config '〈仓库外私有配置文件〉'
+```
+
+两个服务应为 active，开机启用状态应为 enabled。首次安装成功已完成启动，不需要再执行其他启动脚本；已有安装使用 upgrade，不重复 install。内部检查通过只代表服务可用，不代表 HTTPS、平台登录或真实发稿已验收。
+
+## 四、配置 HTTPS 并登录后台
+
+### 1. 编辑生成的 Nginx 配置
+
+安装器仅生成项目模板，不自动重载 Nginx。核对域名、完整证书与私钥路径，确认文件已由证书管理流程准备好。
+
+```bash
+sudoedit /etc/post-bridge/nginx.conf
+```
+
+模板默认的证书路径面向已有 Let's Encrypt 证书；使用其他证书存放位置时在本机配置中修改。模板只代理回环 API，拒绝公网 /internal/；保持登录请求的日志关闭和禁止缓存设置。
+
+### 2. 首次启用项目站点
+
+以下使用 Ubuntu 的 sites-available/sites-enabled 布局。先检查同名文件不存在；检查失败说明已有配置，应编辑并复用已有项目站点，不覆盖或强制替换。使用其他 Nginx 布局时由管理员纳入既有配置。
+
+```bash
+sudo test ! -e /etc/nginx/sites-available/post-bridge.conf
+sudo test ! -e /etc/nginx/sites-enabled/post-bridge.conf
+sudo install --mode=644 /etc/post-bridge/nginx.conf /etc/nginx/sites-available/post-bridge.conf
+sudo ln --symbolic /etc/nginx/sites-available/post-bridge.conf /etc/nginx/sites-enabled/post-bridge.conf
+sudo nginx -t
+```
+
+仅当 nginx -t 成功，且确认不影响其他站点后，启动或重载 Nginx：
+
+```bash
+sudo systemctl start nginx
+sudo systemctl reload nginx
+curl --fail --show-error '〈PUBLIC_ORIGIN 的 HTTPS 地址〉/healthz'
+```
+
+### 3. 获取密码并确认账号
+
+仅在服务器受保护终端读取管理员密码，按 q 退出；不把密码复制到聊天、截图或 Git。
+
+```bash
+sudo less /var/lib/post-bridge/api/admin-password
+```
+
+浏览器打开配置中的 HTTPS 管理地址，用 ADMIN_USERNAME 和该密码登录。进入“平台账号 → 账号设置 → 开始远程登录”，在后台弹窗完成官方认证与指定身份核对。服务器不运行 login-csdn.sh，不需要桌面。完成后检查账号连接状态；首次上线的真实操作按授权范围单独验收。
+
+## 五、日常检查、停止与再次启动
+
+### 1. 检查
+
+```bash
+cd '〈服务器源码目录〉'
+sudo ./scripts/ubuntu-deploy.sh check
+sudo systemctl status post-bridge-api.service post-bridge-worker.service --no-pager
+```
+
+检查成功不等于账号登录有效，平台状态仍在后台核对。
+
+### 2. 停止
+
+先结束后台人工登录并确认没有需要保留的进行中操作。停止仅影响这两个项目单元，最多等待各单元的安全清理时间，不停止 Nginx 或数据库；Nginx 暂时返回上游不可用属于停机结果。
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh stop
+sudo systemctl is-active post-bridge-api.service post-bridge-worker.service
+```
+
+两个单元应为 inactive；is-active 在全部停止时返回非零，这是此步骤的预期结果。stop 不取消开机启动，服务器重启后仍会自动启动这两个项目单元。
+
+### 3. 再次启动或重启
+
+已有部署无需重新 install。先启动 API，再启动执行器，随后检查：
+
+```bash
+sudo systemctl start post-bridge-api.service
+sudo systemctl start post-bridge-worker.service
+sudo ./scripts/ubuntu-deploy.sh check
+```
+
+需要重启正在运行的部署时，API 重启会联动执行器；操作前先结束人工登录并确认可以中断项目服务。
+
+```bash
+sudo systemctl restart post-bridge-api.service
+sudo ./scripts/ubuntu-deploy.sh check
+```
+
+上述启停不重建代码，不应用刚编辑的 install.json；配置变更需要按下一节执行 upgrade。
+
+## 六、升级代码或应用配置
+
+以下采用停机备份方式，操作清晰且能取得一致的项目状态。若采用数据库服务商快照或其他备份方式，也必须保存同一恢复点所需的数据、凭据和账号状态。
+
+### 1. 确认当前状态并停止项目
+
+确认没有进行中的人工登录或平台操作，记录源码提交后再更新。检查失败应先排查；当前服务原本已停止时直接进入备份，不把停止状态当作升级故障。
+
+```bash
+cd '〈服务器源码目录〉'
+git status --short
+sudo ./scripts/ubuntu-deploy.sh check
+sudo ./scripts/ubuntu-deploy.sh stop
+```
+
+停止不关闭数据库，后续仍能执行 pg_dump。不要在账号浏览器仍运行时直接打包其目录。
+
+### 2. 创建私有备份目录并记录代码
+
+```bash
+umask 077
+PB_BACKUP_DIR="$HOME/.local/share/post-bridge/backups/server-$(date -u +%Y%m%dT%H%M%SZ)"
+install -d -m 700 "$PB_BACKUP_DIR"
+git rev-parse HEAD > "$PB_BACKUP_DIR/source-commit.txt"
+sudo readlink /opt/post-bridge/current > "$PB_BACKUP_DIR/release-path.txt"
+```
+
+备份位于仓库外，包含凭据和会话，需按受限备份策略保存。
+
+### 3. 备份专属数据库
+
+将下列主机、端口、角色与库名替换为 install.json 对应值；密码在提示中输入，不写入命令行。pg_dump 已由安装器安装。使用外部数据库时先设置 CA 与证书校验；本机数据库可跳过这两条环境设置。
+
+```bash
+export PGSSLMODE=verify-full
+export PGSSLROOTCERT='〈数据库 CA 文件的绝对路径〉'
+```
+
+```bash
+pg_dump --host '〈数据库主机〉' --port '〈数据库端口〉' --username '〈专属数据库角色〉' --dbname '〈专属数据库名〉' --password --format=custom --file "$PB_BACKUP_DIR/database.dump"
+pg_restore --list "$PB_BACKUP_DIR/database.dump" > /dev/null
+```
+
+导出或目录读取失败就停止升级，处理备份问题；目录读取通过只代表归档可识别，不能替代恢复演练。不要对在线数据库直接打包数据目录。
+
+### 4. 备份私有配置、账号状态及项目单元
+
+该命令只打包本项目的配置与状态。浏览器状态已在停止后保存；外部来源存储密钥与初始化标记一并包含。Nginx 项目站点使用本页布局时，再执行第二个归档命令；其他布局需换为管理员实际维护的项目配置路径。
+
+```bash
+sudo tar --create --gzip --file "$PB_BACKUP_DIR/private-state.tar.gz" --directory / etc/post-bridge var/lib/post-bridge opt/post-bridge/installation.json etc/systemd/system/post-bridge-api.service etc/systemd/system/post-bridge-worker.service
+sudo tar --create --gzip --file "$PB_BACKUP_DIR/nginx-site.tar.gz" --directory / etc/nginx/sites-available/post-bridge.conf etc/nginx/sites-enabled/post-bridge.conf
+sudo chmod 600 "$PB_BACKUP_DIR/private-state.tar.gz" "$PB_BACKUP_DIR/nginx-site.tar.gz"
+sudo tar --list --gzip --file "$PB_BACKUP_DIR/private-state.tar.gz" > /dev/null
+```
+
+证书私钥由现有证书管理与备份流程保管；不得把备份放入源码目录或上传到公开附件。升级不会清理旧发布目录，保留其代码供受控恢复。
+
+### 5. 更新源码或修改配置
+
+确认工作区干净后更新 main。仅修改配置时跳过拉取；只修改代码时无需编辑私有配置。
+
+```bash
+git status --short
+git switch main
+git pull --ff-only origin main
+```
+
+```bash
+sudoedit /etc/post-bridge/install.json
+```
+
+不要重新运行 configure，不删除原密码、内部令牌、接入存储密钥或初始化标记。升级复用这些文件。
+
+### 6. 执行升级并检查
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh upgrade
+sudo ./scripts/ubuntu-deploy.sh check
+sudo systemctl status post-bridge-api.service post-bridge-worker.service --no-pager
+curl --fail --show-error '〈PUBLIC_ORIGIN 的 HTTPS 地址〉/healthz'
+```
+
+使用自定义输入配置时，将上述 upgrade 命令替换为：
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh upgrade --config '〈仓库外私有配置文件〉'
+```
+
+upgrade 会下载并校验 Go 1.26.10，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
+
+安装器不会覆盖已存在的 /etc/post-bridge/nginx.conf，也不会更新启用站点；仅当本次需要调整 Nginx 时，人工核对模板并编辑实际站点，再校验和重载：
+
+```bash
+sudoedit /etc/nginx/sites-available/post-bridge.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 7. 升级失败时
+
+- 构建、下载或数据库连接失败：不会切换到新发布；本流程已预先停机，原服务仍保持停止，排查后重试 upgrade。
+- 新服务启动或健康检查失败：安装器尝试恢复原配置、代码指向、单元及原启用／运行状态。本流程原状态为停止，因此成功恢复也不会自动启动原服务。
+- 需要恢复原服务时，先确认旧代码与当前数据库结构兼容，再按“再次启动”步骤执行；报告“恢复尚未完成”时先查指定单元日志，不盲目反复安装。
+- 数据库不自动回退。不要删除数据库、重置凭据或直接恢复旧数据来解决启动问题；数据库恢复需单独授权、核对来源撤销与防重放状态，并按[运维说明](operations.md)执行。
+
+## 七、查看故障日志
+
+```bash
+sudo journalctl --unit post-bridge-api.service --lines 100 --no-pager
+sudo journalctl --unit post-bridge-worker.service --lines 100 --no-pager
+sudo journalctl --unit nginx --lines 100 --no-pager
+```
+
+先核对私有配置、工具下载网络、数据库连接、端口和浏览器依赖。安装器隐藏子进程输出以避免暴露连接和凭据；不要开启请求正文、Cookie、密码、验证码或登录画面日志。对外分享前仅提取脱敏错误。
 
 ## 可选外部来源接入
 
@@ -51,7 +349,7 @@ API 和远程登录控制使用仅本机可访问的内部地址，具体以部�
 | 位置 | 所有权与用途 |
 | --- | --- |
 | /opt/post-bridge/releases 与 current | root 管理的代码快照及当前指向；服务不能改写代码 |
-| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.2；下载校验后使用 |
+| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.10；下载校验后使用 |
 | /etc/post-bridge | root 私有配置目录，配置及服务环境文件 0600 |
 | /var/lib/post-bridge/api | 独立 API 用户的 0700 目录；后台密码与内部密钥 0600 |
 | /var/lib/post-bridge/worker/profile | 独立执行器用户的 0700 持久浏览器目录；升级保留，不与本地登录助手或其他项目共享 |
@@ -62,7 +360,7 @@ API 用户为 post-bridge-api，执行器用户为 post-bridge-worker，均禁�
 
 [API 单元](../deploy/systemd/post-bridge-api.service)与[执行器单元](../deploy/systemd/post-bridge-worker.service)直接前台运行构建产物，异常退出自动重启。API 重启会带动执行器重新启动；停止给出最多 90 秒清理时间，剩余子进程仅在所属 systemd 控制组内清理，不按进程名批量停止。两个单元随系统启动。
 
-## 升级与排障
+## 升级恢复机制与验收边界
 
 升级前备份专属数据库和私有配置，确认没有正在进行的人工登录或平台操作，并在新的已检出源码中执行 upgrade。安装器先完成构建、浏览器依赖和数据库连通检查，再停止旧服务并切换代码；不会重置账号状态、凭据或数据库。切换前在私有内存中保存现有配置、服务单元、代码指向及启用和运行状态。新服务启动或健康检查失败时，恢复这些文件和状态，重新加载单元，仅启动原本运行的服务，并检查原 API 和执行器健康；原本停止的服务保持停止。恢复未完成会明确报告，不会静默认定成功。数据库不自动回退，因此表结构升级必须向前兼容，原运行程序仍须能读取升级后的表结构。管理员排查后重新执行 upgrade；不要通过重建数据库解决启动问题。
 
@@ -77,3 +375,7 @@ API 用户为 post-bridge-api，执行器用户为 post-bridge-worker，均禁�
 [部署安全测试](../tests/runtime/test_ubuntu.py)覆盖安装快照的文档资源、来源配置、凭据隔离、升级保留、符号链接拒绝、代码切换和代理保护。[CI](../.github/workflows/ci.yml)使用安装器生成独立快照，再从该快照安装依赖、构建后台、执行器和 API。[独立 systemd 检查](../scripts/ubuntu_systemd_smoke.py)使用随机单位名、随机端口和合成服务验证无桌面启动、崩溃重启、API 重启、子进程清理及无关进程保留；结束时删除临时单位与进程。
 
 本地使用用户级 systemd 完成独立合成验证；用户级环境关闭需要系统权限的挂载隔离。CI 以系统级临时单位复验生产单元同源的进程和文件隔离规则。当前没有目标服务器，实际 root 安装、HTTPS 证书、真实账号远程登录及生产验收需在目标环境分别完成；不将本地合成验证记为生产已部署。
+
+## 小红书只读账号
+
+支持配置独立的小红书会话、登录检查和笔记只读同步。完整私有配置字段、逐步启动和部署命令见[平台账号管理](platform-accounts.md)。不配置时保持 CSDN 单平台运行；不开放小红书上传、草稿或发布。

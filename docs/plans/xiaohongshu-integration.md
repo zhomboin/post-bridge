@@ -2,7 +2,7 @@
 
 ## 范围与状态
 
-依据[接入方案](../xiaohongshu-integration.md)、[需求](../requirements.md)、[A 阶段](a-platform-validation.md)和[C 阶段](c-platform-publishing.md)。先验证平台能力，再完成账号拆分、独立图文稿、素材和发布核对。首个交付为单账号图文笔记立即发布。
+依据[接入方案](../xiaohongshu-integration.md)、[需求](../requirements.md)、[A 阶段](a-platform-validation.md)和[C 阶段](c-platform-publishing.md)。先验证平台能力，再完成账号拆分、独立图文稿、素材和发布核对。完整目标为单账号图文笔记立即发布；当前交付为多平台账号、小红书登录检查与笔记只读列表，图文稿、素材和写入尚未实现。
 
 X01、X02 登录及只读空列表与图文上传前检查已完成。用户授权笔记列表与编辑器只读访问，禁止上传素材、保存草稿或公开发布；未填写图文内容或删除笔记。当前列表无非空样本，上传后的编辑字段不可见，X02 整体未通过。账号标识和原始数据仅存本地私有目录，结果见[平台能力](../platform-capabilities.md)、[验收记录](../acceptance.md)和[进度](../progress.md)。
 
@@ -43,12 +43,12 @@ X01 证据：项目 Playwright 1.64.1 可启动启用沙箱的 Chrome 156.0.8078
 
 前置：X02 形成可执行浏览器路径；不依赖外站写入的模拟工作可以先推进。
 
-- [ ] 修改[账号与任务](../../apps/api/schema.sql)，支持平台归属并迁移现有数据，不改变 CSDN 身份与任务关联。
-- [ ] 修改[worker 协议](../../apps/worker/src/types.ts)与[领取执行](../../apps/worker/src/worker.ts)，绑定平台账号、能力和凭据；错平台、错账号与过期领取均拒绝。
-- [ ] 按平台拆分[配置](../../apps/worker/src/config.ts)、[登录](../../apps/worker/src/login-browser.ts)与适配器选择，保持账号互斥和私有浏览器隔离。
-- [ ] 验证双平台任务互不串号、登录等待、取消、失租、重启和旧 CSDN 任务迁移；运行受影响 API 与 worker 用例。
+- [x] 修改[账号与任务](../../apps/api/schema.sql)，支持平台归属并迁移现有数据，不改变 CSDN 身份与任务关联。
+- [x] 修改[worker 协议](../../apps/worker/src/types.ts)与[领取执行](../../apps/worker/src/worker.ts)，绑定平台账号、能力和凭据；错平台、错账号与过期领取均拒绝。
+- [x] 按平台拆分[账号配置](../../apps/worker/src/accounts-config.ts)与适配器选择，保持账号互斥和私有浏览器隔离；CSDN 保留远程登录，小红书仅复用会话进行登录检查。
+- [x] 通过定向数据库与执行器回归验证双平台隔离、登录等待、取消、失租、重启及旧 CSDN 任务兼容；真实非空账号的异常恢复仍待验。
 
-通过：模拟双平台可独立调度，未开放小红书写入能力。
+当前只读范围通过：双平台独立领取，停用账号拒绝新建或恢复任务，旧数据保留；未开放小红书写入能力。
 
 ## X04：独立图文稿与素材
 

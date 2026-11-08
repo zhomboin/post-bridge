@@ -78,6 +78,7 @@ export function validContent(title: string, markdown: string): boolean {
   return contentImages(title, markdown)?.length === 0;
 }
 export interface Config {
+  platform?: string; accountId?: string; userId?: string;
   apiBaseURL: string; tokenFile: string; username: string; displayName: string; profileDir: string;
   executablePath?: string; headless: boolean; workerId: string; pollIntervalMs: number; loginControlAddr?: string;
 }

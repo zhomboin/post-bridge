@@ -8,9 +8,9 @@
 
 ## B01：工程、契约与 CI 基础
 
-前置：A05。当前已存在根 Node 工作区、[Go API](../../apps/api)、[后台](../../apps/admin)、[执行器](../../apps/worker)、[来源机器契约](../../contracts/cms.openapi.yaml)、[启动脚本](../../scripts/dev.ps1)、[停止脚本](../../scripts/stop.ps1)、[CI](../../.github/workflows/ci.yml)及[开发说明](../development.md)。内部 worker 机器契约和完整多平台工程关口继续按未完成范围推进，不使用拟建 internal 目录替代实际文件定位。
+前置：A05。当前已存在根 Node 工作区、[Go API](../../apps/api)、[后台](../../apps/admin)、[执行器](../../apps/worker)、[来源机器契约](../../contracts/cms.openapi.yaml)、[启动脚本](../../scripts/dev.sh)、[停止脚本](../../scripts/stop.sh)、[CI](../../.github/workflows/ci.yml)及[开发说明](../development.md)。内部 worker 机器契约和完整多平台工程关口继续按未完成范围推进，不使用拟建 internal 目录替代实际文件定位。
 
-- [ ] 核实并固定技术版本、镜像和依赖许可；确定 Go、前端和执行器测试工具及 PowerShell Core 运行方式。
+- [ ] 核实并固定技术版本、镜像和依赖许可；确定 Go、前端和执行器测试工具及 Linux Shell 运行方式。
 - [ ] 先写独立 API 健康检查、前端可加载、执行器心跳和非法配置启动失败的最小冒烟用例，确认失败。
 - [ ] 建立根 Node 工作区、中央集成测试配置、三单元启动、数据库连接、模拟来源及平台夹具，契约明确来源与内部执行器的不同认证和数据范围。
 - [ ] 实现总计划的脚本入口与目标白名单；开发、测试资源使用运行标识记录，失败和停止只回收本次创建的资源。
