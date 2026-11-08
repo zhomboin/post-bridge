@@ -32,7 +32,7 @@ API 是数据库唯一业务写入入口。执行器通过独立内部身份领�
 | [来源身份与注册](../apps/api/integration_auth.go)、[注册管理](../apps/api/integration_registry.go)、[签名](../apps/api/integration_signature.go) | 独立外部身份、权限、密钥和调用认证 |
 | [来源内容](../apps/api/integration_content_store.go)、[执行守卫](../apps/api/integration_guard.go) | 快照修订、父分发、生命周期与写入前检查 |
 | [apps/admin/src](../apps/admin/src) | 平铺后台路由、页面、通用交互与来源工作台 |
-| [apps/worker/src](../apps/worker/src) | 固定 CSDN 浏览器执行、只读核对、账号与登录控制 |
+| [apps/worker/src](../apps/worker/src) | CSDN 写入与小红书只读执行、按平台账号隔离调度和登录检查 |
 | [外部契约](../contracts/cms.openapi.yaml)、[共享向量](../tests/fixtures/integration-contract.json) | 当前来源接口和可校验合成数据 |
 | [tests/e2e](../tests/e2e)、[tests/runtime](../tests/runtime) | 跨服务、浏览器与启动部署安全验证 |
 | [deploy/systemd](../deploy/systemd)、[deploy/nginx](../deploy/nginx)、[Ubuntu 安装器](../scripts/ubuntu_deploy.py) | 常驻单元、HTTPS 入口与私有配置 |
