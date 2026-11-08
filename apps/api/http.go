@@ -25,6 +25,7 @@ type Config struct {
 	AdminUsername          string
 	AdminPassword          string
 	WorkerToken            string
+	PlatformAccounts       []PlatformAccountConfig
 	Origin                 string
 	AdminDistDir           string
 	RemoteLoginURL         string
@@ -37,6 +38,7 @@ type handler struct {
 	username         string
 	hash             []byte
 	workerToken      string
+	workerAccounts   map[string]string
 	origin           string
 	secure           bool
 	dist             string
@@ -73,6 +75,17 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 	}
 	h := &handler{store: cfg.Store, username: cfg.AdminUsername, hash: hash, workerToken: cfg.WorkerToken, origin: strings.TrimSuffix(cfg.Origin, "/"), secure: origin.Scheme == "https", dist: cfg.AdminDistDir, mux: http.NewServeMux(), attempts: map[string]loginWindow{}}
 	h.remoteLoginProxy = remote
+	if err = cfg.Store.ConfigurePlatformAccounts(ctx, cfg.PlatformAccounts); err != nil {
+		return nil, err
+	}
+	h.workerAccounts = map[string]string{cfg.WorkerToken: "csdn-main"}
+	for _, a := range cfg.PlatformAccounts {
+		if len(a.WorkerToken) < 32 || h.workerAccounts[a.WorkerToken] != "" {
+			return nil, ErrInvalid
+		}
+		h.workerAccounts[a.WorkerToken] = a.ID
+	}
+	h.platformAccountRoutes()
 	h.routes()
 	h.remoteLoginRoutes()
 	h.articleRoutes()
@@ -171,14 +184,33 @@ func (h *handler) admin(next func(http.ResponseWriter, *http.Request, session)) 
 		next(w, r, s)
 	}
 }
+
+type workerAccountKey struct{}
+
 func (h *handler) worker(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		expected := "Bearer " + h.workerToken
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(expected)) != 1 {
+		accountID := ""
+		for token, id := range h.workerAccounts {
+			if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) == 1 {
+				accountID = id
+			}
+		}
+		if accountID == "" {
 			fail(w, 401, "unauthorized", "需要执行器身份")
 			return
 		}
-		next(w, r)
+		if id := r.PathValue("id"); id != "" {
+			job, err := h.store.Get(r.Context(), id)
+			if err != nil {
+				replyError(w, err)
+				return
+			}
+			if job.AccountID != accountID {
+				fail(w, 403, "forbidden", "执行器不能访问其他账号任务")
+				return
+			}
+		}
+		next(w, r.WithContext(context.WithValue(r.Context(), workerAccountKey{}, accountID)))
 	}
 }
 func (h *handler) limited(r *http.Request) bool {
@@ -354,6 +386,17 @@ func (h *handler) routes() {
 				replyError(w, ErrInvalid)
 				return
 			}
+			if action == "resume" || action == "retry" {
+				existing, err := h.store.Get(r.Context(), r.PathValue("id"))
+				if err != nil {
+					replyError(w, err)
+					return
+				}
+				if !h.configuredAccount(existing.AccountID) {
+					fail(w, http.StatusConflict, "account_disabled", "账号未配置，请先恢复私有账号配置")
+					return
+				}
+			}
 			job, err := h.store.Action(r.Context(), r.PathValue("id"), action, in)
 			if err != nil {
 				replyError(w, err)
@@ -371,7 +414,7 @@ func (h *handler) routes() {
 		if !decode(w, r, &in) {
 			return
 		}
-		c, err := h.store.Claim(r.Context(), in.WorkerID)
+		c, err := h.store.ClaimForAccount(r.Context(), in.WorkerID, r.Context().Value(workerAccountKey{}).(string))
 		if err != nil {
 			replyError(w, err)
 			return
@@ -395,7 +438,7 @@ func (h *handler) routes() {
 			replyError(w, ErrInvalid)
 			return
 		}
-		if err := h.store.WorkerHeartbeat(r.Context(), in.WorkerID, *in.BrowserIdle, *in.ProfileAvailable); err != nil {
+		if err := h.store.WorkerHeartbeatForAccount(r.Context(), in.WorkerID, r.Context().Value(workerAccountKey{}).(string), *in.BrowserIdle, *in.ProfileAvailable); err != nil {
 			replyError(w, err)
 			return
 		}

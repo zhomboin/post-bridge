@@ -15,7 +15,7 @@ func (s *Store) integrationGuardAllowed(ctx context.Context, tx pgx.Tx, r *recor
 		return ErrIntegrationAuthentication
 	}
 	if r.AccountUsername != "" {
-		matches, err := csdnJobAccountMatches(ctx, tx, r)
+		matches, err := jobAccountMatches(ctx, tx, r)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func integrationGuardPause(ctx context.Context, tx pgx.Tx, r *record, now time.T
 func (s *Store) integrationClaimAllowed(ctx context.Context, tx pgx.Tx, r *record, now time.Time) (bool, error) {
 	if r.Kind == "publish" && r.RunMode == "reconcile" {
 		// Source revocation stops writes, not verification of the same account's article.
-		return csdnJobAccountMatches(ctx, tx, r)
+		return jobAccountMatches(ctx, tx, r)
 	}
 	if !sourceGuardedJob(r) || r.RunMode == "reconcile" || readKind(r.Kind) {
 		return true, nil
@@ -117,7 +117,7 @@ func (s *Store) integrationClaimAllowed(ctx context.Context, tx pgx.Tx, r *recor
 
 func (s *Store) integrationActionAllowed(ctx context.Context, tx pgx.Tx, r *record, action string, now time.Time) error {
 	if r.Kind == "publish" && action == "reconcile" {
-		matches, err := csdnJobAccountMatches(ctx, tx, r)
+		matches, err := jobAccountMatches(ctx, tx, r)
 		if err != nil {
 			return err
 		}

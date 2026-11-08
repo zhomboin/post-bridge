@@ -50,7 +50,14 @@ export interface ArticleTrend {
 export interface ArticleSnapshot {
   username: string;
   profile: ArticleProfile;
-  counts: { total: number; published: number; draft: number; rejected: number; recycled: number; unknown: number };
+  counts: {
+    total: number;
+    published: number;
+    draft: number;
+    rejected: number;
+    recycled: number;
+    unknown: number;
+  };
   stats: ArticleStats;
   trend: ArticleTrend[];
   items: Article[];
@@ -82,7 +89,16 @@ export interface PublishOptions {
 }
 export interface Job {
   id: string;
-  kind: 'save_draft' | 'publish' | 'check_account' | 'sync_articles' | 'read_article';
+  platform?: string;
+  account_id?: string;
+  account_native_id?: string;
+  kind:
+    | 'sync_notes'
+    | 'save_draft'
+    | 'publish'
+    | 'check_account'
+    | 'sync_articles'
+    | 'read_article';
   title: string;
   markdown: string;
   image_urls?: string[];
@@ -96,7 +112,12 @@ export interface Job {
   remote_id: string | null;
   reconcile_candidate_id: string | null;
 }
-export interface Claim { job: Job; lease_token: string; lease_seconds: number; lease_expires_at: string }
+export interface Claim {
+  job: Job;
+  lease_token: string;
+  lease_seconds: number;
+  lease_expires_at: string;
+}
 export interface Observation {
   phase: 'before' | 'after';
   title: string;
@@ -104,7 +125,15 @@ export interface Observation {
   status: string;
   remote_id?: string;
 }
-export interface Progress { stage: string; external_started?: boolean; remote_id?: string; message?: string; observation?: Observation; platform_markdown?: string; published_html_sha256?: string }
+export interface Progress {
+  stage: string;
+  external_started?: boolean;
+  remote_id?: string;
+  message?: string;
+  observation?: Observation;
+  platform_markdown?: string;
+  published_html_sha256?: string;
+}
 export interface JobResult {
   status: 'succeeded' | 'failed' | 'waiting_user' | 'reconciling' | 'cancelled';
   remote_id?: string;
@@ -112,13 +141,39 @@ export interface JobResult {
   error_code?: string;
   error_message?: string;
   retryable?: boolean;
+  notes?: NotesSnapshot;
+  account_identity?: AccountIdentity;
   articles?: ArticleSnapshot;
   article?: ArticleBody;
 }
-export interface Hooks { progress(value: Progress): Promise<void> }
-export interface Session { run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult>; close(): Promise<void> }
+export interface Hooks {
+  progress(value: Progress): Promise<void>;
+}
+export interface Session {
+  run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult>;
+  close(): Promise<void>;
+}
 export interface JobAPI {
-  heartbeat(id: string, token: string): Promise<{cancel_requested: boolean}>;
+  heartbeat(id: string, token: string): Promise<{ cancel_requested: boolean }>;
   progress(id: string, token: string, value: Progress): Promise<void>;
   complete(id: string, token: string, value: JobResult): Promise<void>;
+}
+
+export interface AccountIdentity {
+  username: string;
+  user_id: string;
+}
+export interface Note {
+  id: string;
+  title: string;
+  status: 'published' | 'reviewing' | 'rejected' | 'unknown';
+  platform_status: string;
+  posted_at: string;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  favorites: number | null;
+}
+export interface NotesSnapshot extends AccountIdentity {
+  items: Note[];
 }

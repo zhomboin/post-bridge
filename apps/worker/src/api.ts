@@ -4,7 +4,7 @@ export class APIError extends Error {
   constructor(public readonly status: number) { super(status === 409 ? '任务领取已失效' : '内部服务暂不可用'); }
 }
 export class WorkerAPI implements JobAPI {
-  constructor(private readonly baseURL: string, private readonly token: string, readonly workerId: string) {}
+  constructor(private readonly baseURL: string, private readonly token: string, readonly workerId: string, private readonly account?: { id: string; platform: string }) {}
   private async request(path: string, body: unknown): Promise<unknown> {
     try {
       const response = await fetch(`${this.baseURL}${path}`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` }, body: JSON.stringify(body) });
@@ -19,6 +19,7 @@ export class WorkerAPI implements JobAPI {
   async claim(): Promise<Claim | null> {
     const value = await this.request('/internal/worker/claim', { worker_id: this.workerId }) as Claim | null;
     if (value && (!value.job?.id || !value.lease_token || value.lease_seconds < 30)) throw new APIError(502);
+    if (value && this.account && (value.job.account_id !== this.account.id || value.job.platform !== this.account.platform)) throw new APIError(502);
     return value;
   }
   async workerHeartbeat(browserIdle: boolean, profileAvailable: boolean): Promise<void> {

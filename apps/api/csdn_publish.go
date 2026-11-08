@@ -229,12 +229,6 @@ func remoteIDInUse(ctx context.Context, tx pgx.Tx, r *record, remoteID string) (
 	return exists, err
 }
 
-func csdnJobAccountMatches(ctx context.Context, tx pgx.Tx, r *record) (bool, error) {
-	var current string
-	err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id=$1", r.AccountID).Scan(&current)
-	return current == r.AccountUsername && current != "", err
-}
-
 func sourceGuardedJob(r *record) bool {
 	return r.IntegrationDistributionID != "" || r.Kind == "publish"
 }

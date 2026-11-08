@@ -113,7 +113,9 @@ type ArticleDetail struct {
 	ReadJob   *Job         `json:"read_job"`
 }
 
-func readKind(kind string) bool { return kind == "sync_articles" || kind == "read_article" }
+func readKind(kind string) bool {
+	return kind == "sync_articles" || kind == "read_article" || kind == "sync_notes"
+}
 func articleStatus(raw string) string {
 	switch raw {
 	case "1":

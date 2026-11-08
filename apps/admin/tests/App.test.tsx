@@ -300,6 +300,16 @@ describe('管理员会话与任务闭环', () => {
     expect(screen.getByRole('link', { name: '查看CSDN草稿' }).getAttribute('href')).toBe('https://mp.csdn.net/mp_blog/creation/editor/123');
   });
 
+  it('小红书等待登录返回指定账号设置且不显示草稿处理', async () => {
+    window.history.replaceState({}, '', '/jobs/job-1');
+    const fallback = handler;
+    handler = (url, init) => url === '/api/jobs/job-1' ? response({ ...job, platform: 'xiaohongshu', account_id: 'xhs-main', kind: 'sync_notes', status: 'waiting_user' }) : fallback(url, init);
+    render(<App />);
+    expect((await screen.findByRole('link', { name: '检查小红书账号' })).getAttribute('href')).toBe('/account?tab=settings&account=xhs-main');
+    expect(screen.queryByRole('link', { name: '登录 CSDN' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '重新自动核对' })).toBeNull();
+  });
+
   it('等待登录任务提示远程验证并允许手动继续', async () => {
     window.history.replaceState({}, '', '/jobs/job-1');
     const fallback = handler;
