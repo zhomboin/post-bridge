@@ -16,8 +16,8 @@
 - [后台及内部 API](api.md)：管理员、任务与执行器协议。
 - [管理后台规范](admin-ui.md)：界面规则、来源工作台与合成截图。
 - [平台能力](platform-capabilities.md)：各平台实际证据与限制。
-- [本地开发](development.md)：私有配置、启动、停止及本地验证。
+- [WSL 本地开发](development.md)：工具准备、私有配置、初始化、启动、停止、备份升级及验证的逐步命令。
 - [运维说明](operations.md)：来源暂停、密钥、恢复和保留。
-- [Ubuntu 部署](ubuntu-deployment.md)：安装升级、可选接入配置与生产边界。
+- [Ubuntu 部署](ubuntu-deployment.md)：数据库准备、初始化安装、HTTPS、启停、备份升级和排障的逐步命令。
 - [前端技能](frontend-skills.md)：设计与审阅要求。
 - [贡献指南](../AGENTS.md)：实际结构、测试和提交规范。
