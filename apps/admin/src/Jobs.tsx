@@ -8,7 +8,7 @@ import { canReviewPublication, PublishDraftAction, PublishJobActions, publishedA
 import { Empty, Pagination, RefreshBar, ResourceError, RouteLink, Status, isSourcePaused, jobHref, jobOutcome, queryPage, stageLabel, statusLabels, time, useAction, useResource, useWorkspace, type Job, type PageData } from './runtime';
 
 const platformText = (job: Job) => job.platform === 'xiaohongshu' ? '小红书' : 'CSDN';
-const accountSettings = (job: Job) => '/account?tab=settings&account=' + encodeURIComponent(job.account_id || 'csdn-main');
+const accountSettings = (job: Job) => job.platform === 'xiaohongshu' ? '/account?tab=settings&account=' + encodeURIComponent(job.account_id) : '/account?tab=settings';
 const readOnlyJob = (job: Job) => job.platform === 'xiaohongshu' || job.kind === 'sync_articles' || job.kind === 'read_article';
 const kindText = (job: Job) => ({ sync_notes: '笔记同步', sync_articles: '文章同步', read_article: '正文读取', check_account: '账号检查', publish: '正式发布', save_draft: '保存草稿' } as Record<string, string>)[job.kind] || '未知操作';
 function autoReconcileActive(job: Job) {
