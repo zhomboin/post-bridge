@@ -72,7 +72,7 @@
 
 ## C06：小红书真实适配
 
-路线见[小红书接入方案](../xiaohongshu-integration.md)，具体执行见[专项计划 X03—X07](xiaohongshu-integration.md)。匿名入口与环境已实测，真实账号待授权，适配尚未实现；平台账号、图文稿、素材和结果核对均需通过各自关口。
+路线见[小红书接入方案](../xiaohongshu-integration.md)，具体执行见[专项计划 X03—X07](xiaohongshu-integration.md)。匿名入口、指定账号登录与会话重启已实测，适配尚未实现；图文能力、平台账号模型、素材和结果核对均需通过各自关口。
 
 前置：A04、C03，且当前操作已授权。拟建：`apps/worker/src/adapters/xiaohongshu/index.ts`、`xiaohongshu/editor.ts`、`xiaohongshu/result.ts` 及同目录测试。
 
