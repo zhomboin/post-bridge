@@ -12,7 +12,7 @@ func TestAvatarContentSecurityPolicy(t *testing.T) {
 	h := &handler{mux: mux}
 	recorder := httptest.NewRecorder()
 	h.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
-	expected := "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://profile-avatar.csdnimg.cn; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+	expected := "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://profile-avatar.csdnimg.cn https://img.xiaohongshu.com https://*.xhscdn.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 	if got := recorder.Header().Get("Content-Security-Policy"); got != expected {
 		t.Fatalf("unexpected CSP: %s", got)
 	}
