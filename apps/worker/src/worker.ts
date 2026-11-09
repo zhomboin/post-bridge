@@ -104,6 +104,7 @@ export async function executeClaim(
   if (result.status !== 'succeeded' || claim.job.kind !== 'sync_articles') delete result.articles;
   if (result.status !== 'succeeded' || claim.job.kind !== 'read_article') delete result.article;
   if (result.status !== 'succeeded' || claim.job.kind !== 'sync_notes') delete result.notes;
+  if (result.status !== 'succeeded' || claim.job.kind !== 'read_note') delete result.note;
   if (result.status !== 'succeeded' || claim.job.platform !== 'xiaohongshu')
     delete result.account_identity;
   await api.complete(claim.job.id, claim.lease_token, result);

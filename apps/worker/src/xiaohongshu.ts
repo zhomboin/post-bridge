@@ -3,6 +3,8 @@ import type { Hooks, Job, JobResult } from './types.js';
 import { nativeReadRequest } from './native-read.js';
 import { identityPayload, NotesCollector } from './xiaohongshu-model.js';
 import { xiaohongshuRequestAllowed } from './xiaohongshu-network.js';
+import { profilePayload, statsPayload } from './xiaohongshu-insights.js';
+import { readNativeNote } from './xiaohongshu-detail.js';
 
 const origin = 'https://creator.xiaohongshu.com';
 const listPath = '/api/galaxy/v2/creator/note/user/posted';
@@ -36,7 +38,7 @@ export class XiaohongshuAdapter {
   }
   async run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult> {
     if (
-      !['check_account', 'sync_notes'].includes(job.kind) ||
+      !['check_account', 'sync_notes', 'read_note'].includes(job.kind) ||
       job.platform !== 'xiaohongshu' ||
       job.account_id !== this.expected.accountId ||
       job.account_username !== this.expected.username ||
@@ -53,17 +55,41 @@ export class XiaohongshuAdapter {
           route.request().url(),
           route.request().method(),
           route.request().resourceType(),
+          job.kind === 'read_note' ? job.article_id : undefined,
         )
           ? route.fallback()
           : route.abort('blockedbyclient'),
       );
       await this.context.routeWebSocket('**/*', (socket) => socket.close());
       const page = this.context.pages()[0] || (await this.context.newPage());
+      let insights;
+      if (job.kind === 'sync_notes') {
+        const wait = (path: string) =>
+          page.waitForResponse(
+            (r) => r.url().split('?')[0] === origin + path && r.request().method() === 'GET',
+            { timeout: 25000 },
+          );
+        const identityRead = wait('/api/galaxy/user/info');
+        const profileRead = wait('/api/galaxy/creator/home/personal_info');
+        const statsRead = wait('/api/galaxy/v2/creator/datacenter/account/base');
+        for (const promise of [identityRead, profileRead, statsRead]) void promise.catch(() => {});
+        await page.goto(origin + '/new/home', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const identity = identityPayload(await this.payload(await identityRead));
+        if (
+          identity.username !== this.expected.username ||
+          identity.user_id !== this.expected.userId
+        )
+          throw Error('account_mismatch');
+        insights = {
+          profile: profilePayload(await this.payload(await profileRead), this.expected.username),
+          ...statsPayload(await this.payload(await statsRead)),
+        };
+      }
       const accountResponse = page.waitForResponse(
         (response) => response.url().split('?')[0] === origin + '/api/galaxy/user/info',
         { timeout: 25000 },
       );
-      const initialList = job.kind === 'sync_notes' ? this.listResponse(page, 0) : undefined;
+      const initialList = job.kind !== 'check_account' ? this.listResponse(page, 0) : undefined;
       // 所有等待在导航前注册，失败也立即接住拒绝，避免遗留未处理的 Promise。
       void accountResponse.catch(() => {});
       void initialList?.catch(() => {});
@@ -79,8 +105,30 @@ export class XiaohongshuAdapter {
         return { status: 'succeeded', account_identity: identity };
       }
       const collector = new NotesCollector();
-      let next = collector.add(0, await this.payload(await initialList!));
-      while (!collector.done) {
+      let pagePayload = await this.payload(await initialList!);
+      let next = collector.add(0, pagePayload);
+      let pageItems = collector.items.slice();
+      for (;;) {
+        if (job.kind === 'read_note') {
+          const index = pageItems.findIndex((n) => n.id === job.article_id);
+          if (index >= 0) {
+            const target = pageItems[index];
+            if (target.status !== 'published') throw Error('note_unavailable');
+            const note = await readNativeNote(
+              this.context,
+              page,
+              index,
+              pageItems.length,
+              target.id,
+              target.title,
+              this.expected.userId,
+              signal,
+            );
+            await hooks.progress({ stage: 'verifying' });
+            return { status: 'succeeded', account_identity: identity, note };
+          }
+        }
+        if (collector.done) break;
         signal.throwIfAborted();
         // 只驱动平台原生分页，不构造签名或重放带凭据的接口请求。
         const button = page.getByRole('button', { name: /下一页|next/i });
@@ -95,14 +143,18 @@ export class XiaohongshuAdapter {
         );
         const response = await request.response();
         if (!response) throw Error('network_error');
-        next = collector.add(current, await this.payload(response));
+        const previous = collector.items.length;
+        pagePayload = await this.payload(response);
+        next = collector.add(current, pagePayload);
+        pageItems = collector.items.slice(previous);
       }
+      if (job.kind === 'read_note') throw Error('note_unavailable');
       signal.throwIfAborted();
       await hooks.progress({ stage: 'verifying' });
       return {
         status: 'succeeded',
         account_identity: identity,
-        notes: { ...identity, items: collector.items },
+        notes: { ...identity, ...insights, items: collector.items },
       };
     } catch (error) {
       if (signal.aborted) return { status: 'cancelled', error_code: 'cancelled' };
@@ -110,7 +162,12 @@ export class XiaohongshuAdapter {
       if (code === 'needs_login') return { status: 'waiting_user', error_code: code };
       return {
         status: 'failed',
-        error_code: ['account_mismatch', 'adapter_mismatch', 'network_error'].includes(code)
+        error_code: [
+          'account_mismatch',
+          'adapter_mismatch',
+          'network_error',
+          'note_unavailable',
+        ].includes(code)
           ? code
           : 'adapter_mismatch',
         retryable: code === 'network_error',

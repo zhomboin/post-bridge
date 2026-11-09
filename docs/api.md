@@ -90,12 +90,18 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 | POST /api/accounts/{account}/check | 传入 request_id，创建 check_account 任务 |
 | GET /api/accounts/{account}/notes | 小红书本地快照；q、status、page、page_size 支持搜索和分页 |
 | POST /api/accounts/{account}/notes/sync | 传入 request_id，创建 sync_notes；同一账号活跃同步合并 |
+| GET /api/accounts/{account}/notes/{note} | note、body、fetched_at、read_job；仅限当前账号快照内笔记，正文未读为 null |
+| POST /api/accounts/{account}/notes/{note}/read | 传入 request_id，为已发布笔记创建或复用 read_note；需所属用户、Origin 与 CSRF |
 
-笔记返回 items、total、page、page_size、snapshot 和 sync_job。snapshot 为 null 表示从未同步，空 items 且 snapshot 非空表示已同步空账号。笔记含 id、title、status、platform_status、posted_at、views、likes、comments、favorites。时间可为空，统计可为 null；未知状态保持 unknown。无正文、上传或发布链接。
+笔记返回 items、total、page、page_size、snapshot 和 sync_job。snapshot 为 null 表示从未同步，空 items 且 snapshot 非空表示已同步空账号。条目含 id、title、status、platform_status、posted_at、type、cover_urls、note_url，以及 views、likes、comments、favorites、shares。时间可为空，统计可为 null；未知状态保持 unknown。note_url 仅为已发布条目的固定官方查看地址，不是发布接口。
+
+snapshot 的 profile 为昵称、头像、简介、关注、粉丝和获赞与收藏；stats 包含明确起止时间的七日指标，trend 为北京时间日期的六项趋势。净增粉丝可为负，其他计数不得为负；缺失不补零。列表不含正文。详情 body 包含 id、user_id、title、text、images、tags；正文按纯文本显示，媒体仅接受受限平台 HTTPS 域名。正文按账号和笔记存储，读取失败保留缓存，账号或连接变更后拒绝旧上报。
 
 账号列表和账号专属路由仅开放当前用户所属账号。停用账号的专属路由返回 404，重试或恢复任务返回 409；历史任务和本地快照不删除。
 
 每个账号使用不同执行器凭据，服务端按凭据决定可领取与上报的账号；客户端不能通过请求参数更改归属。sync_notes 成功上报需同时包含 account_identity 与 notes，二者 username、user_id 必须匹配任务冻结身份和当前绑定。仅完整、未取消且租约有效的结果可原子替换快照。异常不会覆盖旧快照；跨账号上报拒绝。
+
+read_note 的成功上报使用 account_identity 与 note，笔记标识、作者、任务账号、连接及有效租约同时核对；不接受 articles、article 或 notes 冒充正文。实现和使用见[小红书只读工作台](xiaohongshu-readonly.md)。
 
 ## 账号文章契约
 

@@ -133,6 +133,7 @@ func accountCapabilities(a Account) map[string]bool {
 		"check_login":   true,
 		"sync_articles": a.Platform == "csdn",
 		"read_article":  a.Platform == "csdn",
+		"read_note":     a.Platform == "xiaohongshu",
 		"sync_notes":    a.Platform == "xiaohongshu",
 		"remote_login":  true,
 		"save_draft":    a.Platform == "csdn",
@@ -140,6 +141,7 @@ func accountCapabilities(a Account) map[string]bool {
 	}
 }
 func (h *handler) platformAccountRoutes() {
+	h.noteDetailRoutes()
 	h.mux.HandleFunc("GET /api/accounts", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		accounts, err := h.store.Accounts(r.Context())
 		if err != nil {

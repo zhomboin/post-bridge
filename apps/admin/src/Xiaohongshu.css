@@ -1,0 +1,101 @@
+.xhs-description {
+  margin: 16px 0;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.xhs-profile-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 16px 0;
+}
+.xhs-profile-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.xhs-profile-facts dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.xhs-profile-facts dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.xhs-period {
+  padding: 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.xhs-note-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 220px;
+}
+.xhs-note-title > div {
+  min-width: 0;
+}
+.xhs-note-title a {
+  overflow-wrap: anywhere;
+}
+.xhs-note-cover {
+  width: 64px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex: 0 0 auto;
+}
+.xhs-note-meta {
+  color: var(--muted);
+  margin: 4px 0;
+  font-size: 12px;
+}
+.xhs-note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+  padding: 20px;
+  margin: 0;
+}
+.xhs-note-detail > .surface + .surface {
+  margin-top: 16px;
+}
+.xhs-note-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+.xhs-note-images img {
+  width: 100%;
+  max-height: 640px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.xhs-image-error {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: #f6f8fa;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.xhs-note-tags {
+  padding: 0 20px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 480px) {
+  .xhs-profile-facts {
+    gap: 12px;
+  }
+  .xhs-note-body,
+  .xhs-note-images {
+    padding: 16px;
+  }
+}

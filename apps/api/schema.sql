@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS account_note_snapshots (
   account_id text PRIMARY KEY REFERENCES account(id),
   record jsonb NOT NULL
 );
+CREATE TABLE IF NOT EXISTS account_note_bodies (
+  account_id text NOT NULL REFERENCES account(id),
+  id text NOT NULL,
+  username text NOT NULL,
+  native_user_id text NOT NULL,
+  record jsonb NOT NULL,
+  fetched_at timestamptz NOT NULL,
+  PRIMARY KEY(account_id,id)
+);
 
 CREATE TABLE IF NOT EXISTS account_article_snapshots (
   account_id text PRIMARY KEY REFERENCES account(id),

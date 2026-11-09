@@ -23,6 +23,7 @@ import IntegrationDraft from './IntegrationDraft';
 import { Jobs, JobDetail, NewJob } from './Jobs';
 import Logs from './Logs';
 import { ArticleDetail } from './Articles';
+import NoteDetail from './NoteDetail';
 import { ProcessDetail } from './Processes';
 import {
   ApiError,
@@ -242,7 +243,10 @@ export default function App() {
       selected &&
       path != '/account' &&
       !path.includes('account=') &&
-      (path.startsWith('/account') || path.startsWith('/articles') || path.startsWith('/jobs'))
+      (path.startsWith('/account') ||
+        path.startsWith('/articles') ||
+        path.startsWith('/notes') ||
+        path.startsWith('/jobs'))
     ) {
       const url = new URL(path, location.origin);
       url.searchParams.set('account', selected);
@@ -305,7 +309,19 @@ export default function App() {
   else if (pathname === '/') content = <Dashboard />;
   else if (/^\/articles\/\d{1,32}$/.test(pathname))
     content = <ArticleDetail key={pathname} id={pathname.slice('/articles/'.length)} />;
-  else if (pathname === '/jobs') content = <Jobs />;
+  else if (
+    /^\/notes\/[a-f0-9]{24}$/.test(pathname) &&
+    new URLSearchParams(route.split('?')[1]).get('account')
+  ) {
+    const account = new URLSearchParams(route.split('?')[1]).get('account')!;
+    content = (
+      <NoteDetail
+        key={account + pathname}
+        account={account}
+        id={pathname.slice('/notes/'.length)}
+      />
+    );
+  } else if (pathname === '/jobs') content = <Jobs />;
   else if (pathname === '/jobs/new') content = <NewJob />;
   else if (/^\/jobs\/[^/]+$/.test(pathname))
     content = <JobDetail key={pathname} id={decodeURIComponent(pathname.slice('/jobs/'.length))} />;
@@ -353,7 +369,7 @@ export default function App() {
             item.href ===
             (pathname.startsWith('/integration-preparations')
               ? '/integrations'
-              : pathname.startsWith('/articles')
+              : pathname.startsWith('/articles') || pathname.startsWith('/notes')
                 ? '/account'
                 : pathname.startsWith('/jobs')
                   ? '/jobs'
@@ -389,7 +405,7 @@ export default function App() {
                   href ===
                   (pathname.startsWith('/integration-preparations')
                     ? '/integrations'
-                    : pathname.startsWith('/articles')
+                    : pathname.startsWith('/articles') || pathname.startsWith('/notes')
                       ? '/account'
                       : pathname.startsWith('/jobs')
                         ? '/jobs'

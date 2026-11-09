@@ -52,6 +52,7 @@ export const operationName = (kind: string) =>
       sync_notes: '同步笔记',
       sync_articles: '同步文章',
       read_article: '读取正文',
+      read_note: '读取笔记正文',
     }) as Record<string, string>
   )[kind] || '未知操作';
 export const platformName = (value: string) =>

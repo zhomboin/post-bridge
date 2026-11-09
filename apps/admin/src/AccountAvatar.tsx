@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import './AccountAvatar.css';
+import { platformMediaURL } from './platform-media';
 
 function avatarURL(value?: string) {
   if (
@@ -23,20 +24,31 @@ function avatarURL(value?: string) {
   }
 }
 
-function AvatarImage({ url }: { url: string }) {
+function AvatarImage({ url, fallback }: { url: string; fallback: string }) {
   const [failed, setFailed] = useState(false);
   return failed ? (
-    <span aria-hidden="true">C</span>
+    <span aria-hidden="true">{fallback}</span>
   ) : (
     <img src={url} alt="账号头像" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
   );
 }
 
-export default function AccountAvatar({ url }: { url?: string }) {
-  const safe = avatarURL(url);
+export default function AccountAvatar({
+  url,
+  platform = 'csdn',
+}: {
+  url?: string;
+  platform?: 'csdn' | 'xiaohongshu';
+}) {
+  const safe = platform === 'csdn' ? avatarURL(url) : platformMediaURL(url, platform);
+  const fallback = platform === 'csdn' ? 'C' : '小';
   return (
     <div className="account-icon account-avatar">
-      {safe ? <AvatarImage key={safe} url={safe} /> : <span aria-hidden="true">C</span>}
+      {safe ? (
+        <AvatarImage key={safe} url={safe} fallback={fallback} />
+      ) : (
+        <span aria-hidden="true">{fallback}</span>
+      )}
     </div>
   );
 }

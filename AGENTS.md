@@ -6,7 +6,7 @@
 
 - apps/api：平铺 Go 管理接口、PostgreSQL 队列与初始化；integration_*.go 分担来源认证、注册、签名、内容修订、主动来源事件和本地授权守卫。
 - apps/admin/src：React/TypeScript 后台、页面和样式。
-- apps/worker/src：Node.js/Playwright 固定平台执行器；CSDN 草稿与发布，小红书仅登录检查与笔记只读同步。
+- apps/worker/src：Node.js/Playwright 固定平台执行器；CSDN 草稿与发布，小红书登录、资料统计及笔记正文图片只读。
 - tests/e2e、tests/runtime：跨服务与启动安全测试；单元测试随应用组织。
 - contracts/cms.openapi.yaml：外部接入机器契约；tests/fixtures/integration-contract.json：共享合成签名与指纹向量。
 - scripts：WSL 本地开发和 Ubuntu 部署的 Shell 入口；.github/workflows：CI。

@@ -1,9 +1,15 @@
 const creator = 'creator.xiaohongshu.com';
-const reads = new Set(['/api/galaxy/user/info', '/api/galaxy/v2/creator/note/user/posted']);
+const reads = new Set([
+  '/api/galaxy/user/info',
+  '/api/galaxy/v2/creator/note/user/posted',
+  '/api/galaxy/creator/home/personal_info',
+  '/api/galaxy/v2/creator/datacenter/account/base',
+]);
 export function xiaohongshuRequestAllowed(
   value: string,
   method: string,
   resourceType: string,
+  noteID?: string,
 ): boolean {
   let url: URL;
   try {
@@ -21,6 +27,8 @@ export function xiaohongshuRequestAllowed(
     return false;
   }
   if (/upload/i.test(host)) return false;
+  if (host === 'www.xiaohongshu.com' && method === 'GET' && resourceType === 'document')
+    return !!noteID && /^[a-f0-9]{24}$/.test(noteID) && url.pathname === '/explore/' + noteID;
   const assetHost =
     host === creator || host.endsWith('.xhscdn.com') || host.endsWith('.xiaohongshu.com');
   if (
@@ -35,7 +43,7 @@ export function xiaohongshuRequestAllowed(
   if (host === creator) {
     if (method === 'GET' && reads.has(path)) return true;
     if (method === 'GET' && resourceType === 'document')
-      return path === '/new/note-manager' || path === '/login';
+      return path === '/new/note-manager' || path === '/new/home' || path === '/login';
     if (
       method === 'GET' &&
       ['script', 'stylesheet', 'image', 'font'].includes(resourceType) &&

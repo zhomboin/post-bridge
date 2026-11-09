@@ -405,7 +405,12 @@ export function jobOutcome(job: Job) {
       )[job.status] || '发布尚未提交'
     );
   }
-  if (job.kind === 'sync_notes' || job.kind === 'sync_articles' || job.kind === 'read_article') {
+  if (
+    job.kind === 'sync_notes' ||
+    job.kind === 'sync_articles' ||
+    job.kind === 'read_article' ||
+    job.kind === 'read_note'
+  ) {
     const name =
       job.kind === 'sync_notes'
         ? '笔记同步'

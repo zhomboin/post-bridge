@@ -109,6 +109,7 @@ export default function Processes() {
               <option value="sync_articles">同步文章</option>
               <option value="sync_notes">同步笔记</option>
               <option value="read_article">读取正文</option>
+              <option value="read_note">读取笔记正文</option>
             </select>
           </label>
           <label>
@@ -294,7 +295,7 @@ export function ProcessDetail({ id }: { id: string }) {
                   <dd className="mono">
                     {['check_account', 'sync_articles', 'sync_notes'].includes(job.kind)
                       ? job.account_id
-                      : job.kind === 'read_article'
+                      : job.kind === 'read_article' || job.kind === 'read_note'
                         ? job.article_id || '未记录'
                         : job.remote_id || job.id}
                   </dd>

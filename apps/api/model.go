@@ -98,6 +98,7 @@ type ProgressInput struct {
 }
 type CompleteInput struct {
 	Notes           *NotesSnapshot   `json:"notes,omitempty"`
+	Note            *NoteBody        `json:"note,omitempty"`
 	AccountIdentity *AccountIdentity `json:"account_identity,omitempty"`
 	PublishAccepted bool             `json:"publish_accepted,omitempty"`
 	Articles        *ArticleSnapshot `json:"articles,omitempty"`
@@ -315,6 +316,7 @@ var safeErrors = map[string]string{
 	"needs_login":                "需要人工登录",
 	"account_mismatch":           "平台账号与配置不符",
 	"adapter_mismatch":           "平台页面结构已变化",
+	"note_unavailable":           "该笔记暂不可读取正文，请重新同步笔记列表",
 	"image_source_unavailable":   "公开图片域名未能通过网络检查",
 	"image_transfer_unconfirmed": "CSDN 图片转存结果尚未确认",
 	"publish_draft_mismatch":     "CSDN 草稿或账号与确认记录不符",

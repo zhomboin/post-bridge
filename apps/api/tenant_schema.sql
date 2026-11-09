@@ -135,7 +135,7 @@ DROP POLICY IF EXISTS tenant ON account;
 CREATE POLICY tenant ON account USING(pb_user()='' OR owner_user_id=pb_user()) WITH CHECK(pb_user()='' OR owner_user_id=pb_user());
 
 DO $$ DECLARE item text; BEGIN
-  FOREACH item IN ARRAY ARRAY['account_connections','csdn_publish_presets','worker_proofs','account_note_snapshots','account_article_snapshots','account_articles','account_article_bodies'] LOOP
+  FOREACH item IN ARRAY ARRAY['account_connections','csdn_publish_presets','worker_proofs','account_note_snapshots','account_note_bodies','account_article_snapshots','account_articles','account_article_bodies'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',item);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',item);
     EXECUTE format('DROP POLICY IF EXISTS tenant ON %I',item);
