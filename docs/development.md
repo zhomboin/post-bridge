@@ -258,6 +258,17 @@ tar --create --gzip --file "$PB_BACKUP_DIR/accounts-$(date -u +%s).tar.gz" --dir
 
 上述 runtime.tar.gz 包含已停止的数据库物理文件，只用于同 PostgreSQL 主版本和兼容环境的受控恢复。若 runtime.json 引用额外的外部接入密钥文件，也需单独受限备份。不要在数据库运行时直接复制 pgdata。
 
+备份后逐个检查归档可读并记录校验值，在独立私有目录和独立端口恢复副本，确认原账号、任务和文章完整后再升级。副本中的多用户验证使用合成身份，不启动连接真实平台的执行器；演练结束关闭其数据库、API 和浏览器，保留备份。校验命令在 WSL/Ubuntu Bash 中执行：
+
+```bash
+tar --list --gzip --file "$PB_BACKUP_DIR/runtime.tar.gz" > /dev/null
+tar --list --gzip --file "$PB_BACKUP_DIR/account.tar.gz" > /dev/null
+sha256sum "$PB_BACKUP_DIR"/*.tar.gz > "$PB_BACKUP_DIR/SHA256SUMS"
+sha256sum --check "$PB_BACKUP_DIR/SHA256SUMS"
+```
+
+本地存在多套配置时，先用各自 state 参数检查状态并核对数据库、管理员和账号来源；不要因默认端口被占用而改连其他测试库。停止占用端口的服务前确认其归属和影响。完整本地升级与恢复副本的隔离验证结果见[验收记录](acceptance.md)。
+
 ### 2. 更新源码或修改私有配置
 
 使用主分支更新时逐条执行以下命令。git status 有输出时先处理自己的改动；不运行强制重置。正在开发功能分支时，按分支流程更新，不强行切换 main。
