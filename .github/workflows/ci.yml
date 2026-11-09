@@ -50,7 +50,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bubblewrap apparmor-utils
-          sudo --preserve-env=GITHUB_ACTIONS,GITHUB_ENV python3 scripts/account_sandbox.py --ci
+          sudo --preserve-env=GITHUB_ACTIONS,GITHUB_ENV env PATH=/usr/bin:/bin python3 scripts/account_sandbox.py --ci
           python3 scripts/ci_database.py
       - name: 代码格式检查
         run: npm run format:check

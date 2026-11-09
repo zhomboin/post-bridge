@@ -88,7 +88,7 @@ def install(root, group_id, policy_directory=Path("/etc/apparmor.d")):
             raise ValueError("已有同名 AppArmor 策略不一致，未覆盖")
         policy.write_text(text, encoding="utf-8")
         policy.chmod(0o644)
-        subprocess.run(["apparmor_parser", "-r", str(policy)], check=True)
+        subprocess.run(["/usr/sbin/apparmor_parser", "-r", str(policy)], check=True)
     return binary
 
 
