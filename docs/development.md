@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-提供单管理员、CSDN 与小红书账号工作台，以及 CSDN 草稿后台：登录、总览、草稿创建与预览、队列、任务详情、账号检查、账号文章只读列表与正文及对象处理记录，以及来源应用、平台稿确认与分发工作台。Go API 管理 PostgreSQL，独立 Node.js/Playwright 执行器操作官方编辑器。关闭网页后任务仍继续；运行时无需 AI Agent、模型服务或模型密钥。
+提供多用户独立登录、同平台多账号的 CSDN 与小红书账号工作台，以及 CSDN 草稿后台：登录、总览、草稿创建与预览、队列、任务详情、账号检查、账号文章只读列表与正文及对象处理记录，以及来源应用、平台稿确认与分发工作台。Go API 管理 PostgreSQL，独立 Node.js/Playwright 执行器操作官方编辑器。关闭网页后任务仍继续；运行时无需 AI Agent、模型服务或模型密钥。
 
 后台直接建稿支持文字 Markdown。启用图源白名单后，外部来源稿还可通过 CSDN 转存受控正文图片。标题为 5—100 字，正文不超过 200000 字。支持围栏代码、表格和公式，拒绝 MDX 和可执行 HTML。管理员可对已核对的 CSDN 来源草稿确认正式发布。验证状态见[总体进度](progress.md)。
 
@@ -45,7 +45,7 @@ git status --short
 uname -m
 cat /etc/os-release
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl xz-utils build-essential git python3 less nano postgresql-16 postgresql-client-16 fonts-noto-cjk
+sudo apt-get install -y ca-certificates curl xz-utils build-essential git python3 less nano postgresql-16 postgresql-client-16 fonts-noto-cjk bubblewrap
 python3 --version
 ```
 
@@ -120,6 +120,15 @@ npx --no-install playwright --version
 npx --no-install playwright install --with-deps chromium
 ```
 
+执行账号沙箱预检：
+
+```bash
+bwrap --version
+bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
+```
+
+失败时先检查 bubblewrap 与宿主机用户命名空间策略，执行器不会退回无隔离方式。不要为通过检查擅自关闭系统安全策略。
+
 Playwright 应为 1.64.1。使用现有浏览器时，可在私有 runtime.json 中填写 PLAYWRIGHT_EXECUTABLE_PATH；不要把本机浏览器路径写入仓库配置。
 
 ## 二、初始化本地配置与数据库
@@ -153,6 +162,8 @@ unset CSDN_USERNAME CSDN_DISPLAY_NAME
 ./scripts/status.sh --state "$PB_STATE"
 ```
 
+启动器为自己的独立集群建立非超级用户、不可绕过行权限的 postbridge_app 角色，保留数据库及表，并将 API 连接保存到私有 runtime.json；db-password 仅用于该集群维护，db-application-password 为应用凭据。外部数据库由管理员准备，不能交给本地独立集群入口管理。
+
 此时 database 应为 true，api、worker 应为 false。若初始化后暂不继续，执行本页的停止命令，避免留下数据库进程。
 
 ## 三、启动并登录后台
@@ -175,7 +186,7 @@ less "$PB_STATE/admin-password"
 curl --fail --show-error '〈启动结果中的管理地址〉/healthz'
 ```
 
-进入“平台账号 → 账号设置”，使用“开始远程登录”完成指定账号验证。服务运行不等于平台已登录。
+管理员可先在“用户管理”创建普通用户；每个用户在“平台账号”绑定自己的一个或多个账号。同平台账号通过账号选择器切换。进入“平台账号 → 账号设置”，使用“开始远程登录”完成指定账号验证。服务运行不等于平台已登录。
 
 ### 3. 可选：使用本地图形登录助手
 
@@ -223,6 +234,14 @@ tar --create --gzip --file "$PB_BACKUP_DIR/runtime.tar.gz" --directory "$PB_STAT
 tar --create --gzip --file "$PB_BACKUP_DIR/account.tar.gz" --directory "$(dirname -- "$PB_PROFILE")" "$(basename -- "$PB_PROFILE")"
 ```
 
+网页新增账号默认保存在初始 CSDN 会话目录同级的 managed 目录；若私有配置设置 WORKER_PROFILE_ROOT 则使用该目录。备份需包含所有新增和导入账号目录，不能仅保存初始账号。按实际配置对这些仓库外目录逐个执行：
+
+```bash
+read -r -p '新增或导入会话根目录：' PB_EXTRA_PROFILE
+test -d "$PB_EXTRA_PROFILE"
+tar --create --gzip --file "$PB_BACKUP_DIR/accounts-$(date -u +%s).tar.gz" --directory "$(dirname -- "$PB_EXTRA_PROFILE")" "$(basename -- "$PB_EXTRA_PROFILE")"
+```
+
 上述 runtime.tar.gz 包含已停止的数据库物理文件，只用于同 PostgreSQL 主版本和兼容环境的受控恢复。若 runtime.json 引用额外的外部接入密钥文件，也需单独受限备份。不要在数据库运行时直接复制 pgdata。
 
 ### 2. 更新源码或修改私有配置
@@ -251,7 +270,7 @@ nano "$PB_STATE/runtime.json"
 ./scripts/status.sh --state "$PB_STATE"
 ```
 
-重新打开管理地址，检查后台和账号状态。无需重复初始化或重新生成密码。--skip-build 不适用于此次代码或依赖更新。
+首次启用用户隔离时，启动器为其专属本地集群准备受限角色，API 在事务中将已有业务归入 runtime.json 的初始化管理员。必须沿用原 ADMIN_USERNAME、管理员密码、数据库与平台会话；初始化事务失败则停止排查，不能通过清空数据重试。重新打开管理地址，检查已有文章和处理记录归属、普通用户独立登录与账号状态。无需重复初始化或重新生成密码。--skip-build 不适用于此次代码或依赖更新。
 
 ## 六、按范围验证与结束开发
 
@@ -301,6 +320,12 @@ unset TEST_DATABASE_URL
 ```
 
 test.sh 使用私有配置中的数据库连接，不能指向生产环境；它不包含 E2E 和 Python 启动／部署安全用例。结束开发后执行停止命令，再确认全部项目进程已停止。
+
+## 可选账号存储配置
+
+网页绑定无需增加配置文件。WORKER_PROFILE_ROOT 可在私有 runtime.json 指定新增账号根目录，需位于仓库外且不得与已导入会话目录包含重叠；运行用户所有、权限 0700。ACCOUNT_SANDBOX_EXECUTABLE 仅在系统 bubblewrap 不位于默认位置时设置，必须为可信可执行文件。新增目录引用由服务端生成，不接受用户路径。
+
+导入已有会话时按[平台账号管理](platform-accounts.md)在仓库外准备 JSON 和每账号独立令牌，限制文件 0600、目录 0700；在私有 runtime.json 设置 PLATFORM_ACCOUNTS_FILE 后重启。owner_username 须为已有用户，省略时归初始化管理员。首次迁移复用原会话，不要求重新扫码；后续仍会核对平台身份。
 
 ## 可选外部来源配置
 

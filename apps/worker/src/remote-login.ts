@@ -23,6 +23,7 @@ export interface LoginBrowser {
   frame(): Promise<Buffer>;
   input(value: LoginInput): Promise<void>;
   connected(): Promise<'pending' | 'connected' | 'wrong'>;
+  commit?(): Promise<void>;
   close(): Promise<void>;
 }
 export class LoginPageUnavailable extends Error {
@@ -271,6 +272,7 @@ export class RemoteLoginManager {
           false,
         );
         if (matched === 'connected') {
+          await this.closeBrowser();
           this.finish('succeeded');
           break;
         }

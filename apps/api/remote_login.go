@@ -42,6 +42,7 @@ type remoteLoginBinding struct {
 	revoking  bool
 }
 type remoteLoginProxy struct {
+	token    string
 	endpoint string
 	client   *http.Client
 	mu       sync.Mutex
@@ -270,13 +271,25 @@ func validRemoteInput(data []byte) bool {
 }
 func (h *handler) remoteLoginRoutes() {
 	for _, pattern := range []string{"GET /api/account/login", "POST /api/account/login", "DELETE /api/account/login/{id}", "GET /api/account/login/{id}/frame", "POST /api/account/login/{id}/input"} {
-		h.mux.HandleFunc(pattern, h.admin(h.remoteLogin))
+		h.mux.HandleFunc(pattern, h.authenticated(h.remoteLogin))
 	}
 }
 func (h *handler) remoteLogin(w http.ResponseWriter, r *http.Request, s session) {
-	p := h.remoteLoginProxy
+	if _, err := h.store.pool.Exec(r.Context(), "UPDATE account_connections SET wanted_at=$2 WHERE account_id=$1 AND enabled", accountOf(r.Context()), h.store.now()); err != nil {
+		replyError(w, err)
+		return
+	}
+	p := h.accountLogin(r.Context())
+	if h.store.executableAccount(r.Context(), accountOf(r.Context())) != nil {
+		replyError(w, ErrNotFound)
+		return
+	}
+	token := h.workerToken
+	if p != nil && p.token != "" {
+		token = p.token
+	}
 	if p == nil || p.disabled.Load() {
-		fail(w, 503, "remote_login_disabled", "远程登录尚未启用")
+		fail(w, 503, "remote_login_disabled", "正在等待账号执行器就绪")
 		return
 	}
 	select {
@@ -342,7 +355,7 @@ func (h *handler) remoteLogin(w http.ResponseWriter, r *http.Request, s session)
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/frame") {
-			data, _, err := p.exchange(r.Context(), h.workerToken, "GET", "/login/"+id+"/frame", nil, true)
+			data, _, err := p.exchange(r.Context(), token, "GET", "/login/"+id+"/frame", nil, true)
 			if err != nil {
 				remoteFailure(w, err)
 				return
@@ -354,7 +367,7 @@ func (h *handler) remoteLogin(w http.ResponseWriter, r *http.Request, s session)
 		}
 		if r.Method == "DELETE" {
 			p.current.revoking = true
-			state, err := p.revoke(r.Context(), h.workerToken)
+			state, err := p.revoke(r.Context(), token)
 			if err != nil {
 				remoteFailure(w, err)
 				return
@@ -362,7 +375,7 @@ func (h *handler) remoteLogin(w http.ResponseWriter, r *http.Request, s session)
 			writeJSON(w, 200, state)
 			return
 		}
-		state, _, err := p.state(r.Context(), h.workerToken, "POST", "/login/"+id+"/input", input)
+		state, _, err := p.state(r.Context(), token, "POST", "/login/"+id+"/input", input)
 		if err != nil {
 			remoteFailure(w, err)
 			return
@@ -384,7 +397,7 @@ func (h *handler) remoteLogin(w http.ResponseWriter, r *http.Request, s session)
 		remoteBusy(w, 200)
 		return
 	}
-	state, _, err := p.state(r.Context(), h.workerToken, "GET", "/login", nil)
+	state, _, err := p.state(r.Context(), token, "GET", "/login", nil)
 	if err != nil {
 		remoteFailure(w, err)
 		return
@@ -416,7 +429,7 @@ func (h *handler) remoteLogin(w http.ResponseWriter, r *http.Request, s session)
 		return
 	}
 	previousID := state.ID
-	state, status, err := p.state(r.Context(), h.workerToken, "POST", "/login", nil)
+	state, status, err := p.state(r.Context(), token, "POST", "/login", nil)
 	if err != nil {
 		remoteFailure(w, err)
 		return
@@ -480,7 +493,11 @@ func remoteLock(ctx context.Context, mu *sync.Mutex) bool {
 	}
 }
 func (h *handler) closeRemoteLogin(ctx context.Context, owner string) {
-	p := h.remoteLoginProxy
+	for _, p := range h.loginProxies() {
+		h.closeLoginProxy(ctx, p, owner)
+	}
+}
+func (h *handler) closeLoginProxy(ctx context.Context, p *remoteLoginProxy, owner string) {
 	if p == nil {
 		return
 	}
@@ -497,10 +514,21 @@ func (h *handler) closeRemoteLogin(ctx context.Context, owner string) {
 		return
 	}
 	p.current.revoking = true
-	_, _ = p.revoke(bounded, h.workerToken)
+	token := h.workerToken
+	if p.token != "" {
+		token = p.token
+	}
+	_, _ = p.revoke(bounded, token)
 }
 func (h *handler) maintainRemoteLogin(ctx context.Context) error {
-	p := h.remoteLoginProxy
+	for _, p := range h.loginProxies() {
+		if err := h.maintainLoginProxy(ctx, p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (h *handler) maintainLoginProxy(ctx context.Context, p *remoteLoginProxy) error {
 	if p == nil || ctx.Err() != nil || !p.mu.TryLock() {
 		return nil
 	}
@@ -520,6 +548,10 @@ func (h *handler) maintainRemoteLogin(ctx context.Context) error {
 		}
 		p.current.revoking = true
 	}
-	_, _ = p.revoke(bounded, h.workerToken)
+	token := h.workerToken
+	if p.token != "" {
+		token = p.token
+	}
+	_, _ = p.revoke(bounded, token)
 	return nil
 }

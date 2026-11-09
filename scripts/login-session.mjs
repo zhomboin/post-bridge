@@ -1,4 +1,9 @@
-export async function loginSession(config, { launch, acquire }, signal, timeoutMs = 300000) {
+export async function loginSession(
+  config,
+  { launch, acquire, browserProfile = async (path) => path },
+  signal,
+  timeoutMs = 300000,
+) {
   const owner = await acquire(config.profileDir);
   let context;
   let closing;
@@ -9,7 +14,7 @@ export async function loginSession(config, { launch, acquire }, signal, timeoutM
   signal.addEventListener('abort', abort, { once: true });
   try {
     if (signal.aborted) return false;
-    context = await launch(config.profileDir, {
+    context = await launch(await browserProfile(config.profileDir), {
       headless: false,
       executablePath: config.executablePath,
       acceptDownloads: false,

@@ -85,5 +85,5 @@ test('小红书账号隔离、只读快照、键盘及窄屏', async ({ page, st
   await picker.selectOption('xhs-main');
   await page.getByRole('button', { name: '账号设置', exact: true }).click();
   await expect(page.getByRole('button', { name: '检查登录状态', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '开始远程登录', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '开始远程登录', exact: true })).toBeVisible();
 });

@@ -58,7 +58,7 @@ ALTER TABLE account ADD COLUMN IF NOT EXISTS remote_login_id text NOT NULL DEFAU
 ALTER TABLE account DROP CONSTRAINT IF EXISTS account_id_check;
 ALTER TABLE account ADD COLUMN IF NOT EXISTS platform text NOT NULL DEFAULT 'csdn';
 ALTER TABLE account ADD COLUMN IF NOT EXISTS native_user_id text NOT NULL DEFAULT '';
-CREATE UNIQUE INDEX IF NOT EXISTS account_platform_idx ON account(platform);
+
 ALTER TABLE worker_proofs ADD COLUMN IF NOT EXISTS account_id text NOT NULL DEFAULT 'csdn-main';
 CREATE TABLE IF NOT EXISTS account_note_snapshots (
   account_id text PRIMARY KEY REFERENCES account(id),

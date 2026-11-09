@@ -190,7 +190,7 @@ export { expect };
 
 export async function login(page: Page, stack: Stack) {
   await page.goto('/');
-  await page.getByLabel('管理员账号').fill(stack.username);
+  await page.getByLabel('账号').fill(stack.username);
   await page.getByLabel('密码', { exact: true }).fill(stack.password);
   await page.getByRole('button', { name: '登录工作台', exact: true }).click();
   await expect(page.getByRole('heading', { name: '发布工作台', exact: true })).toBeVisible();

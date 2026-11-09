@@ -28,7 +28,7 @@ type csdnPublishPreview struct {
 }
 
 func (s *Store) csdnPublishSource(ctx context.Context, tx pgx.Tx, parent *record, now time.Time) (csdnPublishPreview, string, error) {
-	if parent.Kind != "save_draft" || parent.Platform != "csdn" || parent.AccountID != "csdn-main" ||
+	if parent.Kind != "save_draft" || parent.Platform != "csdn" || !validKey(parent.AccountID) ||
 		!csdnUsername.MatchString(parent.AccountUsername) || parent.Status != "succeeded" || parent.Outcome != "draft_saved" ||
 		!parent.ExternalStarted || parent.CancelRequested || parent.ManualResolved || !numericID.MatchString(parent.RemoteID) ||
 		parent.IntegrationDistributionID == "" {
@@ -101,7 +101,7 @@ func (s *Store) csdnPublish(ctx context.Context, id string, token *string) (csdn
 		}
 		requestID := "publish:" + id
 		var raw []byte
-		err = tx.QueryRow(ctx, "SELECT record FROM jobs WHERE request_id=$1", requestID).Scan(&raw)
+		err = tx.QueryRow(ctx, "SELECT record FROM jobs WHERE request_id=$1 AND request_namespace=pb_caller()", requestID).Scan(&raw)
 		if err == nil {
 			var existing record
 			if err := json.Unmarshal(raw, &existing); err != nil {
@@ -130,6 +130,7 @@ func (s *Store) csdnPublish(ctx context.Context, id string, token *string) (csdn
 				return ErrConflict
 			}
 			job := newRecord(CreateInput{RequestID: requestID, Platform: "csdn", Kind: "publish", Title: out.Title, Markdown: markdown}, now)
+			job.AccountID = parent.AccountID
 			job.AccountUsername = parent.AccountUsername
 			job.RemoteID, job.RemoteURL = parent.RemoteID, parent.RemoteURL
 			job.PublishFromJobID, job.PublishOptions = parent.ID, &out.Options
@@ -165,7 +166,7 @@ func samePublishConfirmation(a, b string) bool {
 
 func (h *handler) csdnPublishRoutes() {
 	const path = "/api/jobs/{id}/publish"
-	h.mux.HandleFunc("GET "+path, h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET "+path, h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		preview, err := h.store.csdnPublish(r.Context(), r.PathValue("id"), nil)
 		if err != nil {
 			replyCSDNPublishError(w, err)
@@ -173,7 +174,7 @@ func (h *handler) csdnPublishRoutes() {
 		}
 		writeJSON(w, http.StatusOK, preview)
 	}))
-	h.mux.HandleFunc("POST "+path, h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST "+path, h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			ConfirmationToken string `json:"confirmation_token"`
 		}

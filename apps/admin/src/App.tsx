@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Dashboard } from './Dashboard';
 import PlatformAccount from './PlatformAccount';
+import Users from './Users';
 import Integrations from './Integrations';
 import IntegrationDraft from './IntegrationDraft';
 import { Jobs, JobDetail, NewJob } from './Jobs';
@@ -85,7 +86,7 @@ function Login({
     event.preventDefault();
     if (busy.current) return;
     if (!username.trim() || !password) {
-      setError('请输入管理员账号和密码。');
+      setError('请输入账号和密码。');
       return;
     }
     busy.current = true;
@@ -125,7 +126,7 @@ function Login({
         <h1>登录发布工作台</h1>
         <form onSubmit={submit}>
           <label>
-            管理员账号
+            账号
             <input
               autoComplete="username"
               value={username}
@@ -163,8 +164,20 @@ export default function App() {
   const [loggingOut, setLoggingOut] = useState(false);
   const logoutController = useRef<AbortController | undefined>(undefined);
   const csrf = session?.csrf_token;
+  const selectedAccount = new URLSearchParams(route.split('?')[1]).get('account');
   const api = useCallback<Api>(
     async (path, init = {}) => {
+      if (
+        selectedAccount &&
+        (path === '/api/account' ||
+          path.startsWith('/api/account/') ||
+          path.startsWith('/api/account?') ||
+          (path === '/api/jobs' && init.method === 'POST'))
+      ) {
+        const url = new URL(path, location.origin);
+        url.searchParams.set('account_id', selectedAccount);
+        path = url.pathname + url.search;
+      }
       const headers = new Headers(init.headers);
       headers.set('Accept', 'application/json');
       if (init.body) headers.set('Content-Type', 'application/json');
@@ -196,7 +209,7 @@ export default function App() {
       }
       return body as never;
     },
-    [csrf],
+    [csrf, selectedAccount],
   );
   useEffect(() => {
     const controller = new AbortController();
@@ -224,6 +237,17 @@ export default function App() {
   }, []);
   const navigate = useCallback((path: string) => {
     if (!path.startsWith('/') || path.startsWith('//')) return;
+    const selected = new URLSearchParams(location.search).get('account');
+    if (
+      selected &&
+      path != '/account' &&
+      !path.includes('account=') &&
+      (path.startsWith('/account') || path.startsWith('/articles') || path.startsWith('/jobs'))
+    ) {
+      const url = new URL(path, location.origin);
+      url.searchParams.set('account', selected);
+      path = url.pathname + url.search;
+    }
     window.history.pushState({}, '', path);
     setRoute(locationRoute());
   }, []);
@@ -251,7 +275,7 @@ export default function App() {
   if (session === undefined)
     return (
       <main className="loading-page" role="status">
-        正在验证管理员会话…
+        正在验证用户会话…
       </main>
     );
   if (!session)
@@ -291,6 +315,7 @@ export default function App() {
       <ProcessDetail key={pathname} id={decodeURIComponent(pathname.slice('/logs/'.length))} />
     );
   else if (pathname === '/account') content = <PlatformAccount />;
+  else if (pathname === '/users' && session.user.role === 'admin') content = <Users />;
   else if (pathname === '/docs/integrations')
     content = (
       <Suspense
@@ -350,7 +375,12 @@ export default function App() {
             Post Bridge
           </RouteLink>
           <nav aria-label="主导航">
-            {navigation.map(({ href, label, icon: Icon }) => (
+            {[
+              ...navigation,
+              ...(session.user.role === 'admin'
+                ? [{ href: '/users', label: '用户管理', icon: BookOpenText }]
+                : []),
+            ].map(({ href, label, icon: Icon }) => (
               <RouteLink
                 className="nav-link"
                 key={href}

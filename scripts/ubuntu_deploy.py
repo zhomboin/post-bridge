@@ -657,6 +657,7 @@ def install(config_path, upgrade=False):
             "--no-install-recommends",
             "ca-certificates",
             "fonts-noto-cjk",
+            "bubblewrap",
             "postgresql-client-16",
         ],
         env=root_env,

@@ -2448,7 +2448,8 @@
             "type": "string"
           },
           "account_id": {
-            "const": "csdn-main",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "description": "从当前应用获准目标中选择账号标识",
             "type": "string",
             "description": "当前执行器固定目标的系统标识。应从targets读取，不代表真实平台用户名。"
           },

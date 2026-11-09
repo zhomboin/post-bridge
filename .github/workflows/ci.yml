@@ -46,6 +46,11 @@ jobs:
           python-version: '3.12'
       - name: 安装 Python 格式化工具
         run: python3 -m pip install black==25.1.0
+      - name: 准备数据库行权限与账号隔离工具
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          python3 scripts/ci_database.py
       - name: 代码格式检查
         run: npm run format:check
       - name: npm 依赖安全检查
@@ -72,14 +77,14 @@ jobs:
         run: sudo python3 scripts/ubuntu_systemd_smoke.py --system
       - name: 登录助手停止用例
         run: node --test tests/runtime/login-session.test.mjs
+      - name: 构建
+        run: npm run build
       - name: 工作区用例
         run: npm test
       - name: 类型检查
         run: npm run typecheck
       - name: 端到端设施类型检查
         run: npx --no-install tsc -p tests/e2e/tsconfig.json
-      - name: 构建
-        run: npm run build
       - name: 从 Ubuntu 安装快照构建
         run: |
           python3 -B - <<'PY'

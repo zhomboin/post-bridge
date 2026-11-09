@@ -46,6 +46,8 @@ type handler struct {
 	mux              *http.ServeMux
 	integrations     *IntegrationService
 	remoteLoginProxy *remoteLoginProxy
+	accountLoginMu   sync.Mutex
+	accountLogins    map[string]*remoteLoginProxy
 	attempts         map[string]loginWindow
 	mu               sync.Mutex
 }
@@ -53,9 +55,18 @@ type loginWindow struct {
 	Count int
 	Until time.Time
 }
-type session struct{ Username, CSRF string }
+type session struct{ UserID, Username, Role, CSRF string }
 
 func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
+	var bypass bool
+	if cfg.Store != nil {
+		if err := cfg.Store.pool.QueryRow(ctx, "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user").Scan(&bypass); err != nil {
+			return nil, err
+		}
+		if bypass {
+			return nil, errors.New("API 数据库账号不得具有超级用户或绕过行权限的能力")
+		}
+	}
 	origin, err := url.Parse(cfg.Origin)
 	if err != nil || origin.Host == "" || !(origin.Scheme == "http" || origin.Scheme == "https") || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || !(origin.Path == "" || origin.Path == "/") || cfg.Store == nil || cfg.AdminUsername == "" || len(cfg.AdminPassword) < 12 || len(cfg.AdminPassword) > 72 || len(cfg.WorkerToken) < 32 {
 		return nil, ErrInvalid
@@ -86,6 +97,9 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 		attempts:    map[string]loginWindow{},
 	}
 	h.remoteLoginProxy = remote
+	if err = h.initializeUsers(ctx, cfg.AdminUsername); err != nil {
+		return nil, err
+	}
 	if err = cfg.Store.ConfigurePlatformAccounts(ctx, cfg.PlatformAccounts); err != nil {
 		return nil, err
 	}
@@ -96,6 +110,12 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 		}
 		h.workerAccounts[a.WorkerToken] = a.ID
 	}
+	h.userRoutes()
+	h.browserSlotRoutes()
+	if err = h.provisionConnections(ctx); err != nil {
+		return nil, err
+	}
+	h.accountManagementRoutes()
 	h.platformAccountRoutes()
 	h.routes()
 	h.remoteLoginRoutes()
@@ -175,10 +195,10 @@ func (h *handler) session(r *http.Request) (session, error) {
 		return session{}, ErrNotFound
 	}
 	var s session
-	err = h.store.pool.QueryRow(r.Context(), "SELECT username,csrf_token FROM sessions WHERE token_hash=$1 AND expires_at>$2", hashToken(cookie.Value), h.store.now()).Scan(&s.Username, &s.CSRF)
+	err = h.store.pool.QueryRow(r.Context(), "SELECT u.id,u.username,u.role,s.csrf_token FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>$2 AND u.enabled AND s.auth_version=u.auth_version", hashToken(cookie.Value), h.store.now()).Scan(&s.UserID, &s.Username, &s.Role, &s.CSRF)
 	return s, err
 }
-func (h *handler) admin(next func(http.ResponseWriter, *http.Request, session)) http.HandlerFunc {
+func (h *handler) authenticated(next func(http.ResponseWriter, *http.Request, session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s, err := h.session(r)
 		if err != nil {
@@ -192,7 +212,12 @@ func (h *handler) admin(next func(http.ResponseWriter, *http.Request, session)) 
 				return
 			}
 		}
-		next(w, r, s)
+		ctx, err := h.userContext(r, s)
+		if err != nil {
+			replyError(w, err)
+			return
+		}
+		next(w, r.WithContext(ctx), s)
 	}
 }
 
@@ -206,10 +231,21 @@ func (h *handler) worker(next http.HandlerFunc) http.HandlerFunc {
 				accountID = id
 			}
 		}
+		var owner string
+		var version int64
+		if accountID == "" {
+			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			_ = h.store.pool.QueryRow(r.Context(), "SELECT a.id,a.owner_user_id,a.connection_version FROM account_connections c JOIN account a ON a.id=c.account_id JOIN users u ON u.id=a.owner_user_id WHERE c.worker_token_hash=$1 AND c.enabled AND a.enabled AND u.enabled AND c.version=a.connection_version", hashToken(token)).Scan(&accountID, &owner, &version)
+		} else {
+			if err := h.store.pool.QueryRow(r.Context(), "SELECT a.owner_user_id,a.connection_version FROM account a JOIN users u ON u.id=a.owner_user_id WHERE a.id=$1 AND a.enabled AND u.enabled AND a.connection_version=1", accountID).Scan(&owner, &version); err != nil {
+				accountID = ""
+			}
+		}
 		if accountID == "" {
 			fail(w, 401, "unauthorized", "需要执行器身份")
 			return
 		}
+		r = r.WithContext(scoped(r.Context(), tenantScope{UserID: owner, AccountID: accountID, CallerID: "worker:" + accountID, ConnectionVersion: version}))
 		if id := r.PathValue("id"); id != "" {
 			job, err := h.store.Get(r.Context(), id)
 			if err != nil {
@@ -265,15 +301,22 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	matched := bcrypt.CompareHashAndPassword(h.hash, []byte(in.Password)) == nil
-	if in.Username != h.username || !matched {
+	var u User
+	var passwordHash string
+	err := h.store.pool.QueryRow(r.Context(), "SELECT id,username,role,password_hash FROM users WHERE username=$1 AND enabled", in.Username).Scan(&u.ID, &u.Username, &u.Role, &passwordHash)
+	candidate := h.hash
+	if err == nil {
+		candidate = []byte(passwordHash)
+	}
+	matched := bcrypt.CompareHashAndPassword(candidate, []byte(in.Password)) == nil
+	if err != nil || !matched {
 		fail(w, 401, "unauthorized", "账号或密码错误")
 		return
 	}
 	token := randomToken()
 	csrf := randomToken()
 	expires := h.store.now().Add(12 * time.Hour)
-	if _, err := h.store.pool.Exec(r.Context(), "INSERT INTO sessions(token_hash,username,csrf_token,expires_at) VALUES($1,$2,$3,$4)", hashToken(token), h.username, csrf, expires); err != nil {
+	if _, err := h.store.pool.Exec(r.Context(), "INSERT INTO sessions(token_hash,username,csrf_token,expires_at) VALUES($1,$2,$3,$4)", hashToken(token), u.Username, csrf, expires); err != nil {
 		replyError(w, err)
 		return
 	}
@@ -287,7 +330,7 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   43200,
 		Expires:  expires,
 	})
-	writeJSON(w, 200, map[string]any{"user": map[string]string{"username": h.username}, "csrf_token": csrf})
+	writeJSON(w, 200, map[string]any{"user": map[string]string{"id": u.ID, "username": u.Username, "role": u.Role}, "csrf_token": csrf})
 }
 func (h *handler) routes() {
 	h.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -298,10 +341,10 @@ func (h *handler) routes() {
 		writeJSON(w, 200, map[string]bool{"ready": true})
 	})
 	h.mux.HandleFunc("POST /api/login", h.login)
-	h.mux.HandleFunc("GET /api/session", h.admin(func(w http.ResponseWriter, r *http.Request, s session) {
-		writeJSON(w, 200, map[string]any{"user": map[string]string{"username": s.Username}, "csrf_token": s.CSRF})
+	h.mux.HandleFunc("GET /api/session", h.authenticated(func(w http.ResponseWriter, r *http.Request, s session) {
+		writeJSON(w, 200, map[string]any{"user": map[string]string{"id": s.UserID, "username": s.Username, "role": s.Role}, "csrf_token": s.CSRF})
 	}))
-	h.mux.HandleFunc("POST /api/logout", h.admin(func(w http.ResponseWriter, r *http.Request, s session) {
+	h.mux.HandleFunc("POST /api/logout", h.authenticated(func(w http.ResponseWriter, r *http.Request, s session) {
 		cookie, _ := r.Cookie("post_bridge_session")
 		if _, err := h.store.pool.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", hashToken(cookie.Value)); err != nil {
 			replyError(w, err)
@@ -319,7 +362,7 @@ func (h *handler) routes() {
 		})
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	}))
-	h.mux.HandleFunc("GET /api/account", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/account", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		a, err := h.store.Account(r.Context())
 		if err != nil {
 			replyError(w, err)
@@ -327,7 +370,7 @@ func (h *handler) routes() {
 		}
 		writeJSON(w, 200, a)
 	}))
-	h.mux.HandleFunc("GET /api/overview", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/overview", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		counts, err := h.store.Counts(r.Context())
 		if err != nil {
 			replyError(w, err)
@@ -345,7 +388,7 @@ func (h *handler) routes() {
 		}
 		writeJSON(w, 200, map[string]any{"counts": counts, "worker_last_seen_at": seen, "account": account})
 	}))
-	h.mux.HandleFunc("GET /api/settings", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/settings", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		seen, err := h.store.LastSeen(r.Context())
 		if err != nil {
 			replyError(w, err)
@@ -369,7 +412,7 @@ func (h *handler) routes() {
 			"worker_last_seen_at": seen,
 		})
 	}))
-	h.mux.HandleFunc("POST /api/account/check", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/account/check", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			RequestID string `json:"request_id"`
 		}
@@ -378,7 +421,7 @@ func (h *handler) routes() {
 		}
 		h.create(w, r, CreateInput{RequestID: in.RequestID, Kind: "check_account", Platform: "csdn"})
 	}))
-	h.mux.HandleFunc("POST /api/jobs", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/jobs", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in CreateInput
 		if !decode(w, r, &in) {
 			return
@@ -389,7 +432,7 @@ func (h *handler) routes() {
 		}
 		h.create(w, r, in)
 	}))
-	h.mux.HandleFunc("GET /api/jobs", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/jobs", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		page, size, ok := pagination(w, r)
 		if !ok {
 			return
@@ -406,7 +449,7 @@ func (h *handler) routes() {
 		}
 		writeJSON(w, 200, map[string]any{"items": jobs, "total": total, "page": page, "page_size": size})
 	}))
-	h.mux.HandleFunc("GET /api/jobs/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/jobs/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		job, err := h.store.Get(r.Context(), r.PathValue("id"))
 		if err != nil {
 			replyError(w, err)
@@ -415,7 +458,7 @@ func (h *handler) routes() {
 		writeJSON(w, 200, job)
 	}))
 	for _, action := range []string{"cancel", "retry", "resume", "reconcile", "resolve"} {
-		h.mux.HandleFunc("POST /api/jobs/{id}/"+action, h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+		h.mux.HandleFunc("POST /api/jobs/{id}/"+action, h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 			var in ActionInput
 			if action == "reconcile" || action == "resolve" {
 				if !decode(w, r, &in) {
@@ -436,7 +479,7 @@ func (h *handler) routes() {
 					replyError(w, err)
 					return
 				}
-				if !h.configuredAccount(existing.AccountID) {
+				if h.store.executableAccount(r.Context(), existing.AccountID) != nil {
 					fail(w, http.StatusConflict, "account_disabled", "账号未配置，请先恢复私有账号配置")
 					return
 				}
@@ -449,7 +492,7 @@ func (h *handler) routes() {
 			writeJSON(w, 200, job)
 		}))
 	}
-	h.mux.HandleFunc("GET /api/logs", h.admin(h.logs))
+	h.mux.HandleFunc("GET /api/logs", h.authenticated(h.logs))
 	h.processRoutes()
 	h.mux.HandleFunc("POST /internal/worker/claim", h.worker(func(w http.ResponseWriter, r *http.Request) {
 		var in struct {

@@ -3,7 +3,7 @@ package bridge
 import "net/http"
 
 func (h *handler) articleRoutes() {
-	h.mux.HandleFunc("GET /api/account/articles", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/account/articles", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		page, size, ok := pagination(w, r)
 		if !ok {
 			return
@@ -15,7 +15,7 @@ func (h *handler) articleRoutes() {
 		}
 		writeJSON(w, 200, result)
 	}))
-	h.mux.HandleFunc("POST /api/account/articles/sync", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/account/articles/sync", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			RequestID string `json:"request_id"`
 		}
@@ -24,7 +24,7 @@ func (h *handler) articleRoutes() {
 		}
 		h.create(w, r, CreateInput{RequestID: in.RequestID, Kind: "sync_articles", Platform: "csdn"})
 	}))
-	h.mux.HandleFunc("GET /api/account/articles/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/account/articles/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		result, err := h.store.Article(r.Context(), r.PathValue("id"))
 		if err != nil {
 			replyError(w, err)
@@ -32,7 +32,7 @@ func (h *handler) articleRoutes() {
 		}
 		writeJSON(w, 200, result)
 	}))
-	h.mux.HandleFunc("POST /api/account/articles/{id}/read", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/account/articles/{id}/read", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			RequestID string `json:"request_id"`
 		}

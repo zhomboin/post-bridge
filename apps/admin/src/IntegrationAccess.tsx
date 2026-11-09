@@ -1,5 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Empty, errorText, useAction, useWorkspace } from './runtime';
+import {
+  Empty,
+  ResourceError,
+  errorText,
+  useAction,
+  useResource,
+  useWorkspace,
+  type Account,
+} from './runtime';
 import { integrationScopes, type IntegrationClient, type IssuedSecret } from './integration-types';
 import { IntegrationModal, IntegrationState } from './IntegrationDialog';
 const list = (value: string) =>
@@ -33,6 +41,7 @@ export function GrantForm({
   pending: boolean;
   onSubmit: (body: Record<string, unknown>) => Promise<void>;
 }) {
+  const accounts = useResource<{ items: { account: Account }[] }>('/api/accounts');
   const [form, setForm] = useState<Grant>({
     source_id: value?.source_id || '',
     environment: value?.environment || '',
@@ -125,7 +134,30 @@ export function GrantForm({
             </label>
           ))}
         </fieldset>
-        {field('accounts', '允许账号（逗号分隔）', { required: true })}
+        <fieldset className="integration-scopes">
+          <legend>允许账号</legend>
+          <ResourceError error={accounts.error} />
+          {(accounts.data?.items || [])
+            .filter((item) => item.account.platform === 'csdn' && item.account.verified !== false)
+            .map(({ account }) => (
+              <label className="checkbox" key={account.id}>
+                <input
+                  type="checkbox"
+                  checked={list(form.accounts).includes(account.id)}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      accounts: (event.target.checked
+                        ? [...list(current.accounts), account.id]
+                        : list(current.accounts).filter((id) => id !== account.id)
+                      ).join(','),
+                    }))
+                  }
+                />
+                {account.display_name || account.username || account.id}
+              </label>
+            ))}
+        </fieldset>
         <label>
           允许操作
           <input value="保存 CSDN 草稿" disabled />

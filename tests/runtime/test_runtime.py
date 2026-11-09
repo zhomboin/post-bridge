@@ -93,6 +93,49 @@ class RuntimeSafetyTests(unittest.TestCase):
             self.assertNotIn("PUBLIC_ORIGIN", worker)
             self.assertNotIn("REMOTE_LOGIN_URL", worker)
 
+    def test_application_database_preserves_data_and_private_credentials(self):
+        runtime = self.load()
+        with tempfile.TemporaryDirectory() as base:
+            state = Path(base)
+            config = {
+                "DATABASE_URL": "postgres://postbridge:synthetic@127.0.0.1:55432/post_bridge?sslmode=disable"
+            }
+            with patch.object(runtime.subprocess, "run") as command:
+                runtime.application_database(state, config, Path("/tools"), {})
+            secret = state / "db-application-password"
+            self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
+            self.assertEqual((state / "runtime.json").stat().st_mode & 0o777, 0o600)
+            self.assertIn("postbridge_app:", config["DATABASE_URL"])
+            self.assertIn("sslmode=disable", config["DATABASE_URL"])
+            arguments = command.call_args
+            self.assertNotIn(secret.read_text().strip(), " ".join(arguments.args[0]))
+            self.assertIn("NOSUPERUSER NOBYPASSRLS", arguments.kwargs["input"])
+            self.assertNotIn("DROP", arguments.kwargs["input"])
+            original = secret.read_text()
+            with patch.object(runtime.subprocess, "run"):
+                runtime.application_database(state, config, Path("/tools"), {})
+            self.assertEqual(secret.read_text(), original)
+
+    def test_application_database_rejects_public_or_linked_secret(self):
+        runtime = self.load()
+        with tempfile.TemporaryDirectory() as base:
+            state = Path(base)
+            secret = state / "db-application-password"
+            secret.write_text("x" * 40)
+            secret.chmod(0o644)
+            with patch.object(runtime.subprocess, "run") as command:
+                with self.assertRaises(ValueError):
+                    runtime.application_database(state, {}, Path("/tools"), {})
+                command.assert_not_called()
+            target = state / "target"
+            secret.rename(target)
+            target.chmod(0o600)
+            secret.symlink_to(target)
+            with patch.object(runtime.subprocess, "run") as command:
+                with self.assertRaises(ValueError):
+                    runtime.application_database(state, {}, Path("/tools"), {})
+                command.assert_not_called()
+
     def test_database_failure_stops_only_new_cluster(self):
         runtime = self.load()
         with tempfile.TemporaryDirectory() as base:

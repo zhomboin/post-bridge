@@ -1,3 +1,4 @@
+import RemoteLogin from './RemoteLogin';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Empty,
@@ -115,6 +116,7 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
         </div>
         <p className="article-sync-time">最近同步 {time(notes.data?.snapshot?.synced_at)}</p>
       </section>
+      {settings && <RemoteLogin platformLabel="小红书" onVerified={account.refresh} />}
       <ResourceError error={account.error} stale={!!a} />
       <nav className="account-tabs" aria-label="账号视图">
         <button aria-current={!settings ? 'page' : undefined} onClick={() => go({ tab: '' })}>
@@ -133,7 +135,7 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
             <h2>账号设置</h2>
             <button
               className="primary"
-              disabled={action.pending || !a}
+              disabled={action.pending || !a || a.verified === false}
               onClick={() => void submit(true)}
             >
               检查登录状态
@@ -158,7 +160,7 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
             <h2>笔记列表</h2>
             <button
               className="primary"
-              disabled={action.pending || active(job) || !a}
+              disabled={action.pending || active(job) || !a || a.verified === false}
               onClick={() => void submit()}
             >
               {action.pending || active(job) ? '同步处理中…' : '同步笔记'}

@@ -67,6 +67,7 @@ func validateNotes(snapshot *NotesSnapshot, username, userID string) error {
 }
 
 func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID string) (Job, bool, error) {
+
 	if accountID == "csdn-main" && kind == "check_account" {
 		return s.Create(ctx, CreateInput{RequestID: requestID, Kind: kind, Platform: "csdn"})
 	}
@@ -75,7 +76,17 @@ func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID
 	if !validKey(accountID) || !validKey(requestID) || (kind != "check_account" && kind != "sync_notes") {
 		return out, false, ErrInvalid
 	}
+	if err := s.executableAccount(ctx, accountID); err != nil {
+		return out, false, err
+	}
 	err := s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
+		var verified bool
+		if err := tx.QueryRow(ctx, "SELECT verified FROM account WHERE id=$1 FOR SHARE", accountID).Scan(&verified); err != nil {
+			return err
+		}
+		if !verified {
+			return ErrConflict
+		}
 		var platform, username, native string
 		err := tx.QueryRow(ctx, "SELECT platform,username,native_user_id FROM account WHERE id=$1", accountID).Scan(&platform, &username, &native)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -91,7 +102,7 @@ func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID
 		fp := fingerprint(input)
 		var hash string
 		var data []byte
-		err = tx.QueryRow(ctx, "SELECT fingerprint,record FROM jobs WHERE request_id=$1 UNION ALL SELECT a.fingerprint,j.record FROM article_read_requests a JOIN jobs j ON j.id=a.job_id WHERE a.request_id=$1", requestID).Scan(&hash, &data)
+		err = tx.QueryRow(ctx, "SELECT fingerprint,record FROM jobs WHERE request_id=$1 AND request_namespace=pb_caller() UNION ALL SELECT a.fingerprint,j.record FROM article_read_requests a JOIN jobs j ON j.id=a.job_id WHERE a.request_id=$1 AND a.request_namespace=pb_caller()", requestID).Scan(&hash, &data)
 		if err == nil {
 			var r record
 			if json.Unmarshal(data, &r) != nil {
@@ -142,6 +153,9 @@ func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID
 		created = true
 		return appendLog(ctx, tx, r, "info", "只读任务已加入队列", now)
 	})
+	if err == nil && created {
+		out, err = s.Get(ctx, out.ID)
+	}
 	return out, created, err
 }
 

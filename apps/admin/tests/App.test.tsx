@@ -386,7 +386,7 @@ describe('管理员会话与任务闭环', () => {
           : fallback(url, init);
     render(<App />);
     await screen.findByRole('button', { name: '登录工作台' });
-    fireEvent.change(screen.getByLabelText('管理员账号'), { target: { value: 'operator' } });
+    fireEvent.change(screen.getByLabelText('账号'), { target: { value: 'operator' } });
     fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'private' } });
     fireEvent.click(screen.getByRole('button', { name: '登录工作台' }));
     await screen.findByText('第一篇技术文章');
@@ -411,6 +411,9 @@ describe('管理员会话与任务闭环', () => {
     render(<App />);
     await screen.findByText('第一篇技术文章');
     fireEvent.click(screen.getByRole('link', { name: '新建草稿' }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('发布账号') as HTMLSelectElement).value).toBe('csdn-main'),
+    );
     fireEvent.change(screen.getByLabelText('文章标题'), { target: { value: '保存到草稿的文章' } });
     fireEvent.change(screen.getByLabelText('Markdown 正文'), { target: { value: '# 安全的正文' } });
     fireEvent.click(screen.getByRole('button', { name: '保存到CSDN草稿' }));

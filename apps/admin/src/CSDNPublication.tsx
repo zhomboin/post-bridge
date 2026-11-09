@@ -258,7 +258,15 @@ export function PublishJobActions({ job, onUpdate }: { job: Job; onUpdate: () =>
         {needsReconciliation ? (
           <>
             {job.status === 'waiting_user' && (
-              <RouteLink className="button" href="/account?tab=settings">
+              <RouteLink
+                className="button"
+                href={
+                  '/account?tab=settings' +
+                  (job.account_id && job.account_id !== 'csdn-main'
+                    ? '&account=' + encodeURIComponent(job.account_id)
+                    : '')
+                }
+              >
                 登录 CSDN
               </RouteLink>
             )}
@@ -280,7 +288,15 @@ export function PublishJobActions({ job, onUpdate }: { job: Job; onUpdate: () =>
           </>
         ) : canResume ? (
           <>
-            <RouteLink className="button" href="/account?tab=settings">
+            <RouteLink
+              className="button"
+              href={
+                '/account?tab=settings' +
+                (job.account_id && job.account_id !== 'csdn-main'
+                  ? '&account=' + encodeURIComponent(job.account_id)
+                  : '')
+              }
+            >
               登录 CSDN
             </RouteLink>
             <button

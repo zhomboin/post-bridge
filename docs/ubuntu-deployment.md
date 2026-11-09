@@ -40,7 +40,7 @@ sudo -v
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3 ca-certificates git curl nginx nano less
+sudo apt-get install -y python3 ca-certificates git curl nginx nano less bubblewrap
 python3 --version
 systemctl --version
 ```
@@ -75,10 +75,12 @@ sudo apt-get install -y postgresql-16 postgresql-client-16
 sudo systemctl start postgresql
 sudo -u postgres createuser --pwprompt --no-superuser --no-createdb --no-createrole post_bridge
 sudo -u postgres createdb --owner=post_bridge post_bridge
-psql --host 127.0.0.1 --port 5432 --username post_bridge --dbname post_bridge --password --command 'SELECT current_database(), current_user;'
+psql --host 127.0.0.1 --port 5432 --username post_bridge --dbname post_bridge --password --command 'SELECT current_database(),current_user,rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user;'
 ```
 
-密码在交互提示中填写，不作为命令参数。不要给应用 postgres 超级用户权限，也不要指向 postgres、template0、template1 或其他业务库。已有数据库的角色需有目标 schema 的建表与访问权限。
+rolsuper 与 rolbypassrls 必须均为 false，API 启动会拒绝不符合的角色。密码在交互提示中填写，不作为命令参数。不要给应用 postgres 超级用户权限，也不要指向 postgres、template0、template1 或其他业务库。已有数据库的角色需有目标 schema 的建表与访问权限。
+
+已有专属数据库从超级用户运行方式升级时，先完成第六节停机与备份，再由数据库管理员建立受限应用角色、将本项目 schema 与对象所属者改为该角色，并更新私有 DATABASE_URL。API 不会自行给角色降权或更改外部数据库对象所属者；不要向其他业务角色或整个集群执行批量归属操作。
 
 ### 2. 外部数据库
 
@@ -132,6 +134,12 @@ sudo systemctl is-enabled post-bridge-api.service post-bridge-worker.service
 
 ```bash
 sudo ./scripts/ubuntu-deploy.sh install --config '〈仓库外私有配置文件〉'
+```
+
+安装器包含 bubblewrap。部署用户还应执行以下只读预检，失败时核对宿主用户命名空间策略，不关闭系统安全策略来绕过隔离：
+
+```bash
+sudo -u post-bridge-worker bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
 ```
 
 两个服务应为 active，开机启用状态应为 enabled。首次安装成功已完成启动，不需要再执行其他启动脚本；已有安装使用 upgrade，不重复 install。内部检查通过只代表服务可用，不代表 HTTPS、平台登录或真实发稿已验收。
@@ -309,6 +317,8 @@ curl --fail --show-error '〈PUBLIC_ORIGIN 的 HTTPS 地址〉/healthz'
 sudo ./scripts/ubuntu-deploy.sh upgrade --config '〈仓库外私有配置文件〉'
 ```
 
+首次启用用户隔离时，必须沿用 ADMIN_USERNAME 和全部私有配置。API 初始化事务将已有账号、文章、任务和来源归入该管理员；保留标识、内容、请求去重和有效平台会话。迁移失败不得清库重试，按私有日志处理；成功后用管理员核对原有记录，再创建普通用户检验各自账号列表。新账号目录位于 worker 私有状态中的 managed 根目录，备份 var/lib/post-bridge 时一并保留。
+
 upgrade 会下载并校验 Go 1.26.10，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
 
 安装器不会覆盖已存在的 /etc/post-bridge/nginx.conf，也不会更新启用站点；仅当本次需要调整 Nginx 时，人工核对模板并编辑实际站点，再校验和重载：
@@ -377,6 +387,27 @@ API 用户为 post-bridge-api，执行器用户为 post-bridge-worker，均禁�
 [部署安全测试](../tests/runtime/test_ubuntu.py)覆盖安装快照的文档资源、来源配置、凭据隔离、升级保留、符号链接拒绝、代码切换和代理保护。[CI](../.github/workflows/ci.yml)使用安装器生成独立快照，再从该快照安装依赖、构建后台、执行器和 API。[独立 systemd 检查](../scripts/ubuntu_systemd_smoke.py)使用随机单位名、随机端口和合成服务验证无桌面启动、崩溃重启、API 重启、子进程清理及无关进程保留；结束时删除临时单位与进程。
 
 本地使用用户级 systemd 完成独立合成验证；用户级环境关闭需要系统权限的挂载隔离。CI 以系统级临时单位复验生产单元同源的进程和文件隔离规则。当前没有目标服务器，实际 root 安装、HTTPS 证书、真实账号远程登录及生产验收需在目标环境分别完成；不将本地合成验证记为生产已部署。
+
+## 可选导入已有账号会话
+
+网页新增账号无需文件配置。导入已验证会话时，在停止执行器后准备两份各服务可读的账号文件和独立令牌。以下命令在服务器 Bash 中执行，只适用于新建的额外账号；已有文件保留，不覆盖已有凭据。每个额外账号使用独立标识、目录和令牌，不能使用个人日常浏览器目录。
+
+```bash
+sudo systemctl stop post-bridge-worker.service
+sudo install -d -m 700 -o post-bridge-worker -g post-bridge-worker /var/lib/post-bridge/worker/imported-extra
+sudo install -m 600 -o post-bridge-worker -g post-bridge-worker /dev/null /var/lib/post-bridge/worker/imported-extra-token
+openssl rand -hex 32 | sudo tee /var/lib/post-bridge/worker/imported-extra-token > /dev/null
+sudo install -m 600 -o post-bridge-api -g post-bridge-api /var/lib/post-bridge/worker/imported-extra-token /var/lib/post-bridge/api/imported-extra-token
+sudo install -m 600 -o post-bridge-api -g post-bridge-api deploy/platform-accounts.example.json /var/lib/post-bridge/api/accounts.json
+sudo install -m 600 -o post-bridge-worker -g post-bridge-worker deploy/platform-accounts.example.json /var/lib/post-bridge/worker/accounts.json
+sudoedit /var/lib/post-bridge/api/accounts.json
+sudoedit /var/lib/post-bridge/worker/accounts.json
+sudoedit /etc/post-bridge/install.json
+```
+
+已有 accounts.json 时跳过模板复制，在原文件的 accounts 中追加；两份文件的 id、platform、username、user_id、owner_username 保持一致，owner_username 必须是已存在的本站用户。API 文件的 worker_token_file 指向 API 私有令牌副本，worker 文件指向 worker 私有令牌；profile_dir 指向对应的 worker 会话目录。将已核对、已关闭浏览器的专属会话保存到该目录，并核对 worker 所有、目录 0700 和文件受限权限。
+
+install.json 中 API_PLATFORM_ACCOUNTS_FILE 和 WORKER_PLATFORM_ACCOUNTS_FILE 分别填写上述文件位置。按第六节备份并执行 upgrade，再运行 check，登录对应用户检查账号及只读同步。不要仅启动旧部署以为新配置已生效；不要把包含真实身份与目录的文件提交到 Git。
 
 ## 小红书只读账号
 

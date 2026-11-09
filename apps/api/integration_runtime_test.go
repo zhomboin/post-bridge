@@ -124,7 +124,7 @@ func TestIntegrationRuntimeStartsAndStopsWithoutWorker(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	var schemaAccount string
-	if err = store.pool.QueryRow(context.Background(), "SELECT username FROM account WHERE id='csdn-main'").Scan(&schemaAccount); err != nil || schemaAccount != "runtime_fixture" {
+	if err = store.pool.QueryRow(context.Background(), "SELECT username FROM account WHERE id='csdn-main'").Scan(&schemaAccount); err != nil || schemaAccount != "tester" {
 		t.Fatal("运行验证未写入指定隔离schema")
 	}
 	if !ready {

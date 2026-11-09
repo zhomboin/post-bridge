@@ -1,4 +1,4 @@
-const accountQueryKeys = new Set(['q', 'status', 'page', 'tab']);
+const accountQueryKeys = new Set(['q', 'status', 'page', 'tab', 'account']);
 
 export function accountArticlesHref(raw?: string | null) {
   if (!raw || !/^\/(?:account|articles)(?:\?|$)/.test(raw) || raw.includes('#')) return '/account';

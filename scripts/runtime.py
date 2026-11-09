@@ -149,6 +149,8 @@ def child_env(config, worker=False):
             "PLAYWRIGHT_EXECUTABLE_PATH",
             "WORKER_HEADLESS",
             "LOGIN_CONTROL_ADDR",
+            "WORKER_PROFILE_ROOT",
+            "ACCOUNT_SANDBOX_EXECUTABLE",
         )
         if worker
         else (
@@ -293,7 +295,13 @@ def database_start(state, config):
             record = identity(int(server_pid.read_text().splitlines()[0]))
         private_write(state / "database.pid.json", json.dumps(record))
         url = urllib.parse.urlparse(config["DATABASE_URL"])
-        env.update(PGPASSWORD=urllib.parse.unquote(url.password or ""))
+        env.update(
+            PGPASSWORD=(
+                (state / "db-password").read_text().strip()
+                if (state / "db-password").is_file()
+                else urllib.parse.unquote(url.password or "")
+            )
+        )
         query = subprocess.run(
             [
                 str(binary / "psql"),
@@ -330,6 +338,7 @@ def database_start(state, config):
                 check=True,
                 stdout=subprocess.DEVNULL,
             )
+        application_database(state, config, binary, env)
         return not already_running
     except Exception:
         if not already_running and server_pid.exists():
@@ -337,6 +346,74 @@ def database_start(state, config):
             if record and str(data) in record["argv"]:
                 terminate_record(record)
         raise
+
+
+def application_database(state, config, binary, env):
+    """仅迁移本启动器管理的专属本地集群，保留库与数据。"""
+    secret = state / "db-application-password"
+    if not secret.exists():
+        private_write(secret, secrets.token_urlsafe(32))
+    info = secret.lstat()
+    if secret.is_symlink() or not secret.is_file() or info.st_mode & 0o077:
+        raise ValueError("本地应用数据库凭据必须为私有普通文件")
+    password = secret.read_text().strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", password):
+        raise ValueError("本地应用数据库凭据无效")
+    sql = (
+        """
+BEGIN;
+DO $migration$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='postbridge_app') THEN
+  CREATE ROLE postbridge_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+ END IF;
+END $migration$;
+ALTER ROLE postbridge_app NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD '%s';
+ALTER DATABASE post_bridge OWNER TO postbridge_app;
+ALTER SCHEMA public OWNER TO postbridge_app;
+DO $migration$ DECLARE item record; BEGIN
+ FOR item IN SELECT c.relname,c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND pg_get_userbyid(c.relowner)='postbridge' AND c.relkind IN ('r','p','S','v','m') ORDER BY CASE WHEN c.relkind='S' THEN 1 ELSE 0 END LOOP
+  EXECUTE format('ALTER %%s public.%%I OWNER TO postbridge_app',CASE item.relkind WHEN 'S' THEN 'SEQUENCE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'TABLE' END,item.relname);
+ END LOOP;
+ FOR item IN SELECT p.oid,p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND pg_get_userbyid(p.proowner)='postbridge' AND p.prokind='f' LOOP
+  EXECUTE format('ALTER FUNCTION public.%%I(%%s) OWNER TO postbridge_app',item.proname,pg_get_function_identity_arguments(item.oid));
+ END LOOP;
+END $migration$;
+COMMIT;
+"""
+        % password
+    )
+    subprocess.run(
+        [
+            str(binary / "psql"),
+            "-h",
+            "127.0.0.1",
+            "-p",
+            "55432",
+            "-U",
+            "postbridge",
+            "-d",
+            "post_bridge",
+            "-v",
+            "ON_ERROR_STOP=1",
+        ],
+        env=env,
+        input=sql,
+        text=True,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    url = urllib.parse.urlsplit(config["DATABASE_URL"])
+    config["DATABASE_URL"] = urllib.parse.urlunsplit(
+        url._replace(
+            netloc="postbridge_app:"
+            + urllib.parse.quote(password, safe="")
+            + "@127.0.0.1:55432"
+        )
+    )
+    private_write(
+        state / "runtime.json", json.dumps(config, ensure_ascii=False, indent=2)
+    )
 
 
 def build(state):

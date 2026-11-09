@@ -17,11 +17,14 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+//go:embed tenant_schema.sql
+var tenantSchemaSQL string
+
 //go:embed integration_content_schema.sql
 var integrationContentSchemaSQL string
 
 type Store struct {
-	pool         *pgxpool.Pool
+	pool         *tenantPool
 	now          func() time.Time
 	integrations *IntegrationService
 }
@@ -32,6 +35,9 @@ type Claim struct {
 	LeaseExpiresAt time.Time `json:"lease_expires_at"`
 }
 type Account struct {
+	OwnerUserID   string     `json:"owner_user_id,omitempty"`
+	Enabled       bool       `json:"enabled"`
+	Verified      bool       `json:"verified"`
 	ID            string     `json:"id"`
 	Platform      string     `json:"platform"`
 	Username      string     `json:"username"`
@@ -72,13 +78,16 @@ func NewStore(ctx context.Context, pool *pgxpool.Pool, username, display string)
 	if _, err = tx.Exec(ctx, integrationContentSchemaSQL); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO account(id,username,display_name) VALUES('csdn-main',$1,$2) ON CONFLICT(id) DO UPDATE SET username=excluded.username,display_name=excluded.display_name", username, display); err != nil {
+	if _, err = tx.Exec(ctx, tenantSchemaSQL); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO account(id,username,display_name) VALUES('csdn-main',$1,$2) ON CONFLICT(id) DO NOTHING", username, display); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return &Store{pool: pool, now: func() time.Time { return time.Now().UTC() }}, nil
+	return &Store{pool: &tenantPool{Pool: pool}, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 func (s *Store) locked(ctx context.Context, fn func(pgx.Tx, time.Time) error) error {
 	tx, err := s.pool.Begin(ctx)
@@ -86,9 +95,10 @@ func (s *Store) locked(ctx context.Context, fn func(pgx.Tx, time.Time) error) er
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var id string
-	if err = tx.QueryRow(ctx, "SELECT id FROM account WHERE id='csdn-main' FOR UPDATE").Scan(&id); err != nil {
-		return err
+	if accountOf(ctx) != "" {
+		if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,721936419))", accountOf(ctx)); err != nil {
+			return err
+		}
 	}
 	if err = fn(tx, s.now()); err != nil {
 		return err
@@ -114,7 +124,7 @@ func save(ctx context.Context, tx pgx.Tx, r *record) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "UPDATE jobs SET record=$2 WHERE id=$1", r.ID, data)
+	_, err = tx.Exec(ctx, "UPDATE jobs SET record=$2::jsonb||jsonb_build_object('owner_user_id',owner_user_id,'connection_version',connection_version,'created_by',created_by) WHERE id=$1", r.ID, data)
 	return err
 }
 func appendLog(ctx context.Context, tx pgx.Tx, r *record, level, message string, now time.Time) error {
@@ -127,7 +137,13 @@ func fingerprint(in CreateInput) string {
 	return hex.EncodeToString(h[:])
 }
 func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
-	if in.Kind == "sync_notes" || in.AccountID != "" && in.AccountID != "csdn-main" {
+	if in.AccountID != "" {
+		sc := scopeOf(ctx)
+		sc.AccountID = in.AccountID
+		ctx = scoped(ctx, sc)
+	}
+
+	if in.Kind == "sync_notes" || in.AccountID != "" && !validKey(in.AccountID) {
 		return Job{}, false, ErrInvalid
 	}
 	if readKind(in.Kind) {
@@ -141,11 +157,21 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 	} else if err := ValidateCreate(in); err != nil {
 		return Job{}, false, err
 	}
+	if err := s.executableAccount(ctx, accountOf(ctx)); err != nil {
+		return Job{}, false, err
+	}
 	var job Job
 	created := false
 	err := s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
 		var currentUsername string
-		if err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&currentUsername); err != nil {
+		var verified bool
+		if err := tx.QueryRow(ctx, "SELECT verified FROM account WHERE id=pb_account() FOR SHARE").Scan(&verified); err != nil {
+			return err
+		}
+		if !verified {
+			return ErrConflict
+		}
+		if err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id=pb_account() AND platform='csdn'").Scan(&currentUsername); err != nil {
 			return err
 		}
 		if readKind(in.Kind) && !csdnUsername.MatchString(currentUsername) {
@@ -153,7 +179,7 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		}
 		var hash string
 		var data []byte
-		err := tx.QueryRow(ctx, "SELECT fingerprint,record FROM jobs WHERE request_id=$1", in.RequestID).Scan(&hash, &data)
+		err := tx.QueryRow(ctx, "SELECT fingerprint,record FROM jobs WHERE request_id=$1 AND request_namespace=pb_caller()", in.RequestID).Scan(&hash, &data)
 		if err == nil {
 			if hash != fingerprint(in) {
 				return ErrConflict
@@ -162,7 +188,7 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 			if err = json.Unmarshal(data, &r); err != nil {
 				return err
 			}
-			if readKind(in.Kind) && r.AccountUsername != currentUsername {
+			if r.AccountID != accountOf(ctx) || (readKind(in.Kind) && r.AccountUsername != currentUsername) {
 				return ErrConflict
 			}
 			job = r.Job
@@ -171,7 +197,7 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		err = tx.QueryRow(ctx, "SELECT a.fingerprint,j.record FROM article_read_requests a JOIN jobs j ON j.id=a.job_id WHERE a.request_id=$1", in.RequestID).Scan(&hash, &data)
+		err = tx.QueryRow(ctx, "SELECT a.fingerprint,j.record FROM article_read_requests a JOIN jobs j ON j.id=a.job_id WHERE a.request_id=$1 AND a.request_namespace=pb_caller()", in.RequestID).Scan(&hash, &data)
 		if err == nil {
 			if hash != fingerprint(in) {
 				return ErrConflict
@@ -180,7 +206,7 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 			if e := json.Unmarshal(data, &existing); e != nil {
 				return e
 			}
-			if existing.AccountUsername != currentUsername {
+			if existing.AccountID != accountOf(ctx) || existing.AccountUsername != currentUsername {
 				return ErrConflict
 			}
 			job = existing.Job
@@ -192,7 +218,7 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		if readKind(in.Kind) {
 			if in.Kind == "read_article" {
 				var exists bool
-				if e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM account_articles WHERE username=$1 AND id=$2)", currentUsername, in.ArticleID).Scan(&exists); e != nil {
+				if e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM account_articles WHERE account_id=pb_account() AND username=$1 AND id=$2)", currentUsername, in.ArticleID).Scan(&exists); e != nil {
 					return e
 				}
 				if !exists {
@@ -200,7 +226,7 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 				}
 			}
 			var active []byte
-			e := tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'kind'=$1 AND COALESCE(record->>'article_id','')=$2 AND record->>'account_username'=$3 AND record->>'status' IN ('queued','running','waiting_user') ORDER BY created_at DESC,id DESC LIMIT 1", in.Kind, in.ArticleID, currentUsername).Scan(&active)
+			e := tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=pb_account() AND record->>'kind'=$1 AND COALESCE(record->>'article_id','')=$2 AND record->>'account_username'=$3 AND record->>'status' IN ('queued','running','waiting_user') ORDER BY created_at DESC,id DESC LIMIT 1", in.Kind, in.ArticleID, currentUsername).Scan(&active)
 			if e == nil {
 				var existing record
 				if e = json.Unmarshal(active, &existing); e != nil {
@@ -217,10 +243,12 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 			}
 		}
 		r := newRecord(in, now)
+		r.AccountID = accountOf(ctx)
+		r.AccountUsername = currentUsername
 		if readKind(in.Kind) {
 			r.AccountUsername = currentUsername
 			if in.Kind == "read_article" {
-				if err = tx.QueryRow(ctx, "SELECT record->>'title' FROM account_articles WHERE account_id='csdn-main' AND username=$1 AND id=$2", currentUsername, in.ArticleID).Scan(&r.Title); err != nil {
+				if err = tx.QueryRow(ctx, "SELECT record->>'title' FROM account_articles WHERE account_id=pb_account() AND username=$1 AND id=$2", currentUsername, in.ArticleID).Scan(&r.Title); err != nil {
 					return err
 				}
 			}
@@ -236,12 +264,21 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		created = true
 		return appendLog(ctx, tx, r, "info", "任务已加入队列", now)
 	})
+	if err == nil && created {
+		job, err = s.Get(ctx, job.ID)
+	}
 	return job, created, err
 }
 func (s *Store) Claim(ctx context.Context, worker string) (*Claim, error) {
 	return s.ClaimForAccount(ctx, worker, "csdn-main")
 }
 func (s *Store) ClaimForAccount(ctx context.Context, worker, accountID string) (*Claim, error) {
+	sc := scopeOf(ctx)
+	sc.AccountID = accountID
+	ctx = scoped(ctx, sc)
+	if err := s.executableAccount(ctx, accountID); err != nil {
+		return nil, err
+	}
 	if !validKey(worker) {
 		return nil, ErrInvalid
 	}
@@ -271,12 +308,16 @@ func (s *Store) ClaimForAccount(ctx context.Context, worker, accountID string) (
 			return err
 		}
 		var currentUsername string
-		if err = tx.QueryRow(ctx, "SELECT username FROM account WHERE id=$1", accountID).Scan(&currentUsername); err != nil {
+		var currentVersion int64
+		if err = tx.QueryRow(ctx, "SELECT username,connection_version FROM account WHERE id=$1", accountID).Scan(&currentUsername, &currentVersion); err != nil {
 			return err
 		}
 		active := false
 		unknown := ""
 		for _, r := range records {
+			if r.AccountUsername == "" && r.AccountID == "csdn-main" {
+				r.AccountUsername = currentUsername
+			}
 			if r.Status == "reconciling" && r.ExternalStarted && !r.ManualResolved && !r.AutoReconcileStarted {
 				r.AutoReconcileStarted = true
 				r.RunMode = "reconcile"
@@ -298,7 +339,7 @@ func (s *Store) ClaimForAccount(ctx context.Context, worker, accountID string) (
 					return err
 				}
 			}
-			if readKind(r.Kind) && r.AccountUsername != currentUsername && r.Status != "running" && (r.Status == "queued" || r.Status == "waiting_user") {
+			if ((readKind(r.Kind) && r.AccountUsername != currentUsername) || (r.ConnectionVersion > 0 && r.ConnectionVersion != currentVersion)) && r.Status != "running" && (r.Status == "queued" || r.Status == "waiting_user") {
 				r.Status = "failed"
 				r.Ready = false
 				r.ErrorCode = "account_mismatch"
@@ -337,6 +378,13 @@ func (s *Store) ClaimForAccount(ctx context.Context, worker, accountID string) (
 			}
 			if !allowed {
 				continue
+			}
+			allowed, budgetErr := reserveBrowser(ctx, tx, accountID, "task", now)
+			if budgetErr != nil {
+				return budgetErr
+			}
+			if !allowed {
+				return nil
 			}
 			r.Status = "running"
 			r.Attempts++
@@ -383,6 +431,13 @@ func leaseValid(r *record, token string, now time.Time) bool {
 	return r.Status == "running" && token != "" && r.LeaseToken == token && r.LeaseExpiresAt.After(now)
 }
 func (s *Store) mutateLease(ctx context.Context, id, token string, fn func(pgx.Tx, *record, time.Time) error) error {
+	job, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	sc := scopeOf(ctx)
+	sc.AccountID = job.AccountID
+	ctx = scoped(ctx, sc)
 	return s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
 		r, err := load(ctx, tx, id)
 		if err != nil {
@@ -391,14 +446,12 @@ func (s *Store) mutateLease(ctx context.Context, id, token string, fn func(pgx.T
 		if !leaseValid(r, token, now) {
 			return ErrConflict
 		}
-		if readKind(r.Kind) || r.Kind == "publish" || r.Platform == "xiaohongshu" {
-			matches, err := jobAccountMatches(ctx, tx, r)
-			if err != nil {
-				return err
-			}
-			if !matches {
-				return ErrConflict
-			}
+		matches, err := jobAccountMatches(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		if !matches {
+			return ErrConflict
 		}
 		if err = fn(tx, r, now); err != nil {
 			return err
@@ -411,7 +464,8 @@ func (s *Store) Heartbeat(ctx context.Context, id, token string) (bool, error) {
 	err := s.mutateLease(ctx, id, token, func(tx pgx.Tx, r *record, now time.Time) error {
 		cancel = r.CancelRequested && r.RunMode != "reconcile"
 		r.LeaseExpiresAt = now.Add(60 * time.Second)
-		return nil
+		_, err := tx.Exec(ctx, "UPDATE account_browser_slots SET expires_at=$2 WHERE account_id=$1 AND purpose='task'", r.AccountID, now.Add(90*time.Second))
+		return err
 	})
 	return cancel, err
 }
@@ -489,6 +543,9 @@ func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error
 		level := "info"
 		if r.Status == "failed" || r.Status == "reconciling" {
 			level = "warning"
+		}
+		if _, err := tx.Exec(ctx, "DELETE FROM account_browser_slots WHERE account_id=$1 AND purpose='task'", r.AccountID); err != nil {
+			return err
 		}
 		return appendLog(ctx, tx, r, level, "执行器已上报任务结果", now)
 	})
@@ -574,6 +631,9 @@ func (s *Store) WorkerHeartbeatForAccount(ctx context.Context, worker, accountID
 		return ErrInvalid
 	}
 	return s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
+		if _, err := tx.Exec(ctx, "UPDATE account_browser_slots SET expires_at=$2 WHERE account_id=$1 AND purpose='login'", accountID, now.Add(90*time.Second)); err != nil {
+			return err
+		}
 		// 活跃领取期间的空闲声明不能用作人工结束证明。
 		if idle {
 			var active bool
@@ -596,10 +656,12 @@ func (s *Store) WorkerHeartbeatForAccount(ctx context.Context, worker, accountID
 	})
 }
 func (s *Store) Account(ctx context.Context) (Account, error) {
-	a := Account{ID: "csdn-main", Platform: "csdn"}
-	err := s.pool.QueryRow(ctx, "SELECT username,display_name,status,last_checked_at,last_error FROM account WHERE id='csdn-main'").Scan(&a.Username, &a.DisplayName, &a.Status, &a.LastCheckedAt, &a.LastError)
-	return a, err
+	if accountOf(ctx) == "" {
+		return Account{}, nil
+	}
+	return s.AccountByID(ctx, accountOf(ctx))
 }
+
 func (s *Store) LastSeen(ctx context.Context) (*time.Time, error) {
 	var seen *time.Time
 	err := s.pool.QueryRow(ctx, "SELECT max(seen_at) FROM worker_proofs").Scan(&seen)
@@ -740,7 +802,7 @@ func (s *Store) Maintain(ctx context.Context) error {
 }
 func (s *Store) Ready(ctx context.Context) error {
 	var n int
-	if err := s.pool.QueryRow(ctx, "SELECT 1 FROM account WHERE id='csdn-main'").Scan(&n); err != nil {
+	if err := s.pool.QueryRow(ctx, "SELECT 1 FROM account WHERE id=pb_account()").Scan(&n); err != nil {
 		return fmt.Errorf("数据库未就绪")
 	}
 	return nil

@@ -2,7 +2,7 @@
 
 ## 范围与状态
 
-依据[接入方案](../xiaohongshu-integration.md)、[需求](../requirements.md)、[A 阶段](a-platform-validation.md)和[C 阶段](c-platform-publishing.md)。先验证平台能力，再完成账号拆分、独立图文稿、素材和发布核对。完整目标为单账号图文笔记立即发布；当前交付为多平台账号、小红书登录检查与笔记只读列表，图文稿、素材和写入尚未实现。
+依据[接入方案](../xiaohongshu-integration.md)、[需求](../requirements.md)、[A 阶段](a-platform-validation.md)和[C 阶段](c-platform-publishing.md)。先验证平台能力，再完成账号拆分、独立图文稿、素材和发布核对。完整目标为按账号隔离的图文笔记立即发布；当前交付为多平台账号、小红书登录检查与笔记只读列表，图文稿、素材和写入尚未实现。
 
 X01、X02 登录及只读空列表与图文上传前检查已完成。用户授权笔记列表与编辑器只读访问，禁止上传素材、保存草稿或公开发布；未填写图文内容或删除笔记。当前列表无非空样本，上传后的编辑字段不可见，X02 整体未通过。账号标识和原始数据仅存本地私有目录，结果见[平台能力](../platform-capabilities.md)、[验收记录](../acceptance.md)和[进度](../progress.md)。
 

@@ -1,5 +1,6 @@
 import XiaohongshuAccount from './XiaohongshuAccount';
-import { useRef, type ReactNode, type KeyboardEvent } from 'react';
+import AccountBinding from './AccountBinding';
+import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from 'react';
 import { AccountStats, Articles, type ArticlePage } from './Articles';
 import RemoteLogin from './RemoteLogin';
 import AccountAvatar from './AccountAvatar';
@@ -51,7 +52,7 @@ function AccountSettings({ account }: { account: AccountResource }) {
           <h2>账号设置</h2>
           <button
             className="primary"
-            disabled={action.pending || !account.data}
+            disabled={action.pending || !account.data || account.data.verified === false}
             onClick={() => void check()}
           >
             {action.pending ? '正在创建检查任务…' : '检查登录状态'}
@@ -126,7 +127,7 @@ function CSDNAccount({ picker }: { picker: ReactNode }) {
                 {snapshot?.profile.nickname ||
                   account.data?.display_name ||
                   account.data?.username ||
-                  'CSDN 固定账号'}
+                  'CSDN 账号'}
               </h2>
               <p>
                 <span className="account-id-label">账号 ID</span>
@@ -201,8 +202,30 @@ export default function PlatformAccount() {
   const accounts = useResource<{
     items: { account: Account; capabilities: Record<string, boolean> }[];
   }>('/api/accounts');
-  const id = new URLSearchParams(route.split('?')[1]).get('account') || 'csdn-main';
-  const selected = accounts.data?.items.find((item) => item.account.id === id)?.account;
+  const [removed, setRemoved] = useState<Set<string>>(() => new Set());
+  const items = (accounts.data?.items || []).filter((item) => !removed.has(item.account.id));
+  const changed = (id: string, wasRemoved: boolean) => {
+    setRemoved((previous) => {
+      const next = new Set(previous);
+      if (wasRemoved) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    accounts.refresh();
+  };
+  const id = new URLSearchParams(route.split('?')[1]).get('account') || items[0]?.account.id || '';
+  const selected = items.find((item) => item.account.id === id)?.account;
+  useEffect(() => {
+    const params = new URLSearchParams(route.split('?')[1]);
+    if (selected && selected.id !== 'csdn-main' && !params.has('account')) {
+      params.set('account', selected.id);
+      navigate('/account?' + params);
+    }
+  }, [selected?.id, route, navigate]);
+  const choosingDefault =
+    !!selected &&
+    selected.id !== 'csdn-main' &&
+    !new URLSearchParams(route.split('?')[1]).has('account');
   const picker = (
     <label className="account-picker">
       平台账号
@@ -211,16 +234,12 @@ export default function PlatformAccount() {
         value={id}
         onChange={(event) => navigate('/account?account=' + encodeURIComponent(event.target.value))}
       >
-        {id !== 'csdn-main' && accounts.data && !selected && (
+        {id && accounts.data && !selected && (
           <option value={id} disabled>
             账号未配置
           </option>
         )}
-        {(
-          accounts.data?.items || [
-            { account: { id: 'csdn-main', platform: 'csdn', display_name: 'CSDN', username: '' } },
-          ]
-        ).map(({ account }) => (
+        {items.map(({ account }) => (
           <option key={account.id} value={account.id}>
             {account.platform === 'xiaohongshu' ? '小红书' : 'CSDN'} ·{' '}
             {account.display_name || account.username || account.id}
@@ -229,7 +248,7 @@ export default function PlatformAccount() {
       </select>
     </label>
   );
-  if (id !== 'csdn-main' && !selected)
+  if (!selected || choosingDefault)
     return (
       <div className="page">
         <div className="page-heading">
@@ -237,12 +256,18 @@ export default function PlatformAccount() {
           {picker}
         </div>
         <ResourceError error={accounts.error} />
-        <Empty loading={accounts.loading}>未找到平台账号</Empty>
+        <Empty loading={accounts.loading}>
+          {choosingDefault ? '正在选择平台账号' : id ? '未找到平台账号' : '尚未绑定平台账号'}
+        </Empty>
+        <AccountBinding onChanged={changed} />
       </div>
     );
   return (
     <>
       <ResourceError error={accounts.error} stale={!!accounts.data} />
+      <div className="page" style={{ paddingBottom: 0 }}>
+        <AccountBinding key={selected.id} onChanged={changed} account={selected} />
+      </div>
       {selected?.platform === 'xiaohongshu' ? (
         <XiaohongshuAccount key={id} id={id} picker={picker} />
       ) : (

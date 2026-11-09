@@ -2,7 +2,7 @@
 
 ## 本轮交付边界
 
-实现独立管理员登录、CSDN 草稿与受控发布、账号文章快照与正文、持久队列、任务详情和日志，以及 CSDN 与小红书账号切换、小红书登录检查及笔记只读快照。每个平台绑定一个账号；小红书内容写入不开放。PostBridge 侧来源接入已实现，真实调用方连接及生产验收仍待。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
+实现多用户独立登录、CSDN 草稿与受控发布、账号文章快照与正文、持久队列、任务详情和日志，以及 CSDN 与小红书账号切换、小红书登录检查及笔记只读快照。每个用户可绑定同平台多个独占账号；小红书内容写入不开放。PostBridge 侧来源接入已实现，真实调用方连接及生产验收仍待。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
 
 API 管理数据库，执行器通过受限内部接口领取和上报，不直接访问数据库。管理界面只操作管理接口。本文为三单元共享契约，字段变化需同时更新实现与用例。
 
@@ -45,11 +45,17 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 | GET /api/logs | job_id、level、q、from、to、page、page_size | 脱敏日志列表，不返回任务正文 |
 | GET /api/settings | 会话 | draft_only、platform、limits、poll_interval_ms、worker_last_seen_at；当前只读 |
 
-登录返回的 user 含 username。账号 id 固定 csdn-main；username 由服务配置确定，不由任务请求覆盖。账号 status 为 unchecked、connected、needs_login 或 blocked。
+登录返回的 user 含 id、username、role。管理员角色仅额外开放用户管理，不可访问其他用户业务数据。user_id 和账号归属由服务端会话决定，不能由请求指定。账号含 owner_user_id、enabled、verified；status 为 unchecked、connected、needs_login、blocked 或 disconnected。网页新绑定先为未核验状态，平台身份确认后才能创建任务和授予来源权限。
+
+/api/account 及其文章、登录、设置接口用 account_id 查询参数选择账号；省略时选择当前用户第一个有效账号。无账号不使用其他用户默认账号。创建任务可传 account_id；任务详情操作始终从任务本身取得账号。所有列表、数量及对象读取限制当前用户；越权对象返回 404。去重按用户及调用主体划分，同用户相同标识不同账号或内容返回 409。
+
+## 用户管理
+
+仅 admin 角色可调用 GET /api/users、POST /api/users 和 PATCH /api/users/{user}。创建输入 username、password，密码为 12—72 字节；创建普通用户。修改接受 enabled 或 password，提升认证版本并撤销该用户全部本站会话。禁止停用自己、修改其他用户、由客户端提升角色；普通用户返回 403。用户列表不返回密码哈希。后台提供创建和启停，密码重置通过受保护的 PATCH 接口执行。
 
 ## 任务字段与状态
 
-任务对象另含可选 integration_distribution_id，用于定位外部来源父分发。任务对象：id、request_id、platform、account_id、account_username、kind、article_id、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
+任务对象另含 owner_user_id、connection_version、created_by，以及可选 integration_distribution_id，用于定位外部来源父分发。任务对象：id、request_id、platform、account_id、account_username、kind、article_id、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
 
 - kind 为 save_draft、check_account、sync_articles 或 read_article；读取任务由文章专用接口创建，使用 account_username 绑定账号，正文读取另含 article_id。读取任务不设置 external_started 和 remote_id，成功仍为 not_submitted，不表示外站保存或发布。
 - status 为 queued、running、waiting_user、reconciling、succeeded、failed、cancelled。waiting_user 表示等待处理；有 integration_distribution_id 且 error_code 为 source_guard_failed 或 source_changed 时显示“来源待处理”，进入原父分发处理来源授权，不引导平台登录或普通恢复。
@@ -73,10 +79,12 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 
 ## 多平台账号与小红书只读接口
 
-全部接口需要管理员会话；POST 同时校验 Origin 和 CSRF。私有配置方式见[账号管理](platform-accounts.md)。
+全部接口需要本站用户会话；写请求同时校验 Origin 和 CSRF。私有配置方式见[账号管理](platform-accounts.md)。
 
 | 方法与路径 | 结果 |
 | --- | --- |
+| POST /api/accounts | platform、username、可选 display_name 和小红书 user_id；归属取会话，返回 201。每用户最多一百个有效绑定；重复绑定返回 409 |
+| DELETE /api/accounts/{account} | 解绑，撤销连接与新任务资格；业务记录保留；未确认的平台结果返回 409 account_unresolved；不能转让归属 |
 | GET /api/accounts | items 中每项包含 account 和 capabilities；不返回凭据、浏览器路径或 Cookie |
 | GET /api/accounts/{account} | 指定账号及能力开关 |
 | POST /api/accounts/{account}/check | 传入 request_id，创建 check_account 任务 |
@@ -85,7 +93,7 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 
 笔记返回 items、total、page、page_size、snapshot 和 sync_job。snapshot 为 null 表示从未同步，空 items 且 snapshot 非空表示已同步空账号。笔记含 id、title、status、platform_status、posted_at、views、likes、comments、favorites。时间可为空，统计可为 null；未知状态保持 unknown。无正文、上传或发布链接。
 
-账号列表和账号专属路由仅开放当前配置的账号。停用账号的专属路由返回 404，重试或恢复任务返回 409；历史任务和本地快照不删除。
+账号列表和账号专属路由仅开放当前用户所属账号。停用账号的专属路由返回 404，重试或恢复任务返回 409；历史任务和本地快照不删除。
 
 每个账号使用不同执行器凭据，服务端按凭据决定可领取与上报的账号；客户端不能通过请求参数更改归属。sync_notes 成功上报需同时包含 account_identity 与 notes，二者 username、user_id 必须匹配任务冻结身份和当前绑定。仅完整、未取消且租约有效的结果可原子替换快照。异常不会覆盖旧快照；跨账号上报拒绝。
 
@@ -97,7 +105,7 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 
 profile 提供昵称、头像地址、等级、积分、原创文章数与粉丝数；stats 提供文章数、阅读、点赞、评论、收藏、展现、粉丝及可获取的昨日变化。trend 按日期提供阅读、评论、收藏、粉丝净变化、推广与外链点击。未取得指标为 null，净变化可为负，不以零替代未知。
 
-body 含 id、title、markdown、html、description、tags、categories、type、visibility、platform_status、reason。所有正文接口要求管理员会话，正文不进入任务记录、列表、日志和错误信息。平台 HTML 只作为文本返回；界面禁用原始 HTML，正文链接只允许 HTTP/HTTPS，禁止自动加载外站图片。
+body 含 id、title、markdown、html、description、tags、categories、type、visibility、platform_status、reason。所有正文接口要求本站用户会话，正文不进入任务记录、列表、日志和错误信息。平台 HTML 只作为文本返回；界面禁用原始 HTML，正文链接只允许 HTTP/HTTPS，禁止自动加载外站图片。
 
 同步成功的内部完成请求携带 articles，正文成功携带 article；与完成状态在同一事务提交。其他任务、失败、取消、过期领取和账号不匹配均不能保存读取载荷。最多 2000 条文章、366 条趋势；快照最大 6 MiB、单篇正文最大 2 MiB，内部完成接口最大 8 MiB。普通管理请求维持 1 MiB。
 
@@ -140,6 +148,8 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 | ADMIN_USERNAME、ADMIN_PASSWORD_FILE | 初始管理员及私有密码文件，禁止内置通用密码 |
 | WORKER_TOKEN_FILE | 管理端与执行器共享的私有内部凭据文件 |
 | CSDN_USERNAME、CSDN_DISPLAY_NAME | 预期账号身份，身份不符时不修改平台内容 |
+| WORKER_PROFILE_ROOT | 可选新增账号私有根目录，默认在初始会话同级 managed 中 |
+| ACCOUNT_SANDBOX_EXECUTABLE | 可选可信 bubblewrap 路径，默认 /usr/bin/bwrap |
 | CSDN_PROFILE_DIR | 仓库外专属浏览器配置目录，Linux 权限 0700 |
 | PLAYWRIGHT_EXECUTABLE_PATH | 可选开发浏览器路径；部署时使用匹配的固定浏览器版本 |
 | WORKER_HEADLESS | 默认 true；账号页提供无桌面远程验证，本地助手为可选入口 |
@@ -151,7 +161,7 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 
 ## 后台远程登录
 
-远程登录在“平台账号”的“账号设置”页签发起，输入和画面仅转发到固定 IPv4 回环执行器。管理员会话和写操作 CSRF 均需验证，会话绑定具体发起者；其他管理员会话只能看到忙碌提示。所有响应禁缓存，不转发管理员 Cookie、请求来源凭据或任何任意网址。
+远程登录在“平台账号”的“账号设置”页签发起，输入和画面仅转发到当前账号登记的 IPv4 回环执行器。本站用户会话和写操作 CSRF 均需验证，会话绑定具体发起者；其他本站用户会话只能看到忙碌提示。所有响应禁缓存，不转发管理员 Cookie、请求来源凭据或任何任意网址。
 
 | 方法与路径 | 行为 |
 | --- | --- |
@@ -163,7 +173,7 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 
 会话最长十分钟，活动期间六十秒无画面或输入后关闭。状态为 idle、pending、active、succeeded、failed、expired、cancelled；他人占用时返回 busy。输入大小至多 16 KiB，文字至多 2000 字、拖动 2—128 个点、坐标限制在视口内。手机号和验证码填写分别只接受 5—20 位与 4—8 位数字，按字段匹配固定认证来源内唯一可用输入，不自动获取短信或提交登录。认证页面未就绪时保持 pending；最多三次页面加载仍失败后返回 failed 及固定加载失败提示，关闭浏览器。其他执行器错误继续脱敏。停止与过期拒绝迟到输入。远端 Tab 和 Shift+Tab 仅在固定认证来源的可用文字输入间循环，不在后台账号页背景导航。指定身份成功确认采用幂等事务，只恢复本账号因 needs_login 等待且未取消的任务；未知外站结果仍进入核对，预算不重置。
 
-公开来源 PUBLIC_ORIGIN 与内部 API_BASE_URL 分离。REMOTE_LOGIN_URL 仅支持固定回环地址；执行器通过 LOGIN_CONTROL_ADDR 启用控制服务，内部鉴权沿用私有执行器密钥。部署与配置入口见[Ubuntu 部署说明](ubuntu-deployment.md)。
+公开来源 PUBLIC_ORIGIN 与内部 API_BASE_URL 分离。REMOTE_LOGIN_URL 仅作初始账号兼容入口，固定回环地址；账号执行器使用独立凭据登记动态回环入口，不接受外网地址。LOGIN_CONTROL_ADDR 用于调度器回环健康检查。部署与配置入口见[Ubuntu 部署说明](ubuntu-deployment.md)。
 
 ## 账号内容展示
 
@@ -181,3 +191,11 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 | POST /api/jobs/{id}/publish | 使用草稿任务标识和确认令牌提交发布任务，返回 202。同一稿件确认重复提交时返回已有任务。 |
 
 发布操作复用原 CSDN 草稿标识。执行器提交前再次核对目标账号、文章和冻结设置。只有读回已发布状态才显示发布成功。平台已受理与结果未知分别记录，均按原任务只读核对。发布至少需要一个标签。转载或翻译需要单篇填写 HTTPS 原文链接并确认授权。自动选封面、定时发布、多平台发布与 GitCode 备份不属于此操作。
+
+## 账号执行调度
+
+GET /internal/worker/accounts 仅接受调度器主凭据，返回账号身份、归属、连接版本、受控目录引用和当前连接执行令牌；不对网页或账号执行器开放。调度器只按需要启动独立账号环境。
+
+账号执行凭据仅能访问自身任务、心跳、POST/DELETE /internal/worker/control、POST/DELETE /internal/worker/login-lease 和 POST /internal/worker/identity。control 登记或注销自身回环登录入口；登录租约受全局八个、每用户两个浏览器名额限制。identity 仅在浏览器核验后确认独占身份；小红书同时上报官方稳定用户标识，冲突返回 409。解绑或停用用户后拒绝执行器请求；重新绑定不会恢复旧令牌。
+
+实现与数据库约束见[账号归属与认证存储](account-ownership.md)。

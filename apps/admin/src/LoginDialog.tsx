@@ -2,10 +2,12 @@ import { useEffect, useRef, type ReactNode, type RefObject, type KeyboardEvent }
 import { X } from 'lucide-react';
 
 export default function LoginDialog({
+  title = '平台账号登录',
   children,
   onClose,
   trigger,
 }: {
+  title?: string;
   children: ReactNode;
   onClose: () => void;
   trigger: RefObject<HTMLButtonElement | null>;
@@ -50,7 +52,7 @@ export default function LoginDialog({
       }}
     >
       <div className="surface-header">
-        <h2 id="remote-login-title">CSDN 登录</h2>
+        <h2 id="remote-login-title">{title}</h2>
         <button type="button" aria-label="关闭登录弹窗" onClick={onClose}>
           <X size={18} aria-hidden="true" />
         </button>

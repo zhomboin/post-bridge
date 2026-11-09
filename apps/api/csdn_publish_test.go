@@ -294,7 +294,7 @@ func TestCSDNPublishRequiresBoundAccountAndTags(t *testing.T) {
 				guardMutateRecord(t, s, draft.ID, func(r *record) { r.AccountUsername = "" })
 			}
 			if tc.changeAccount {
-				if _, err := s.pool.Exec(ctx, "UPDATE account SET username='other'"); err != nil {
+				if _, err := s.pool.Exec(ctx, "UPDATE account SET connection_version=connection_version+1"); err != nil {
 					t.Fatal(err)
 				}
 			}
