@@ -266,6 +266,7 @@ it('应用授权只提交固定接入字段，无需反向服务配置', async (
   expect(screen.queryByText('反向来源')).toBeNull();
   expect(screen.queryByLabelText('来源地址')).toBeNull();
   expect(screen.queryByLabelText('来源密钥')).toBeNull();
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
   fireEvent.click(screen.getByRole('button', { name: '保存应用配置' }));
   await waitFor(() => expect(calls.some((call) => call.init?.method === 'PUT')).toBe(true));
   const body = JSON.parse(calls.find((call) => call.init?.method === 'PUT')!.init!.body as string);
@@ -342,6 +343,7 @@ it('审批只签发一次密钥并发送当前权限和账号', async () => {
         : base(url, init);
   render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: '审批' }));
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
   fireEvent.click(screen.getByRole('button', { name: '批准并签发密钥' }));
   await screen.findByText('approval-example-secret');
   const call = calls.find((item) => item.url.endsWith('/approve'))!;
@@ -566,4 +568,21 @@ it('分发子任务来源暂停显示来源待处理', async () => {
   await screen.findByRole('heading', { name: '分发 article-one' });
   expect(screen.getByText('来源待处理')).toBeTruthy();
   expect(screen.queryByRole('button', { name: '恢复原任务' })).toBeNull();
+});
+
+it('保存来源权限时移除已解绑账号，不影响仍有效的授权账号', async () => {
+  window.history.replaceState({}, '', '/integrations?tab=clients');
+  const base = handler;
+  handler = (url, init) =>
+    url === '/api/integration-clients/client-one' && init?.method !== 'PUT'
+      ? response({ ...client, accounts: ['csdn-main', 'unbound-account'] })
+      : base(url, init);
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: '内容中心' }));
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
+  fireEvent.click(screen.getByRole('button', { name: '保存应用配置' }));
+  await waitFor(() => expect(calls.some((call) => call.init?.method === 'PUT')).toBe(true));
+  const sent = calls.find((call) => call.init?.method === 'PUT')!;
+  expect(JSON.parse(String(sent.init?.body)).accounts).toEqual(['csdn-main']);
 });

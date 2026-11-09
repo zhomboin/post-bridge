@@ -64,6 +64,7 @@ export type LogEntry = {
 export type PageData<T> = { items: T[]; total: number; page: number; page_size: number };
 export type Account = {
   verified?: boolean;
+  enabled?: boolean;
   id: string;
   platform: string;
   username?: string;

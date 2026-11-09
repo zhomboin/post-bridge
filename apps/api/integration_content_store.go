@@ -745,7 +745,11 @@ func integrationClientAllowedTx(ctx context.Context, tx pgx.Tx, id, scope string
 	if !integrationHas(c.Scopes, scope) {
 		return c, ErrIntegrationPermission
 	}
-	if err = integrationOwnedAccounts(ctx, tx, c.OwnerUserID, c.Accounts); err != nil {
+	ids := make([]string, 0, len(targets))
+	for _, target := range targets {
+		ids = append(ids, target.AccountID)
+	}
+	if err = integrationOwnedAccounts(ctx, tx, c.OwnerUserID, ids); err != nil {
 		return c, err
 	}
 	for _, target := range targets {

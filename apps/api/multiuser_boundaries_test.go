@@ -89,6 +89,34 @@ func TestMultiuserSourceOwnershipAndConnectionReuse(t *testing.T) {
 		}(i)
 	}
 	group.Wait()
+	if _, err = store.pool.Exec(bCtx, "INSERT INTO account(id,platform,username,display_name,owner_user_id) VALUES('second-extra','csdn','second_extra','另一个账号',$1)", b); err != nil {
+		t.Fatal(err)
+	}
+	client.Accounts = append(client.Accounts, "second-extra")
+	client.Status = "active"
+	tx, err := store.pool.Begin(bCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(bCtx)
+	if err = integrationSaveClient(bCtx, tx, client); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(bCtx, "UPDATE integration_keys SET status='active' WHERE client_id=$1", client.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(bCtx, "UPDATE account SET enabled=false WHERE id='second-account'"); err != nil {
+		t.Fatal(err)
+	}
+	target := []IntegrationTarget{{Platform: "csdn", AccountID: "second-extra", Operation: "save_draft"}}
+	if _, err = integrationClientAllowedTx(bCtx, tx, client.ID, "targets:read", target, store.now()); err != nil {
+		t.Fatal("unbinding another target disabled remaining grant", err)
+	}
+	target[0].AccountID = "second-account"
+	if _, err = integrationClientAllowedTx(bCtx, tx, client.ID, "targets:read", target, store.now()); err != ErrIntegrationPermission {
+		t.Fatal("unbound target remained usable", err)
+	}
+
 }
 
 func TestMultiuserBrowserBudgetDoesNotBlockOtherUsers(t *testing.T) {

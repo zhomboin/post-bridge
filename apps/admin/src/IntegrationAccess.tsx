@@ -80,8 +80,17 @@ export function GrantForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError('');
-    if (!form.scopes.length || !list(form.accounts).length) {
-      setError('请选择权限并填写允许的账号。');
+    const selected = list(form.accounts).filter((id) =>
+      accounts.data?.items.some(
+        ({ account }) =>
+          account.id === id &&
+          account.platform === 'csdn' &&
+          account.verified !== false &&
+          account.enabled !== false,
+      ),
+    );
+    if (!form.scopes.length || !selected.length) {
+      setError('请选择权限和允许的账号。');
       return;
     }
     if (!Number.isFinite(Date.parse(form.expires_at))) {
@@ -91,7 +100,7 @@ export function GrantForm({
     const body = {
       ...form,
       scopes: form.scopes,
-      accounts: list(form.accounts),
+      accounts: selected,
       operations: ['save_draft'],
       expires_at: new Date(form.expires_at).toISOString(),
       rate_limit_per_minute: Number(form.rate_limit_per_minute),
@@ -189,7 +198,11 @@ export function GrantForm({
           {error}
         </div>
       )}
-      <button type="submit" className="primary" disabled={pending}>
+      <button
+        type="submit"
+        className="primary"
+        disabled={pending || accounts.loading || !!accounts.error}
+      >
         {pending
           ? '正在处理…'
           : invitation
