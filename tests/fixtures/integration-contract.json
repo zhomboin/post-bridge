@@ -21,10 +21,7 @@
       "summary": "<摘要>",
       "body": "# 正文\r\n\r\n内容",
       "body_format": "markdown",
-      "tags": [
-        "Go",
-        "接口"
-      ],
+      "tags": ["Go", "接口"],
       "cover_image_url": "",
       "assets": [],
       "original_url": "https://blog.example/blog/abcdef"

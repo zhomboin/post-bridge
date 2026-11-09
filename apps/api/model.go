@@ -187,7 +187,27 @@ func randomToken() string {
 	return hex.EncodeToString(b[:])
 }
 func newRecord(in CreateInput, now time.Time) *record {
-	return &record{Job: Job{ID: randomToken(), RequestID: in.RequestID, Platform: "csdn", AccountID: "csdn-main", Kind: in.Kind, ArticleID: in.ArticleID, Title: in.Title, Markdown: in.Markdown, Status: "queued", Outcome: "not_submitted", Stage: "queued", MaxRetries: 3, RunMode: "execute", CreatedAt: now, UpdatedAt: now, AvailableAt: now}, Ready: true}
+	return &record{
+		Job: Job{
+			ID:          randomToken(),
+			RequestID:   in.RequestID,
+			Platform:    "csdn",
+			AccountID:   "csdn-main",
+			Kind:        in.Kind,
+			ArticleID:   in.ArticleID,
+			Title:       in.Title,
+			Markdown:    in.Markdown,
+			Status:      "queued",
+			Outcome:     "not_submitted",
+			Stage:       "queued",
+			MaxRetries:  3,
+			RunMode:     "execute",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+			AvailableAt: now,
+		},
+		Ready: true,
+	}
 }
 func (r *record) bind(id string) error {
 	if id == "" {
@@ -210,7 +230,16 @@ func (r *record) bind(id string) error {
 	return nil
 }
 
-var stages = map[string]int{"queued": 0, "checking_login": 1, "opening_editor": 2, "draft_acquired": 3, "filling": 4, "saving": 5, "verifying": 6, "finished": 7}
+var stages = map[string]int{
+	"queued":         0,
+	"checking_login": 1,
+	"opening_editor": 2,
+	"draft_acquired": 3,
+	"filling":        4,
+	"saving":         5,
+	"verifying":      6,
+	"finished":       7,
+}
 
 func (r *record) progress(in ProgressInput, now time.Time) error {
 	rank, ok := stages[in.Stage]

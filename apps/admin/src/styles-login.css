@@ -1,0 +1,103 @@
+.remote-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.remote-toolbar label {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.remote-toolbar input {
+  width: 100%;
+}
+.remote-screen {
+  width: 100%;
+  max-width: 1280px;
+  aspect-ratio: 8/5;
+  background: #f6f8fa;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.remote-screen img {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
+  user-select: none;
+}
+.remote-screen img:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: -3px;
+}
+
+.remote-entry {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.remote-entry > p {
+  font-size: 13px;
+  color: var(--muted);
+}
+.login-dialog {
+  width: min(1320px, calc(100vw - 48px));
+  max-width: none;
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: #182230;
+  overflow: hidden;
+}
+.login-dialog::backdrop {
+  background: rgb(24 34 48 / 48%);
+}
+.login-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.login-dialog > .surface-header {
+  flex-shrink: 0;
+}
+.login-dialog > .surface-header button {
+  min-width: 36px;
+  padding: 7px;
+}
+.login-dialog-body {
+  padding: 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.login-dialog-body > .remote-toolbar:first-child {
+  justify-content: space-between;
+}
+@media (max-width: 720px) {
+  .login-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 8px;
+  }
+  .login-dialog-body {
+    padding: 12px;
+  }
+  .login-dialog .section-gap {
+    margin-top: 16px;
+  }
+  .login-dialog .remote-toolbar {
+    gap: 8px;
+  }
+  .login-dialog .remote-toolbar label {
+    flex-basis: 100%;
+  }
+  .login-dialog .remote-toolbar button {
+    flex-grow: 1;
+  }
+}

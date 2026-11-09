@@ -15,11 +15,13 @@ test('登录弹窗限制焦点，Escape 撤销验证并停止画面请求', asyn
     for (const width of [1440, 390, 320]) {
       await page.setViewportSize({ width, height: 700 });
       await expect(dialog).toBeVisible();
-      expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
       await dialog.getByRole('button', { name: '向下滚动', exact: true }).focus();
       await page.keyboard.press('Tab');
-      expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
+      expect(await dialog.evaluate((node) => node.contains(document.activeElement))).toBe(true);
     }
     await image.focus();
     await page.keyboard.press('Escape');
@@ -27,8 +29,12 @@ test('登录弹窗限制焦点，Escape 撤销验证并停止画面请求', asyn
     await expect(page.getByText('远程登录已结束', { exact: true })).toBeVisible();
     await expect(start).toBeFocused();
     let frames = 0;
-    page.on('request', request => { if (new URL(request.url()).pathname.endsWith('/frame')) frames++; });
-    await expect.poll(async () => (await (await page.request.get('/api/account/login')).json()).status).toBe('idle');
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.endsWith('/frame')) frames++;
+    });
+    await expect
+      .poll(async () => (await (await page.request.get('/api/account/login')).json()).status)
+      .toBe('idle');
     await page.waitForTimeout(1300);
     expect(frames).toBe(0);
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
@@ -36,10 +42,24 @@ test('登录弹窗限制焦点，Escape 撤销验证并停止画面请求', asyn
     await page.getByRole('tab', { name: '数据统计', exact: true }).click();
     await page.getByRole('tab', { name: '账号设置', exact: true }).click();
     const restart = page.getByRole('button', { name: '开始远程登录', exact: true });
-    await expect(restart).toBeEnabled(); await restart.click();
-    await expect(page.getByRole('dialog', { name: 'CSDN 登录' })).toBeVisible(); await expect(page.getByRole('img', { name: 'CSDN 远程登录画面' })).toBeVisible();
-    await page.goBack(); await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toHaveAttribute('aria-selected', 'true'); await expect(page.getByRole('dialog', { name: 'CSDN 登录' })).toHaveCount(0);
-    await expect.poll(async () => (await (await page.request.get('/api/account/login')).json()).status).toBe('idle');
-    frames = 0; await page.waitForTimeout(1300); expect(frames).toBe(0); expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
-  } finally { await stopWorker(); }
+    await expect(restart).toBeEnabled();
+    await restart.click();
+    await expect(page.getByRole('dialog', { name: 'CSDN 登录' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'CSDN 远程登录画面' })).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole('tab', { name: '数据统计', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('dialog', { name: 'CSDN 登录' })).toHaveCount(0);
+    await expect
+      .poll(async () => (await (await page.request.get('/api/account/login')).json()).status)
+      .toBe('idle');
+    frames = 0;
+    await page.waitForTimeout(1300);
+    expect(frames).toBe(0);
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
+  } finally {
+    await stopWorker();
+  }
 });

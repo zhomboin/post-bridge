@@ -7,6 +7,7 @@
 - [总体进度](progress.md)：代码、本地、真实平台与生产状态。
 - [验收记录](acceptance.md)：实际运行证据及未验边界。
 - [版本记录](version.md)：简要变更。
+- [代码质量与安全](code-quality.md)：全仓审阅范围、已修复问题、格式规范及验证边界。
 - [完整实施计划](implementation-plan.md)：阶段依赖与剩余工作。
 - [小红书接入方案](xiaohongshu-integration.md)：图文笔记路线、开源参考、系统改动与提交核对边界。
 - [小红书实施计划](plans/xiaohongshu-integration.md)：匿名验证、账号能力、图文准备与正式发布的分层关口。

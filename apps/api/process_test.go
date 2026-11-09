@@ -12,7 +12,13 @@ import (
 
 func processTestHandler(t *testing.T, s *Store) (http.Handler, *http.Cookie) {
 	t.Helper()
-	h, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "http://localhost"})
+	h, err := NewHandler(context.Background(), Config{
+		Store:         s,
+		AdminUsername: "admin",
+		AdminPassword: "private-test-password",
+		WorkerToken:   "private-test-worker-token-32-characters",
+		Origin:        "http://localhost",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +110,13 @@ func TestProcessObservationIsActualAndLeaseFenced(t *testing.T) {
 		t.Fatal(err)
 	}
 	progress := func(token, stage, phase, title, body string) error {
-		raw, _ := json.Marshal(map[string]any{"lease_token": token, "stage": stage, "external_started": true, "remote_id": "123", "observation": map[string]string{"phase": phase, "title": title, "markdown": body, "status": "draft", "remote_id": "123"}})
+		raw, _ := json.Marshal(map[string]any{
+			"lease_token":      token,
+			"stage":            stage,
+			"external_started": true,
+			"remote_id":        "123",
+			"observation":      map[string]string{"phase": phase, "title": title, "markdown": body, "status": "draft", "remote_id": "123"},
+		})
 		var in ProgressInput
 		if err := json.Unmarshal(raw, &in); err != nil {
 			t.Fatal(err)
@@ -252,12 +264,21 @@ func TestProcessObservationBoundariesAndRollback(t *testing.T) {
 	if err = s.pool.QueryRow(ctx, "SELECT count(*) FROM process_snapshots WHERE job_id=$1", j.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("snapshot persisted after rejection", count, err)
 	}
-	max := Observation{Phase: "before", Title: strings.Repeat("中", 100), Markdown: strings.Repeat("中", 200000), Status: "editor"}
+	max := Observation{
+		Phase:    "before",
+		Title:    strings.Repeat("中", 100),
+		Markdown: strings.Repeat("中", 200000),
+		Status:   "editor",
+	}
 	if err = s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "filling", ExternalStarted: true, Observation: &max}); err != nil {
 		t.Fatal("max observation rejected", err)
 	}
 	s.now = func() time.Time { return time.Now().Add(2 * time.Minute) }
-	if err = s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "verifying", Observation: &Observation{Phase: "after", Status: "draft"}}); err != ErrConflict {
+	if err = s.Progress(ctx, j.ID, ProgressInput{
+		LeaseToken:  c.LeaseToken,
+		Stage:       "verifying",
+		Observation: &Observation{Phase: "after", Status: "draft"},
+	}); err != ErrConflict {
 		t.Fatal("expired snapshot accepted", err)
 	}
 }
@@ -281,7 +302,18 @@ func TestProcessFiltersTransitionsAndMissingSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, total, err := s.Processes(ctx, ProcessFilter{Q: "唯一检索词", Status: "failed", Platform: "csdn", Kind: "save_draft", JobID: j.ID, Level: "error", From: s.now().Add(-time.Hour), To: s.now().Add(time.Hour), Page: 1, Size: 1})
+	items, total, err := s.Processes(ctx, ProcessFilter{
+		Q:        "唯一检索词",
+		Status:   "failed",
+		Platform: "csdn",
+		Kind:     "save_draft",
+		JobID:    j.ID,
+		Level:    "error",
+		From:     s.now().Add(-time.Hour),
+		To:       s.now().Add(time.Hour),
+		Page:     1,
+		Size:     1,
+	})
 	if err != nil || total != 1 || len(items) != 1 || items[0].EventCount != 7 || items[0].ErrorCount != 1 || items[0].WarningCount != 1 {
 		t.Fatalf("wrong filters %+v %d %v", items, total, err)
 	}
@@ -309,7 +341,12 @@ func TestProcessEmptyObservedContentAndCandidateFencing(t *testing.T) {
 	if err != nil || c == nil {
 		t.Fatal(err)
 	}
-	in := ProgressInput{LeaseToken: c.LeaseToken, Stage: "filling", ExternalStarted: true, Observation: &Observation{Phase: "before", Status: "editor"}}
+	in := ProgressInput{
+		LeaseToken:      c.LeaseToken,
+		Stage:           "filling",
+		ExternalStarted: true,
+		Observation:     &Observation{Phase: "before", Status: "editor"},
+	}
 	if err = s.Progress(ctx, j.ID, in); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +369,11 @@ func TestProcessEmptyObservedContentAndCandidateFencing(t *testing.T) {
 	if err != nil || c == nil {
 		t.Fatal(err)
 	}
-	in = ProgressInput{LeaseToken: c.LeaseToken, Stage: "verifying", Observation: &Observation{Phase: "after", Title: "实际标题", Markdown: "实际正文", Status: "draft", RemoteID: "999"}}
+	in = ProgressInput{
+		LeaseToken:  c.LeaseToken,
+		Stage:       "verifying",
+		Observation: &Observation{Phase: "after", Title: "实际标题", Markdown: "实际正文", Status: "draft", RemoteID: "999"},
+	}
 	if err = s.Progress(ctx, j.ID, in); err != ErrConflict {
 		t.Fatal("candidate mismatch accepted", err)
 	}
@@ -340,7 +381,11 @@ func TestProcessEmptyObservedContentAndCandidateFencing(t *testing.T) {
 	if err = s.Progress(ctx, j.ID, in); err != nil {
 		t.Fatal("matching candidate rejected", err)
 	}
-	if err = s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "filling", Observation: &Observation{Phase: "before", Status: "editor"}}); err != ErrConflict {
+	if err = s.Progress(ctx, j.ID, ProgressInput{
+		LeaseToken:  c.LeaseToken,
+		Stage:       "filling",
+		Observation: &Observation{Phase: "before", Status: "editor"},
+	}); err != ErrConflict {
 		t.Fatal("reconcile before accepted", err)
 	}
 	changes, err := s.Changes(ctx, j.ID, 2)
@@ -359,7 +404,11 @@ func TestProcessAccountCannotSubmitArticleObservation(t *testing.T) {
 	if err != nil || c == nil {
 		t.Fatal(err)
 	}
-	if err = s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "checking_login", Observation: &Observation{Phase: "before", Status: "editor"}}); err != ErrInvalid {
+	if err = s.Progress(ctx, j.ID, ProgressInput{
+		LeaseToken:  c.LeaseToken,
+		Stage:       "checking_login",
+		Observation: &Observation{Phase: "before", Status: "editor"},
+	}); err != ErrInvalid {
 		t.Fatal("account accepted article observation", err)
 	}
 	changes, err := s.Changes(ctx, j.ID, 0)
@@ -379,8 +428,20 @@ func TestProcessArticleRetentionPreservesUnknownAndExpiresTerminal(t *testing.T)
 		t.Fatal(err)
 	}
 	before := &Observation{Phase: "before", Status: "editor"}
-	after := &Observation{Phase: "after", Title: "实际草稿标题", Markdown: "真实正文", Status: "draft", RemoteID: "456"}
-	if err = s.Progress(ctx, terminal.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "filling", ExternalStarted: true, RemoteID: "456", Observation: before}); err != nil {
+	after := &Observation{
+		Phase:    "after",
+		Title:    "实际草稿标题",
+		Markdown: "真实正文",
+		Status:   "draft",
+		RemoteID: "456",
+	}
+	if err = s.Progress(ctx, terminal.ID, ProgressInput{
+		LeaseToken:      c.LeaseToken,
+		Stage:           "filling",
+		ExternalStarted: true,
+		RemoteID:        "456",
+		Observation:     before,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Progress(ctx, terminal.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "verifying", Observation: after}); err != nil {

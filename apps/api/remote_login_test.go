@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/jackc/pgx/v5"
 	"image"
 	"image/jpeg"
 	"io"
@@ -17,11 +16,19 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestRemoteLoginDisabledRequiresAdministrator(t *testing.T) {
 	s := testStore(t)
-	h, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "http://localhost"})
+	h, err := NewHandler(context.Background(), Config{
+		Store:         s,
+		AdminUsername: "admin",
+		AdminPassword: "private-test-password",
+		WorkerToken:   "private-test-worker-token-32-characters",
+		Origin:        "http://localhost",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +50,18 @@ func TestRuntimePublicOriginOverridesInternalAPI(t *testing.T) {
 	if err := os.WriteFile(token, []byte("worker-secret-at-least-thirty-two-chars"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for key, value := range map[string]string{"DATABASE_URL": "postgres://project/db", "ADMIN_USERNAME": "admin", "ADMIN_PASSWORD_FILE": password, "WORKER_TOKEN_FILE": token, "CSDN_USERNAME": "tester", "CSDN_DISPLAY_NAME": "tester", "API_ADDR": "127.0.0.1:18080", "API_BASE_URL": "http://127.0.0.1:18080", "PUBLIC_ORIGIN": "https://post.example.com", "REMOTE_LOGIN_URL": ""} {
+	for key, value := range map[string]string{
+		"DATABASE_URL":        "postgres://project/db",
+		"ADMIN_USERNAME":      "admin",
+		"ADMIN_PASSWORD_FILE": password,
+		"WORKER_TOKEN_FILE":   token,
+		"CSDN_USERNAME":       "tester",
+		"CSDN_DISPLAY_NAME":   "tester",
+		"API_ADDR":            "127.0.0.1:18080",
+		"API_BASE_URL":        "http://127.0.0.1:18080",
+		"PUBLIC_ORIGIN":       "https://post.example.com",
+		"REMOTE_LOGIN_URL":    "",
+	} {
 		t.Setenv(key, value)
 	}
 	cfg, err := LoadRuntimeConfig()
@@ -110,7 +128,14 @@ func newRemoteFixture(t *testing.T) (*remoteFixture, *httptest.Server) {
 func remoteHandler(t *testing.T, url string) (http.Handler, *Store) {
 	t.Helper()
 	s := testStore(t)
-	h, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "http://localhost", RemoteLoginURL: url})
+	h, err := NewHandler(context.Background(), Config{
+		Store:          s,
+		AdminUsername:  "admin",
+		AdminPassword:  "private-test-password",
+		WorkerToken:    "private-test-worker-token-32-characters",
+		Origin:         "http://localhost",
+		RemoteLoginURL: url,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +304,14 @@ func TestRemoteLoginRefusesOrphanAndExpiredAdministrator(t *testing.T) {
 func TestRemoteLoginConfigurationRejectsNonLoopback(t *testing.T) {
 	s := testStore(t)
 	for _, endpoint := range []string{"https://127.0.0.1:8081", "http://localhost:8081", "http://127.1:8081", "http://[::1]:8081", "http://127.0.0.1", "http://127.0.0.1:0", "http://127.0.0.1:65536", "http://name:password@127.0.0.1:8081", "http://127.0.0.1:8081/", "http://127.0.0.1:8081/login", "http://127.0.0.1:8081?x=1", "http://127.0.0.1:8081#x"} {
-		if _, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "http://localhost", RemoteLoginURL: endpoint}); err == nil {
+		if _, err := NewHandler(context.Background(), Config{
+			Store:          s,
+			AdminUsername:  "admin",
+			AdminPassword:  "private-test-password",
+			WorkerToken:    "private-test-worker-token-32-characters",
+			Origin:         "http://localhost",
+			RemoteLoginURL: endpoint,
+		}); err == nil {
 			t.Fatalf("unsafe remote URL accepted: %s", endpoint)
 		}
 	}
@@ -728,7 +760,14 @@ func TestRemoteLoginPageLoadErrorSanitization(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				json.NewEncoder(w).Encode(remoteLoginState{ID: "synthetic-login", Status: tc.status, ExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339), Width: 1280, Height: 800, Error: tc.upstream})
+				json.NewEncoder(w).Encode(remoteLoginState{
+					ID:        "synthetic-login",
+					Status:    tc.status,
+					ExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339),
+					Width:     1280,
+					Height:    800,
+					Error:     tc.upstream,
+				})
 			}))
 			defer upstream.Close()
 			proxy, err := newRemoteLoginProxy(upstream.URL)

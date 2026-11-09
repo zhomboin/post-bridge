@@ -31,7 +31,13 @@ func TestFenceRecognitionCannotHideUnsupportedContent(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateCreate(CreateInput{RequestID: "fence", Kind: "save_draft", Platform: "csdn", Title: "valid title", Markdown: tc.markdown})
+			err := ValidateCreate(CreateInput{
+				RequestID: "fence",
+				Kind:      "save_draft",
+				Platform:  "csdn",
+				Title:     "valid title",
+				Markdown:  tc.markdown,
+			})
 			if (err == nil) != tc.allowed {
 				t.Fatalf("allowed=%v, want %v", (err == nil), tc.allowed)
 			}

@@ -24,7 +24,18 @@ func TestStandaloneDistributionExecutesConfirmedSnapshotWithoutSourceService(t *
 	s := h.store
 	snapshot := IntegrationSnapshot{Title: "独立服务完整流程", Body: "# 原始正文", BodyFormat: "markdown"}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	input := IntegrationPrepareInput{RequestID: "standalone-prepare", SourceID: client.SourceID, ArticleID: "standalone-article", SourceVersion: 1, StateSeq: 1, AuthorizationID: "standalone-grant", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	input := IntegrationPrepareInput{
+		RequestID:              "standalone-prepare",
+		SourceID:               client.SourceID,
+		ArticleID:              "standalone-article",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "standalone-grant",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	rr := call("POST", "/api/integrations/v1/preparations", input, false)
 	if rr.Code != 201 {
 		t.Fatalf("prepare %d %s", rr.Code, rr.Body.String())
@@ -44,7 +55,18 @@ func TestStandaloneDistributionExecutesConfirmedSnapshotWithoutSourceService(t *
 	if err := json.Unmarshal(rr.Body.Bytes(), &prep); err != nil {
 		t.Fatal(err)
 	}
-	submit := IntegrationSubmitInput{RequestID: "standalone-submit", SourceID: client.SourceID, ArticleID: prep.ArticleID, SourceVersion: prep.SourceVersion, StateSeq: prep.StateSeq, ContentFingerprint: fp, PreparationID: prep.ID, DraftRevisionIDs: prep.DraftRevisionIDs, ConfirmationFingerprint: prep.ConfirmationFingerprint, Targets: prep.Targets}
+	submit := IntegrationSubmitInput{
+		RequestID:               "standalone-submit",
+		SourceID:                client.SourceID,
+		ArticleID:               prep.ArticleID,
+		SourceVersion:           prep.SourceVersion,
+		StateSeq:                prep.StateSeq,
+		ContentFingerprint:      fp,
+		PreparationID:           prep.ID,
+		DraftRevisionIDs:        prep.DraftRevisionIDs,
+		ConfirmationFingerprint: prep.ConfirmationFingerprint,
+		Targets:                 prep.Targets,
+	}
 	rr = call("POST", "/api/integrations/v1/distributions", submit, false)
 	if rr.Code != 202 {
 		t.Fatalf("submit %d %s", rr.Code, rr.Body.String())
@@ -202,7 +224,18 @@ func TestStandaloneSignedCancellationEndpoint(t *testing.T) {
 	h, c, call := integrationHTTPFixture(t)
 	snap := IntegrationSnapshot{Title: "标准接口取消测试", Body: "正文", BodyFormat: "markdown"}
 	fp, _ := IntegrationContentFingerprint(snap)
-	prep, _, err := h.prepareIntegration(context.Background(), c, IntegrationPrepareInput{RequestID: "cancel-prepare", SourceID: c.SourceID, ArticleID: "cancel-article", SourceVersion: 1, StateSeq: 1, AuthorizationID: "cancel-grant", AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snap, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}})
+	prep, _, err := h.prepareIntegration(context.Background(), c, IntegrationPrepareInput{
+		RequestID:              "cancel-prepare",
+		SourceID:               c.SourceID,
+		ArticleID:              "cancel-article",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "cancel-grant",
+		AuthorizationExpiresAt: h.store.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snap,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +243,18 @@ func TestStandaloneSignedCancellationEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := IntegrationSubmitInput{RequestID: "cancel-submit", SourceID: c.SourceID, ArticleID: prep.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: prep.ID, DraftRevisionIDs: prep.DraftRevisionIDs, ConfirmationFingerprint: prep.ConfirmationFingerprint, Targets: prep.Targets}
+	in := IntegrationSubmitInput{
+		RequestID:               "cancel-submit",
+		SourceID:                c.SourceID,
+		ArticleID:               prep.ArticleID,
+		SourceVersion:           1,
+		StateSeq:                1,
+		ContentFingerprint:      fp,
+		PreparationID:           prep.ID,
+		DraftRevisionIDs:        prep.DraftRevisionIDs,
+		ConfirmationFingerprint: prep.ConfirmationFingerprint,
+		Targets:                 prep.Targets,
+	}
 	rr := call("POST", "/api/integrations/v1/distributions", in, false)
 	if rr.Code != 202 {
 		t.Fatalf("submit %d %s", rr.Code, rr.Body.String())
@@ -317,7 +361,18 @@ func TestStandaloneKnownVersionMustMatchAtSameSequence(t *testing.T) {
 			ctx := context.Background()
 			snap := IntegrationSnapshot{Title: "来源版本一致性测试", Body: "正文", BodyFormat: "markdown"}
 			fp, _ := IntegrationContentFingerprint(snap)
-			input := IntegrationPrepareInput{RequestID: "version-prepare", SourceID: c.SourceID, ArticleID: "version-article", SourceVersion: 1, StateSeq: 1, AuthorizationID: "version-grant", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snap, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+			input := IntegrationPrepareInput{
+				RequestID:              "version-prepare",
+				SourceID:               c.SourceID,
+				ArticleID:              "version-article",
+				SourceVersion:          1,
+				StateSeq:               1,
+				AuthorizationID:        "version-grant",
+				AuthorizationExpiresAt: s.now().Add(time.Hour),
+				ContentFingerprint:     fp,
+				Snapshot:               snap,
+				Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+			}
 			var prep IntegrationPreparation
 			var err error
 			if phase != "prepare" {
@@ -332,7 +387,17 @@ func TestStandaloneKnownVersionMustMatchAtSameSequence(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err = h.applyIntegrationEvent(ctx, c, IntegrationSourceEvent{EventID: "known-version", SourceID: c.SourceID, ArticleID: input.ArticleID, StateSeq: 1, SourceVersion: 2, Type: "published", Status: "published", AuthorizationValid: true, ContentFingerprint: fp}); err != nil {
+			if _, err = h.applyIntegrationEvent(ctx, c, IntegrationSourceEvent{
+				EventID:            "known-version",
+				SourceID:           c.SourceID,
+				ArticleID:          input.ArticleID,
+				StateSeq:           1,
+				SourceVersion:      2,
+				Type:               "published",
+				Status:             "published",
+				AuthorizationValid: true,
+				ContentFingerprint: fp,
+			}); err != nil {
 				t.Fatal(err)
 			}
 			switch phase {
@@ -341,7 +406,18 @@ func TestStandaloneKnownVersionMustMatchAtSameSequence(t *testing.T) {
 			case "confirm":
 				_, err = h.confirmIntegrationPreparation(ctx, prep.ID, prep.Revision)
 			case "submit":
-				_, _, err = h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{RequestID: "version-submit", SourceID: c.SourceID, ArticleID: input.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: prep.ID, DraftRevisionIDs: prep.DraftRevisionIDs, ConfirmationFingerprint: prep.ConfirmationFingerprint, Targets: prep.Targets})
+				_, _, err = h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{
+					RequestID:               "version-submit",
+					SourceID:                c.SourceID,
+					ArticleID:               input.ArticleID,
+					SourceVersion:           1,
+					StateSeq:                1,
+					ContentFingerprint:      fp,
+					PreparationID:           prep.ID,
+					DraftRevisionIDs:        prep.DraftRevisionIDs,
+					ConfirmationFingerprint: prep.ConfirmationFingerprint,
+					Targets:                 prep.Targets,
+				})
 			}
 			if !errors.Is(err, ErrIntegrationSourceChanged) {
 				t.Fatalf("%s accepted contradictory known version: %v", phase, err)

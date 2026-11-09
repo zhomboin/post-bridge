@@ -12,8 +12,28 @@ import (
 
 func sampleArticles() *ArticleSnapshot {
 	return &ArticleSnapshot{Username: "tester", Profile: ArticleProfile{Nickname: "测试作者"}, Counts: ArticleCounts{Total: 2, Published: 1, Draft: 1}, Items: []Article{
-		{ID: "101", Title: "已发布测试文章", Status: "published", PlatformStatus: "1", PostedAt: "2026-11-04T10:00:00+08:00", Type: "original", Views: 12, Likes: 2, Comments: 1, Favorites: 3, Exposures: 20, CoverURLs: []string{}},
-		{ID: "102", Title: "草稿测试文章", Status: "draft", PlatformStatus: "2", Type: "unknown", CoverURLs: []string{}},
+		{
+			ID:             "101",
+			Title:          "已发布测试文章",
+			Status:         "published",
+			PlatformStatus: "1",
+			PostedAt:       "2026-11-04T10:00:00+08:00",
+			Type:           "original",
+			Views:          12,
+			Likes:          2,
+			Comments:       1,
+			Favorites:      3,
+			Exposures:      20,
+			CoverURLs:      []string{},
+		},
+		{
+			ID:             "102",
+			Title:          "草稿测试文章",
+			Status:         "draft",
+			PlatformStatus: "2",
+			Type:           "unknown",
+			CoverURLs:      []string{},
+		},
 	}, Trend: []ArticleTrend{}}
 }
 func completeArticles(t *testing.T, s *Store, key string, payload *ArticleSnapshot) Job {
@@ -96,7 +116,15 @@ func TestArticleReadOnlyLifecycleAndCache(t *testing.T) {
 	if err = s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "verifying"}); err != nil {
 		t.Fatal(err)
 	}
-	body := &ArticleBody{ID: "102", Title: "正文", Markdown: "# 只读正文", HTML: "<script>unsafe</script>", Tags: []string{}, Categories: []string{}, PlatformStatus: "1"}
+	body := &ArticleBody{
+		ID:             "102",
+		Title:          "正文",
+		Markdown:       "# 只读正文",
+		HTML:           "<script>unsafe</script>",
+		Tags:           []string{},
+		Categories:     []string{},
+		PlatformStatus: "1",
+	}
 	if err = s.Complete(ctx, j.ID, CompleteInput{LeaseToken: c.LeaseToken, Status: "succeeded", Article: body}); err != ErrInvalid {
 		t.Fatal("mismatched body id accepted", err)
 	}
@@ -160,7 +188,13 @@ func TestArticleFailedSyncRetainsSnapshotAndRejectsWrongAccount(t *testing.T) {
 func TestArticleHTTPPermissionsAndReadContracts(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
-	h, err := NewHandler(ctx, Config{Store: s, AdminUsername: "admin", AdminPassword: "test-password-long", WorkerToken: strings.Repeat("w", 32), Origin: "http://localhost"})
+	h, err := NewHandler(ctx, Config{
+		Store:         s,
+		AdminUsername: "admin",
+		AdminPassword: "test-password-long",
+		WorkerToken:   strings.Repeat("w", 32),
+		Origin:        "http://localhost",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +252,14 @@ func TestArticleReadPayloadFencingAndRequestReuse(t *testing.T) {
 	}
 	c, _ := s.Claim(ctx, "reader")
 	s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "verifying"})
-	body := &ArticleBody{ID: "101", Title: "正文", PlatformStatus: "1", Markdown: "正文", Tags: []string{}, Categories: []string{}}
+	body := &ArticleBody{
+		ID:             "101",
+		Title:          "正文",
+		PlatformStatus: "1",
+		Markdown:       "正文",
+		Tags:           []string{},
+		Categories:     []string{},
+	}
 	if err = s.Complete(ctx, j.ID, CompleteInput{LeaseToken: c.LeaseToken, Status: "succeeded", Article: body}); err != nil {
 		t.Fatal(err)
 	}

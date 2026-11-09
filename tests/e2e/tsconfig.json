@@ -6,15 +6,8 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ],
-    "lib": [
-      "ES2023",
-      "DOM"
-    ]
+    "types": ["node"],
+    "lib": ["ES2023", "DOM"]
   },
-  "include": [
-    "*.ts"
-  ]
+  "include": ["*.ts"]
 }

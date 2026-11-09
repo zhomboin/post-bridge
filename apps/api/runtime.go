@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
 	"net"
 	"net/http"
@@ -13,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type RuntimeConfig struct {
@@ -41,7 +42,15 @@ func privateSecret(path string) (string, error) {
 	return strings.TrimRight(string(data), "\r\n"), nil
 }
 func LoadRuntimeConfig() (RuntimeConfig, error) {
-	c := RuntimeConfig{DatabaseURL: os.Getenv("DATABASE_URL"), Address: os.Getenv("API_ADDR"), Origin: os.Getenv("API_BASE_URL"), Username: os.Getenv("ADMIN_USERNAME"), CSDNUsername: os.Getenv("CSDN_USERNAME"), CSDNDisplayName: os.Getenv("CSDN_DISPLAY_NAME"), AdminDistDir: os.Getenv("ADMIN_DIST_DIR")}
+	c := RuntimeConfig{
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		Address:         os.Getenv("API_ADDR"),
+		Origin:          os.Getenv("API_BASE_URL"),
+		Username:        os.Getenv("ADMIN_USERNAME"),
+		CSDNUsername:    os.Getenv("CSDN_USERNAME"),
+		CSDNDisplayName: os.Getenv("CSDN_DISPLAY_NAME"),
+		AdminDistDir:    os.Getenv("ADMIN_DIST_DIR"),
+	}
 	c.RemoteLoginURL = os.Getenv("REMOTE_LOGIN_URL")
 	if public := os.Getenv("PUBLIC_ORIGIN"); public != "" {
 		c.Origin = public
@@ -108,7 +117,19 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 		cancel()
 		return fmt.Errorf("数据库初始化失败")
 	}
-	h, err := NewHandler(startup, Config{PlatformAccounts: c.PlatformAccounts, Store: store, AdminUsername: c.Username, AdminPassword: c.Password, WorkerToken: c.WorkerToken, Origin: c.Origin, AdminDistDir: c.AdminDistDir, RemoteLoginURL: c.RemoteLoginURL, IntegrationMasterKey: c.IntegrationMasterKey, IntegrationEnvironment: c.IntegrationEnvironment, IntegrationServiceID: c.IntegrationServiceID})
+	h, err := NewHandler(startup, Config{
+		PlatformAccounts:       c.PlatformAccounts,
+		Store:                  store,
+		AdminUsername:          c.Username,
+		AdminPassword:          c.Password,
+		WorkerToken:            c.WorkerToken,
+		Origin:                 c.Origin,
+		AdminDistDir:           c.AdminDistDir,
+		RemoteLoginURL:         c.RemoteLoginURL,
+		IntegrationMasterKey:   c.IntegrationMasterKey,
+		IntegrationEnvironment: c.IntegrationEnvironment,
+		IntegrationServiceID:   c.IntegrationServiceID,
+	})
 	cancel()
 	if err != nil {
 		return fmt.Errorf("管理接口初始化失败")
@@ -124,7 +145,15 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 	if err != nil {
 		return fmt.Errorf("无法监听 API 地址")
 	}
-	server := &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
+	server := &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(listener) }()
 	ticker := time.NewTicker(5 * time.Second)

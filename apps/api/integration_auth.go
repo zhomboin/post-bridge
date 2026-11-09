@@ -9,12 +9,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 //go:embed integration_schema.sql
@@ -57,7 +58,13 @@ func NewIntegrationService(store *Store, masterKeyHex, environment, serviceID, p
 	if e != nil {
 		return nil, e
 	}
-	return &IntegrationService{store: store, aead: aead, environment: environment, serviceID: serviceID, origin: strings.TrimSuffix(publicOrigin, "/")}, nil
+	return &IntegrationService{
+		store:       store,
+		aead:        aead,
+		environment: environment,
+		serviceID:   serviceID,
+		origin:      strings.TrimSuffix(publicOrigin, "/"),
+	}, nil
 }
 func (s *IntegrationService) seal(raw []byte, identity string) ([]byte, error) {
 	nonce := make([]byte, s.aead.NonceSize())

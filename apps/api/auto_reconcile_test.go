@@ -8,7 +8,13 @@ import (
 )
 
 func uncertainRecord(now time.Time) *record {
-	r := newRecord(CreateInput{RequestID: "auto", Kind: "save_draft", Platform: "csdn", Title: "测试自动核对", Markdown: "正文"}, now)
+	r := newRecord(CreateInput{
+		RequestID: "auto",
+		Kind:      "save_draft",
+		Platform:  "csdn",
+		Title:     "测试自动核对",
+		Markdown:  "正文",
+	}, now)
 	r.Status = "running"
 	r.ExternalStarted = true
 	r.Outcome = "unknown"

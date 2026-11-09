@@ -3,9 +3,10 @@ package bridge
 import (
 	"context"
 	"encoding/json"
-	"github.com/jackc/pgx/v5"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (h *handler) revokeIntegrationPreparation(ctx context.Context, id string) (IntegrationPreparation, error) {
@@ -63,7 +64,21 @@ func (h *handler) integrationDistributionSummary(ctx context.Context, d Integrat
 		if external == "draft_saved" && job.Status == "succeeded" {
 			checked = job.FinishedAt
 		}
-		child := map[string]any{"id": job.ID, "platform": job.Platform, "account_id": job.AccountID, "operation": job.Kind, "status": job.Status, "external_status": external, "outcome": job.Outcome, "last_confirmed_at": checked, "remote_id": job.RemoteID, "remote_url": job.RemoteURL, "error_code": job.ErrorCode, "error_message": job.ErrorMessage, "detail_url": h.origin + "/jobs/" + id}
+		child := map[string]any{
+			"id":                job.ID,
+			"platform":          job.Platform,
+			"account_id":        job.AccountID,
+			"operation":         job.Kind,
+			"status":            job.Status,
+			"external_status":   external,
+			"outcome":           job.Outcome,
+			"last_confirmed_at": checked,
+			"remote_id":         job.RemoteID,
+			"remote_url":        job.RemoteURL,
+			"error_code":        job.ErrorCode,
+			"error_message":     job.ErrorMessage,
+			"detail_url":        h.origin + "/jobs/" + id,
+		}
 		children = append(children, child)
 		switch job.Status {
 		case "succeeded", "cancelled":

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testStore(t *testing.T) *Store {
@@ -48,7 +49,13 @@ func testStore(t *testing.T) *Store {
 }
 func createTest(t *testing.T, s *Store, key string) Job {
 	t.Helper()
-	j, _, err := s.Create(context.Background(), CreateInput{RequestID: key, Platform: "csdn", Kind: "save_draft", Title: "测试文章标题", Markdown: "# body\n\n内容"})
+	j, _, err := s.Create(context.Background(), CreateInput{
+		RequestID: key,
+		Platform:  "csdn",
+		Kind:      "save_draft",
+		Title:     "测试文章标题",
+		Markdown:  "# body\n\n内容",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,11 +65,23 @@ func TestPostgresIdempotencyAndConcurrentClaimFencing(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 	j := createTest(t, s, "same")
-	got, created, err := s.Create(ctx, CreateInput{RequestID: "same", Platform: "csdn", Kind: "save_draft", Title: "测试文章标题", Markdown: "# body\n\n内容"})
+	got, created, err := s.Create(ctx, CreateInput{
+		RequestID: "same",
+		Platform:  "csdn",
+		Kind:      "save_draft",
+		Title:     "测试文章标题",
+		Markdown:  "# body\n\n内容",
+	})
 	if err != nil || created || got.ID != j.ID {
 		t.Fatalf("idempotency failed: %v", err)
 	}
-	if _, _, err = s.Create(ctx, CreateInput{RequestID: "same", Platform: "csdn", Kind: "save_draft", Title: "不同文章标题", Markdown: "changed"}); err != ErrConflict {
+	if _, _, err = s.Create(ctx, CreateInput{
+		RequestID: "same",
+		Platform:  "csdn",
+		Kind:      "save_draft",
+		Title:     "不同文章标题",
+		Markdown:  "changed",
+	}); err != ErrConflict {
 		t.Fatalf("wanted conflict got %v", err)
 	}
 	var wg sync.WaitGroup
@@ -143,7 +162,13 @@ func TestPostgresResolveRequiresOwningWorkersFreshProof(t *testing.T) {
 }
 func TestHTTPAuthCSRFAndInputBoundaries(t *testing.T) {
 	s := testStore(t)
-	h, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "http://localhost"})
+	h, err := NewHandler(context.Background(), Config{
+		Store:         s,
+		AdminUsername: "admin",
+		AdminPassword: "private-test-password",
+		WorkerToken:   "private-test-worker-token-32-characters",
+		Origin:        "http://localhost",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

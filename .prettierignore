@@ -1,0 +1,12 @@
+.agents/
+.worktrees/
+.local-tmp/
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+output/
+package-lock.json
+docs/
+AGENTS.md

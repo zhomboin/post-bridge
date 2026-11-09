@@ -6,61 +6,176 @@ import { WorkerAPI } from '../src/api.js';
 import { executeClaim, runWorker } from '../src/worker.js';
 import type { Claim, JobResult } from '../src/types.js';
 
-const claim: Claim = { job: { id: 'job', kind: 'save_draft', title: '一篇验证草稿文章', markdown: '正文', run_mode: 'execute', external_started: false, remote_id: null, reconcile_candidate_id: null }, lease_token: 'lease', lease_seconds: 60, lease_expires_at: new Date(Date.now()+60000).toISOString() };
-function api(heartbeat: () => Promise<{cancel_requested:boolean}>) {
+const claim: Claim = {
+  job: {
+    id: 'job',
+    kind: 'save_draft',
+    title: '一篇验证草稿文章',
+    markdown: '正文',
+    run_mode: 'execute',
+    external_started: false,
+    remote_id: null,
+    reconcile_candidate_id: null,
+  },
+  lease_token: 'lease',
+  lease_seconds: 60,
+  lease_expires_at: new Date(Date.now() + 60000).toISOString(),
+};
+function api(heartbeat: () => Promise<{ cancel_requested: boolean }>) {
   const completed: JobResult[] = [];
-  return { completed, heartbeat, progress: async () => {}, complete: async (_id:string, _token:string, result:JobResult) => { completed.push(result); } };
+  return {
+    completed,
+    heartbeat,
+    progress: async () => {},
+    complete: async (_id: string, _token: string, result: JobResult) => {
+      completed.push(result);
+    },
+  };
 }
 
 describe('领取的停止与清理', () => {
   it('只读任务完成前取消时清除正文载荷并关闭浏览器', async () => {
-    let closed = false; const fake = api(async () => ({ cancel_requested: true }));
-    await executeClaim(fake, { ...claim, job: { ...claim.job, kind: 'read_article', article_id: '100', account_username: 'expected-user' } }, async () => ({ close: async () => { closed = true; }, run: async () => ({ status: 'succeeded', article: { id: '100' } as never }) }), new AbortController().signal);
-    expect(closed).toBe(true); expect(fake.completed[0]).toMatchObject({ status: 'cancelled' }); expect(fake.completed[0]?.article).toBeUndefined();
+    let closed = false;
+    const fake = api(async () => ({ cancel_requested: true }));
+    await executeClaim(
+      fake,
+      {
+        ...claim,
+        job: {
+          ...claim.job,
+          kind: 'read_article',
+          article_id: '100',
+          account_username: 'expected-user',
+        },
+      },
+      async () => ({
+        close: async () => {
+          closed = true;
+        },
+        run: async () => ({ status: 'succeeded', article: { id: '100' } as never }),
+      }),
+      new AbortController().signal,
+    );
+    expect(closed).toBe(true);
+    expect(fake.completed[0]).toMatchObject({ status: 'cancelled' });
+    expect(fake.completed[0]?.article).toBeUndefined();
   });
   it('只读任务失租时关闭浏览器且不提交快照', async () => {
-    let closed = false; const fake = api(async () => { throw new Error('lost lease'); });
-    await executeClaim(fake, { ...claim, job: { ...claim.job, kind: 'sync_articles', account_username: 'expected-user' } }, async () => ({ close: async () => { closed = true; }, run: async (_job, _hooks, signal) => { await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); return { status: 'succeeded', articles: {} as never }; } }), new AbortController().signal, 10);
-    expect(closed).toBe(true); expect(fake.completed).toEqual([]);
+    let closed = false;
+    const fake = api(async () => {
+      throw new Error('lost lease');
+    });
+    await executeClaim(
+      fake,
+      { ...claim, job: { ...claim.job, kind: 'sync_articles', account_username: 'expected-user' } },
+      async () => ({
+        close: async () => {
+          closed = true;
+        },
+        run: async (_job, _hooks, signal) => {
+          await new Promise<void>((resolve) =>
+            signal.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          return { status: 'succeeded', articles: {} as never };
+        },
+      }),
+      new AbortController().signal,
+      10,
+    );
+    expect(closed).toBe(true);
+    expect(fake.completed).toEqual([]);
   });
   it('失败或不匹配任务种类的读取载荷不发送到完成接口', async () => {
     const fake = api(async () => ({ cancel_requested: false }));
-    await executeClaim(fake, { ...claim, job: { ...claim.job, kind: 'read_article', article_id: '100' } }, async () => ({ close: async () => {}, run: async () => ({ status: 'failed', article: { id: '100' } as never, articles: {} as never }) }), new AbortController().signal);
-    expect(fake.completed[0]?.article).toBeUndefined(); expect(fake.completed[0]?.articles).toBeUndefined();
+    await executeClaim(
+      fake,
+      { ...claim, job: { ...claim.job, kind: 'read_article', article_id: '100' } },
+      async () => ({
+        close: async () => {},
+        run: async () => ({
+          status: 'failed',
+          article: { id: '100' } as never,
+          articles: {} as never,
+        }),
+      }),
+      new AbortController().signal,
+    );
+    expect(fake.completed[0]?.article).toBeUndefined();
+    expect(fake.completed[0]?.articles).toBeUndefined();
   });
   it('租约心跳失败立即关闭浏览器，不再写入完成状态', async () => {
     let closed = false;
-    const fake = api(async () => { throw new Error('lost lease'); });
-    await executeClaim(fake, claim, async () => ({
-      close: async () => { closed = true; },
-      run: async (_job, _hooks, signal) => { await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true })); return { status: 'cancelled' }; }
-    }), new AbortController().signal, 10);
-    expect(closed).toBe(true); expect(fake.completed).toHaveLength(0);
+    const fake = api(async () => {
+      throw new Error('lost lease');
+    });
+    await executeClaim(
+      fake,
+      claim,
+      async () => ({
+        close: async () => {
+          closed = true;
+        },
+        run: async (_job, _hooks, signal) => {
+          await new Promise<void>((resolve) =>
+            signal.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          return { status: 'cancelled' };
+        },
+      }),
+      new AbortController().signal,
+      10,
+    );
+    expect(closed).toBe(true);
+    expect(fake.completed).toHaveLength(0);
   });
   it('取消已开始任务时先关闭浏览器，再上报待核对，不谎报撤回', async () => {
     let closed = false;
     let completionAfterClose = false;
     const fake = api(async () => ({ cancel_requested: true }));
     const complete = fake.complete;
-    fake.complete = async (...args) => { completionAfterClose = closed; await complete(...args); };
-    await executeClaim(fake, claim, async () => ({
-      close: async () => { closed = true; },
-      run: async (_job, hooks, signal) => {
-        await hooks.progress({ stage: 'opening_editor', external_started: true });
-        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
-        return { status: 'cancelled' };
-      }
-    }), new AbortController().signal, 10);
+    fake.complete = async (...args) => {
+      completionAfterClose = closed;
+      await complete(...args);
+    };
+    await executeClaim(
+      fake,
+      claim,
+      async () => ({
+        close: async () => {
+          closed = true;
+        },
+        run: async (_job, hooks, signal) => {
+          await hooks.progress({ stage: 'opening_editor', external_started: true });
+          await new Promise<void>((resolve) =>
+            signal.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          return { status: 'cancelled' };
+        },
+      }),
+      new AbortController().signal,
+      10,
+    );
     expect(completionAfterClose).toBe(true);
     expect(fake.completed[0]?.status).toBe('reconciling');
   });
   it('保存读回完成到关闭浏览器之间的取消请求仍阻止成功上报', async () => {
     let closed = false;
     const fake = api(async () => ({ cancel_requested: true }));
-    await executeClaim(fake, claim, async () => ({
-      close: async () => { closed = true; },
-      run: async (_job, hooks) => { await hooks.progress({ stage: 'opening_editor', external_started: true }); return { status: 'succeeded', remote_id: '123' }; }
-    }), new AbortController().signal, 15000);
+    await executeClaim(
+      fake,
+      claim,
+      async () => ({
+        close: async () => {
+          closed = true;
+        },
+        run: async (_job, hooks) => {
+          await hooks.progress({ stage: 'opening_editor', external_started: true });
+          return { status: 'succeeded', remote_id: '123' };
+        },
+      }),
+      new AbortController().signal,
+      15000,
+    );
     expect(closed).toBe(true);
     expect(fake.completed[0]?.status).toBe('reconciling');
   });
@@ -68,21 +183,68 @@ describe('领取的停止与清理', () => {
     let closed = false;
     const controller = new AbortController();
     const fake = api(async () => ({ cancel_requested: false }));
-    await executeClaim(fake, claim, async () => ({
-      close: async () => { closed = true; },
-      run: async (_job, _hooks, signal) => { controller.abort(); if (!signal.aborted) throw new Error('abort not forwarded'); return { status: 'cancelled' }; }
-    }), controller.signal, 10);
-    expect(closed).toBe(true); expect(fake.completed[0]?.status).toBe('cancelled');
+    await executeClaim(
+      fake,
+      claim,
+      async () => ({
+        close: async () => {
+          closed = true;
+        },
+        run: async (_job, _hooks, signal) => {
+          controller.abort();
+          if (!signal.aborted) throw new Error('abort not forwarded');
+          return { status: 'cancelled' };
+        },
+      }),
+      controller.signal,
+      10,
+    );
+    expect(closed).toBe(true);
+    expect(fake.completed[0]?.status).toBe('cancelled');
   });
 });
 describe('空闲维护调度', () => {
   it('登录维护优先于领取任务，期间报告忙碌并在退出时关闭', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'post-bridge-maintenance-'));
-    const stop = new AbortController(); const states: boolean[] = []; let claims = 0; let closed = false;
-    const fake = { workerHeartbeat: async (idle: boolean) => { states.push(idle); }, claim: async () => { claims++; stop.abort(); return null; } } as unknown as WorkerAPI;
+    const stop = new AbortController();
+    const states: boolean[] = [];
+    let claims = 0;
+    let closed = false;
+    const fake = {
+      workerHeartbeat: async (idle: boolean) => {
+        states.push(idle);
+      },
+      claim: async () => {
+        claims++;
+        stop.abort();
+        return null;
+      },
+    } as unknown as WorkerAPI;
     try {
-      await runWorker(fake, dir, async () => { throw new Error('不应开启任务浏览器'); }, stop.signal, 1, { pending: () => true, run: async () => { expect(states.at(-1)).toBe(false); stop.abort(); }, close: async () => { closed = true; } });
-      expect(claims).toBe(0); expect(closed).toBe(true); expect(states).toContain(false);
-    } finally { await rm(dir, { recursive: true, force: true }); }
+      await runWorker(
+        fake,
+        dir,
+        async () => {
+          throw new Error('不应开启任务浏览器');
+        },
+        stop.signal,
+        1,
+        {
+          pending: () => true,
+          run: async () => {
+            expect(states.at(-1)).toBe(false);
+            stop.abort();
+          },
+          close: async () => {
+            closed = true;
+          },
+        },
+      );
+      expect(claims).toBe(0);
+      expect(closed).toBe(true);
+      expect(states).toContain(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

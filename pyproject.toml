@@ -1,0 +1,5 @@
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+include = '\.py$'
+extend-exclude = '/(\.local-tmp|\.worktrees|node_modules|\.agents)/'
