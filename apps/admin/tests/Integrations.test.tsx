@@ -198,8 +198,9 @@ it('离开邀请页后迟到的签发响应不显示密钥', async () => {
         })
       : base(url, init);
   render(<App />);
+  await screen.findByText('暂无记录');
   fireEvent.click(await screen.findByRole('button', { name: '创建邀请' }));
-  fireEvent.change(screen.getByLabelText('来源标识'), { target: { value: 'editorial' } });
+  fireEvent.change(await screen.findByLabelText('来源标识'), { target: { value: 'editorial' } });
   fireEvent.change(screen.getByLabelText('运行环境'), { target: { value: 'test' } });
   fireEvent.click(await screen.findByLabelText('合成 CSDN 账号'));
   fireEvent.change(screen.getByLabelText('邀请有效期'), { target: { value: '2099-01-01T00:00' } });
@@ -207,6 +208,13 @@ it('离开邀请页后迟到的签发响应不显示密钥', async () => {
   if (!((await screen.findByLabelText('合成 CSDN 账号')) as HTMLInputElement).checked)
     fireEvent.click(screen.getByLabelText('合成 CSDN 账号'));
   fireEvent.click(screen.getByRole('button', { name: '生成邀请' }));
+  await waitFor(() =>
+    expect(
+      calls.filter(
+        (call) => call.url === '/api/integration-invitations' && call.init?.method === 'POST',
+      ),
+    ).toHaveLength(1),
+  );
   window.history.pushState({}, '', '/integrations?tab=clients');
   fireEvent.popState(window);
   await screen.findByRole('button', { name: '内容中心' });
@@ -233,6 +241,7 @@ it('创建邀请携带CSRF且关闭和离开均清除一次令牌', async () => 
         })
       : base(url, init);
   render(<App />);
+  await screen.findByText('暂无记录');
   fireEvent.click(await screen.findByRole('button', { name: '创建邀请' }));
   for (const [label, value] of [
     ['来源标识', 'editorial'],
