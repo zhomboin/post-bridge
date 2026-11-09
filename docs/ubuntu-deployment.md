@@ -40,7 +40,7 @@ sudo -v
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3 ca-certificates git curl nginx nano less bubblewrap
+sudo apt-get install -y python3 ca-certificates git curl nginx nano less bubblewrap apparmor-utils
 python3 --version
 systemctl --version
 ```
@@ -136,10 +136,10 @@ sudo systemctl is-enabled post-bridge-api.service post-bridge-worker.service
 sudo ./scripts/ubuntu-deploy.sh install --config '〈仓库外私有配置文件〉'
 ```
 
-安装器包含 bubblewrap。部署用户还应执行以下只读预检，失败时核对宿主用户命名空间策略，不关闭系统安全策略来绕过隔离：
+安装器包含 bubblewrap，并通过[专用沙箱准备脚本](../scripts/account_sandbox.py)建立 root 管理、仅 worker 用户组可执行的私有副本与对应 AppArmor 应用策略。保持全局用户命名空间限制，不覆盖系统通用 bwrap 策略。升级时同步系统可信副本；部署用户还应执行以下只读预检，失败时核对宿主策略：
 
 ```bash
-sudo -u post-bridge-worker bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
+sudo -u post-bridge-worker setpriv --no-new-privs /opt/post-bridge/tools/account-sandbox/bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
 ```
 
 两个服务应为 active，开机启用状态应为 enabled。首次安装成功已完成启动，不需要再执行其他启动脚本；已有安装使用 upgrade，不重复 install。内部检查通过只代表服务可用，不代表 HTTPS、平台登录或真实发稿已验收。

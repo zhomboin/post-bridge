@@ -45,7 +45,7 @@ git status --short
 uname -m
 cat /etc/os-release
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl xz-utils build-essential git python3 less nano postgresql-16 postgresql-client-16 fonts-noto-cjk bubblewrap
+sudo apt-get install -y ca-certificates curl xz-utils build-essential git python3 less nano postgresql-16 postgresql-client-16 fonts-noto-cjk bubblewrap apparmor-utils
 python3 --version
 ```
 
@@ -127,7 +127,15 @@ bwrap --version
 bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
 ```
 
-失败时先检查 bubblewrap 与宿主机用户命名空间策略，执行器不会退回无隔离方式。不要为通过检查擅自关闭系统安全策略。
+Ubuntu 24.04 的 AppArmor 可能拒绝用户命名空间。出现 uid map 权限错误时，由管理员审阅[专用沙箱准备脚本](../scripts/account_sandbox.py)后执行下列命令。它创建 root 管理、当前开发用户组可执行的项目专用文件和对应应用策略，保持全局限制；不修改系统通用 bwrap 策略。
+
+```bash
+sudo python3 scripts/account_sandbox.py --local
+read -r -p '请输入上述返回的项目沙箱执行文件路径：' PB_SANDBOX
+"$PB_SANDBOX" --unshare-user --unshare-pid --ro-bind / / --proc /proc --dev /dev -- /usr/bin/true
+```
+
+首次初始化 runtime.json 后，将 ACCOUNT_SANDBOX_EXECUTABLE 填为返回的绝对路径，再启动服务。失败时检查宿主策略，不使用无隔离执行模式。原理见[Ubuntu 官方说明](https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces)。
 
 Playwright 应为 1.64.1。使用现有浏览器时，可在私有 runtime.json 中填写 PLAYWRIGHT_EXECUTABLE_PATH；不要把本机浏览器路径写入仓库配置。
 
@@ -169,6 +177,12 @@ unset CSDN_USERNAME CSDN_DISPLAY_NAME
 ## 三、启动并登录后台
 
 ### 1. 构建并启动
+
+使用专用沙箱执行文件时，先编辑私有配置，设置 ACCOUNT_SANDBOX_EXECUTABLE 为准备步骤返回的路径；目录和身份等真实配置不写入仓库。
+
+```bash
+nano "$PB_STATE/runtime.json"
+```
 
 ```bash
 ./scripts/dev.sh --state "$PB_STATE"
