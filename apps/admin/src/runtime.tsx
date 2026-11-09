@@ -10,7 +10,10 @@ import { RefreshCw } from 'lucide-react';
 
 import type { CSDNPublishOptions } from './integration-types';
 
-export type Session = { user: { username: string }; csrf_token: string };
+export type Session = {
+  user: { id?: string; username: string; role?: string };
+  csrf_token: string;
+};
 export type Job = {
   id: string;
   request_id: string;
@@ -60,6 +63,8 @@ export type LogEntry = {
 };
 export type PageData<T> = { items: T[]; total: number; page: number; page_size: number };
 export type Account = {
+  verified?: boolean;
+  enabled?: boolean;
   id: string;
   platform: string;
   username?: string;

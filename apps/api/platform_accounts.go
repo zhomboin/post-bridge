@@ -23,6 +23,7 @@ type PlatformAccountConfig struct {
 	DisplayName     string `json:"display_name"`
 	ProfileDir      string `json:"profile_dir"`
 	WorkerTokenFile string `json:"worker_token_file"`
+	OwnerUsername   string `json:"owner_username,omitempty"`
 	WorkerToken     string `json:"-"`
 }
 
@@ -46,12 +47,12 @@ func loadPlatformAccounts(path, legacyToken string) ([]PlatformAccountConfig, er
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&file) != nil || decoder.Decode(new(any)) != io.EOF || len(file.Accounts) != 1 {
+	if decoder.Decode(&file) != nil || decoder.Decode(new(any)) != io.EOF || len(file.Accounts) < 1 || len(file.Accounts) > 1000 {
 		return nil, ErrInvalid
 	}
 	for i := range file.Accounts {
 		a := &file.Accounts[i]
-		if !validKey(a.ID) || a.ID == "csdn-main" || a.Platform != "xiaohongshu" || !xhsUsername.MatchString(a.Username) || !xhsUserID.MatchString(a.UserID) || strings.TrimSpace(a.DisplayName) == "" || !boundedText(a.DisplayName, 400) || !filepath.IsAbs(a.ProfileDir) {
+		if !validKey(a.ID) || a.ID == "csdn-main" || (a.Platform != "xiaohongshu" && a.Platform != "csdn") || !xhsUsername.MatchString(a.Username) || a.Platform == "xiaohongshu" && !xhsUserID.MatchString(a.UserID) || strings.TrimSpace(a.DisplayName) == "" || !boundedText(a.DisplayName, 400) || !filepath.IsAbs(a.ProfileDir) {
 			return nil, ErrInvalid
 		}
 		tokenInfo, tokenErr := os.Lstat(a.WorkerTokenFile)
@@ -67,17 +68,27 @@ func loadPlatformAccounts(path, legacyToken string) ([]PlatformAccountConfig, er
 }
 
 func (s *Store) ConfigurePlatformAccounts(ctx context.Context, accounts []PlatformAccountConfig) error {
-	if len(accounts) > 1 {
+	if len(accounts) > 1000 {
 		return ErrInvalid
 	}
 	return s.locked(ctx, func(tx pgx.Tx, _ time.Time) error {
 		for _, a := range accounts {
-			if a.Platform != "xiaohongshu" || !validKey(a.ID) || a.ID == "csdn-main" || !xhsUsername.MatchString(a.Username) || !xhsUserID.MatchString(a.UserID) {
+			if (a.Platform != "xiaohongshu" && a.Platform != "csdn") || !validKey(a.ID) || a.ID == "csdn-main" || !xhsUsername.MatchString(a.Username) || a.Platform == "xiaohongshu" && !xhsUserID.MatchString(a.UserID) {
 				return ErrInvalid
 			}
-			tag, err := tx.Exec(ctx, `INSERT INTO account(id,platform,username,native_user_id,display_name) VALUES($1,$2,$3,$4,$5)
-    ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name
-    WHERE account.platform=excluded.platform AND account.username=excluded.username AND account.native_user_id=excluded.native_user_id`, a.ID, a.Platform, a.Username, a.UserID, a.DisplayName)
+			var owner string
+			if a.OwnerUsername != "" {
+				if err := tx.QueryRow(ctx, "SELECT id FROM users WHERE username=$1 AND enabled", a.OwnerUsername).Scan(&owner); err != nil {
+					return ErrInvalid
+				}
+			} else {
+				if err := tx.QueryRow(ctx, "SELECT pb_owner()").Scan(&owner); err != nil {
+					return err
+				}
+			}
+			tag, err := tx.Exec(ctx, `INSERT INTO account(id,platform,username,native_user_id,display_name,owner_user_id) VALUES($1,$2,$3,$4,$5,nullif($6,''))
+    ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,enabled=NOT account.credentials_revoked
+    WHERE account.platform=excluded.platform AND account.username=excluded.username AND account.native_user_id=excluded.native_user_id AND account.owner_user_id IS NOT DISTINCT FROM excluded.owner_user_id`, a.ID, a.Platform, a.Username, a.UserID, a.DisplayName, owner)
 			if err != nil {
 				return err
 			}
@@ -94,14 +105,14 @@ func (s *Store) AccountByID(ctx context.Context, id string) (Account, error) {
 	if !validKey(id) {
 		return a, ErrInvalid
 	}
-	err := s.pool.QueryRow(ctx, `SELECT id,platform,username,display_name,status,last_checked_at,last_error FROM account WHERE id=$1`, id).Scan(&a.ID, &a.Platform, &a.Username, &a.DisplayName, &a.Status, &a.LastCheckedAt, &a.LastError)
+	err := s.pool.QueryRow(ctx, `SELECT id,platform,username,display_name,status,last_checked_at,last_error,enabled,coalesce(owner_user_id,''),verified FROM account WHERE id=$1`, id).Scan(&a.ID, &a.Platform, &a.Username, &a.DisplayName, &a.Status, &a.LastCheckedAt, &a.LastError, &a.Enabled, &a.OwnerUserID, &a.Verified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = ErrNotFound
 	}
 	return a, err
 }
 func (s *Store) Accounts(ctx context.Context) ([]Account, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id,platform,username,display_name,status,last_checked_at,last_error FROM account ORDER BY platform,id`)
+	rows, err := s.pool.Query(ctx, `SELECT id,platform,username,display_name,status,last_checked_at,last_error,enabled,coalesce(owner_user_id,''),verified FROM account ORDER BY (id='csdn-main') DESC,platform,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +120,7 @@ func (s *Store) Accounts(ctx context.Context) ([]Account, error) {
 	out := []Account{}
 	for rows.Next() {
 		var a Account
-		if err = rows.Scan(&a.ID, &a.Platform, &a.Username, &a.DisplayName, &a.Status, &a.LastCheckedAt, &a.LastError); err != nil {
+		if err = rows.Scan(&a.ID, &a.Platform, &a.Username, &a.DisplayName, &a.Status, &a.LastCheckedAt, &a.LastError, &a.Enabled, &a.OwnerUserID, &a.Verified); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -123,7 +134,7 @@ func accountCapabilities(a Account) map[string]bool {
 		"sync_articles": a.Platform == "csdn",
 		"read_article":  a.Platform == "csdn",
 		"sync_notes":    a.Platform == "xiaohongshu",
-		"remote_login":  a.Platform == "csdn",
+		"remote_login":  true,
 		"save_draft":    a.Platform == "csdn",
 		"publish":       a.Platform == "csdn",
 	}
@@ -137,7 +148,7 @@ func (h *handler) platformAccountRoutes() {
 		}
 		items := []map[string]any{}
 		for _, a := range accounts {
-			if !h.configuredAccount(a.ID) {
+			if !a.Enabled {
 				continue
 			}
 			items = append(items, map[string]any{"account": a, "capabilities": accountCapabilities(a)})
@@ -159,7 +170,18 @@ func (h *handler) platformAccountRoutes() {
 		if !decode(w, r, &in) {
 			return
 		}
-		job, created, err := h.store.CreateAccountJob(r.Context(), r.PathValue("account"), "check_account", in.RequestID)
+		a, err := h.store.AccountByID(r.Context(), r.PathValue("account"))
+		if err != nil {
+			replyError(w, err)
+			return
+		}
+		var job Job
+		var created bool
+		if a.Platform == "csdn" {
+			job, created, err = h.store.Create(r.Context(), CreateInput{AccountID: a.ID, Platform: a.Platform, Kind: "check_account", RequestID: in.RequestID})
+		} else {
+			job, created, err = h.store.CreateAccountJob(r.Context(), a.ID, "check_account", in.RequestID)
+		}
 		if err != nil {
 			replyError(w, err)
 			return
@@ -204,8 +226,10 @@ func (h *handler) platformAccountRoutes() {
 
 func jobAccountMatches(ctx context.Context, tx pgx.Tx, r *record) (bool, error) {
 	var current, native, platform string
-	err := tx.QueryRow(ctx, "SELECT username,native_user_id,platform FROM account WHERE id=$1", r.AccountID).Scan(&current, &native, &platform)
-	return current == r.AccountUsername && current != "" && platform == r.Platform && (platform != "xiaohongshu" || native == r.AccountNativeID), err
+	var version int64
+	var enabled, verified bool
+	err := tx.QueryRow(ctx, "SELECT username,native_user_id,platform,connection_version,enabled,verified FROM account WHERE id=$1", r.AccountID).Scan(&current, &native, &platform, &version, &enabled, &verified)
+	return enabled && verified && (r.ConnectionVersion == 0 || r.ConnectionVersion == version) && current == r.AccountUsername && current != "" && platform == r.Platform && (platform != "xiaohongshu" || native == r.AccountNativeID), err
 }
 
 func (h *handler) configuredAccount(id string) bool {
@@ -218,11 +242,11 @@ func (h *handler) configuredAccount(id string) bool {
 }
 
 func (h *handler) platformAccountAdmin(next func(http.ResponseWriter, *http.Request, session)) http.HandlerFunc {
-	return h.admin(func(w http.ResponseWriter, r *http.Request, current session) {
-		if id := r.PathValue("account"); id != "" && !h.configuredAccount(id) {
-			fail(w, http.StatusNotFound, "not_found", "未找到已配置的平台账号")
+	return h.authenticated(func(w http.ResponseWriter, r *http.Request, s session) {
+		if id := r.PathValue("account"); id != "" && h.store.executableAccount(r.Context(), id) != nil {
+			replyError(w, ErrNotFound)
 			return
 		}
-		next(w, r, current)
+		next(w, r, s)
 	})
 }

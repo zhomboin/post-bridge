@@ -22,6 +22,7 @@ import (
 var integrationSchemaSQL string
 
 type IntegrationClient struct {
+	OwnerUserID        string    `json:"owner_user_id,omitempty"`
 	ID                 string    `json:"id"`
 	Name               string    `json:"name"`
 	SourceID           string    `json:"source_id"`
@@ -87,7 +88,7 @@ func integrationAudit(ctx context.Context, tx pgx.Tx, client, action, actor stri
 func (s *IntegrationService) Client(ctx context.Context, id string) (IntegrationClient, error) {
 	var c IntegrationClient
 	var raw []byte
-	e := s.store.pool.QueryRow(ctx, "SELECT metadata FROM integration_clients WHERE id=$1", id).Scan(&raw)
+	e := s.store.pool.QueryRow(ctx, "SELECT metadata || jsonb_build_object('owner_user_id',owner_user_id) FROM integration_clients WHERE id=$1", id).Scan(&raw)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return c, ErrNotFound
 	}
@@ -100,7 +101,7 @@ func (s *IntegrationService) Client(ctx context.Context, id string) (Integration
 func integrationLoadClient(ctx context.Context, tx pgx.Tx, id string) (IntegrationClient, error) {
 	var c IntegrationClient
 	var raw []byte
-	e := tx.QueryRow(ctx, "SELECT metadata FROM integration_clients WHERE id=$1 FOR UPDATE", id).Scan(&raw)
+	e := tx.QueryRow(ctx, "SELECT metadata || jsonb_build_object('owner_user_id',owner_user_id) FROM integration_clients WHERE id=$1 FOR UPDATE", id).Scan(&raw)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return c, ErrNotFound
 	}
@@ -111,6 +112,13 @@ func integrationLoadClient(ctx context.Context, tx pgx.Tx, id string) (Integrati
 	return c, e
 }
 func integrationSaveClient(ctx context.Context, tx pgx.Tx, c IntegrationClient) error {
+	owner, err := integrationOwner(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if err = integrationOwnedAccounts(ctx, tx, owner, c.Accounts); err != nil && c.Status != "revoked" && c.Status != "suspended" {
+		return err
+	}
 	raw, e := json.Marshal(c)
 	if e != nil {
 		return e
@@ -210,6 +218,13 @@ func (s *IntegrationService) authenticate(r *http.Request, body []byte, activate
 	defer tx.Rollback(ctx)
 	c, e := integrationLoadClient(ctx, tx, r.Header.Get("X-Integration-Client"))
 	now := s.store.now()
+	if e == nil {
+		var active bool
+		e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND enabled) OR ($1='' AND NOT EXISTS(SELECT 1 FROM users))", c.OwnerUserID).Scan(&active)
+		if e != nil || !active {
+			return deny(ErrIntegrationAuthentication)
+		}
+	}
 	if e != nil || c.Environment != s.environment || c.ServiceID != s.serviceID || r.Header.Get("X-Integration-Environment") != s.environment || r.Header.Get("X-Integration-Service") != s.serviceID || !c.ExpiresAt.After(now) {
 		return deny(ErrIntegrationAuthentication)
 	}

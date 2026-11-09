@@ -1,6 +1,6 @@
 import type { Claim, JobAPI, JobResult, Session } from './types.js';
 import { WorkerAPI } from './api.js';
-import { acquireProfile, profileAvailable } from './profile.js';
+import { acquireProfile, profileAvailable, type ProfileOwner } from './profile.js';
 
 export async function executeClaim(
   api: JobAPI,
@@ -133,8 +133,9 @@ export async function runWorker(
   signal: AbortSignal,
   pollIntervalMs = 1500,
   maintenance?: WorkerMaintenance,
+  ownedProfile?: ProfileOwner,
 ): Promise<void> {
-  const owner = await acquireProfile(profileDir);
+  const owner = ownedProfile || (await acquireProfile(profileDir));
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal.addEventListener('abort', abort, { once: true });

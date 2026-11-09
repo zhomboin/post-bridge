@@ -14,14 +14,14 @@ func (s *Store) ConfirmRemoteLogin(ctx context.Context, id string) error {
 		return ErrInvalid
 	}
 	return s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
-		changed, err := tx.Exec(ctx, "UPDATE account SET status='connected',last_checked_at=$2,last_error='',remote_login_id=$1 WHERE id='csdn-main' AND remote_login_id<>$1", id, now)
+		changed, err := tx.Exec(ctx, "UPDATE account SET status='connected',last_checked_at=$2,last_error='',remote_login_id=$1 WHERE id=pb_account() AND remote_login_id<>$1", id, now)
 		if err != nil {
 			return err
 		}
 		if changed.RowsAffected() == 0 {
 			return nil
 		}
-		rows, err := tx.Query(ctx, "SELECT record FROM jobs WHERE record->>'account_id'='csdn-main' AND record->>'status'='waiting_user' AND record->>'error_code'='needs_login' FOR UPDATE")
+		rows, err := tx.Query(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=pb_account() AND record->>'status'='waiting_user' AND record->>'error_code'='needs_login' FOR UPDATE")
 		if err != nil {
 			return err
 		}

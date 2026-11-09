@@ -92,6 +92,19 @@ beforeEach(() => {
   calls = [];
   window.history.replaceState({}, '', '/articles');
   handler = (url) => {
+    if (url === '/api/accounts')
+      return response({
+        items: [
+          {
+            account: {
+              id: 'csdn-main',
+              platform: 'csdn',
+              display_name: '测试作者',
+              status: 'connected',
+            },
+          },
+        ],
+      });
     if (url === '/api/account') return response({ username: 'example', status: 'connected' });
     if (url === '/api/session')
       return response({ user: { username: '管理员' }, csrf_token: 'csrf' });

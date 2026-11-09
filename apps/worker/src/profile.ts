@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 export interface ProfileOwner {
   path: string;
   nonce: string;
+  pid?: number;
   release(): Promise<void>;
 }
 const lockName = '.post-bridge-owner';
@@ -62,7 +63,7 @@ export async function profileAvailable(path: string, owner?: ProfileOwner): Prom
   if (!owner || owner.path !== profile) return false;
   try {
     const value = JSON.parse(await readFile(join(lock, 'owner.json'), 'utf8'));
-    return value.nonce === owner.nonce && value.pid === process.pid;
+    return value.nonce === owner.nonce && value.pid === (owner.pid ?? process.pid);
   } catch {
     return false;
   }

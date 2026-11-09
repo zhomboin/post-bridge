@@ -478,7 +478,7 @@ func TestProcessArticleRetentionPreservesUnknownAndExpiresTerminal(t *testing.T)
 func TestProcessAccountObservedEmptyFieldsRemainPresent(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
-	if _, err := s.pool.Exec(ctx, "UPDATE account SET username='',display_name='' WHERE id='csdn-main'"); err != nil {
+	if _, err := s.pool.Exec(ctx, "UPDATE account SET display_name='' WHERE id='csdn-main'"); err != nil {
 		t.Fatal(err)
 	}
 	j, _, err := s.Create(ctx, CreateInput{RequestID: "empty-account-fields", Kind: "check_account", Platform: "csdn"})
@@ -500,7 +500,7 @@ func TestProcessAccountObservedEmptyFieldsRemainPresent(t *testing.T) {
 	if err = json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if len(raw.Snapshots) != 1 || raw.Snapshots[0]["username"] != "" || raw.Snapshots[0]["display_name"] != "" {
+	if len(raw.Snapshots) != 1 || raw.Snapshots[0]["username"] != "tester" || raw.Snapshots[0]["display_name"] != "" {
 		t.Fatalf("empty account observation lost: %s", data)
 	}
 }

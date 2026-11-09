@@ -423,13 +423,14 @@ func (h *handler) commitIntegrationDistribution(ctx context.Context, client Inte
 			JobIDs:                  []string{},
 			CreatedAt:               now,
 		}
-		var accountUsername string
-		if e = tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&accountUsername); e != nil {
-			return e
-		}
 		for i, draft := range p.Drafts {
+			var accountUsername string
+			if e = tx.QueryRow(ctx, "SELECT username FROM account WHERE id=$1 AND enabled", draft.AccountID).Scan(&accountUsername); e != nil {
+				return e
+			}
 			job := newRecord(CreateInput{
 				RequestID: fmt.Sprintf("integration:%s:%d", out.ID, i),
+				AccountID: draft.AccountID,
 				Platform:  draft.Platform,
 				Kind:      draft.Operation,
 				Title:     draft.Title,
@@ -535,7 +536,7 @@ func (h *handler) applyIntegrationEvent(ctx context.Context, client IntegrationC
 		if err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", event.SourceID, event.ArticleID, event.StateSeq, raw); err != nil {
+		if _, err = tx.Exec(ctx, "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(owner_user_id,source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", event.SourceID, event.ArticleID, event.StateSeq, raw); err != nil {
 			return err
 		}
 		applied = true
@@ -614,7 +615,7 @@ func integrationRevokeAuthorization(ctx context.Context, tx pgx.Tx, event Integr
 		return false, err
 	}
 	var seq int64
-	err = tx.QueryRow(ctx, "INSERT INTO integration_authorization_revocations(source_id,article_id,authorization_id,state_seq,record) VALUES($1,$2,$3,$4,$5) ON CONFLICT(source_id,article_id,authorization_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record WHERE integration_authorization_revocations.state_seq<excluded.state_seq RETURNING state_seq", event.SourceID, event.ArticleID, event.AuthorizationID, event.StateSeq, raw).Scan(&seq)
+	err = tx.QueryRow(ctx, "INSERT INTO integration_authorization_revocations(source_id,article_id,authorization_id,state_seq,record) VALUES($1,$2,$3,$4,$5) ON CONFLICT(owner_user_id,source_id,article_id,authorization_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record WHERE integration_authorization_revocations.state_seq<excluded.state_seq RETURNING state_seq", event.SourceID, event.ArticleID, event.AuthorizationID, event.StateSeq, raw).Scan(&seq)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -744,6 +745,13 @@ func integrationClientAllowedTx(ctx context.Context, tx pgx.Tx, id, scope string
 	if !integrationHas(c.Scopes, scope) {
 		return c, ErrIntegrationPermission
 	}
+	ids := make([]string, 0, len(targets))
+	for _, target := range targets {
+		ids = append(ids, target.AccountID)
+	}
+	if err = integrationOwnedAccounts(ctx, tx, c.OwnerUserID, ids); err != nil {
+		return c, err
+	}
 	for _, target := range targets {
 		if !integrationHas(c.Accounts, target.AccountID) || !integrationHas(c.Operations, target.Operation) {
 			return c, ErrIntegrationPermission
@@ -780,7 +788,7 @@ func integrationAdvanceSnapshotState(ctx context.Context, tx pgx.Tx, p Integrati
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", p.SourceID, p.ArticleID, p.StateSeq, raw)
+	_, err = tx.Exec(ctx, "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(owner_user_id,source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", p.SourceID, p.ArticleID, p.StateSeq, raw)
 	return err
 }
 

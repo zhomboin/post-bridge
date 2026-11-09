@@ -67,6 +67,19 @@ function openPage(
       }
       if (raw === '/api/session')
         return response({ user: { username: '管理员' }, csrf_token: 'csrf' });
+      if (raw === '/api/accounts')
+        return response({
+          items: [
+            {
+              account: {
+                id: 'csdn-main',
+                platform: 'csdn',
+                display_name: '测试账号',
+                status: 'connected',
+              },
+            },
+          ],
+        });
       if (raw === '/api/account')
         return response({ id: 'csdn-main', platform: 'csdn', status: 'connected' });
       if (raw === presetPath) return response(preset);

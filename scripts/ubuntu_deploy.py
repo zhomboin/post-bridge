@@ -245,6 +245,7 @@ def environments(config):
         "CSDN_PROFILE_DIR": str(STATE / "worker/profile"),
         "WORKER_HEADLESS": "true",
         "PLAYWRIGHT_BROWSERS_PATH": str(BROWSERS),
+        "ACCOUNT_SANDBOX_EXECUTABLE": str(INSTALL / "tools/account-sandbox/bwrap"),
         "HOME": str(STATE / "worker"),
     }
     if config.get("INTEGRATION_ENVIRONMENT"):
@@ -657,9 +658,14 @@ def install(config_path, upgrade=False):
             "--no-install-recommends",
             "ca-certificates",
             "fonts-noto-cjk",
+            "bubblewrap",
+            "apparmor-utils",
             "postgresql-client-16",
         ],
         env=root_env,
+    )
+    command(
+        [sys.executable, REPO / "scripts/account_sandbox.py", "--deploy"], env=root_env
     )
     command(
         [

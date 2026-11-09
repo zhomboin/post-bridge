@@ -32,7 +32,7 @@ func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, i
 		return nil
 	}
 	var username string
-	if err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&username); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id=pb_account()").Scan(&username); err != nil {
 		return err
 	}
 	if username != r.AccountUsername {
@@ -58,13 +58,13 @@ func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, i
 		if err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, "INSERT INTO account_article_snapshots(account_id,username,record,synced_at) VALUES('csdn-main',$1,$2,$3) ON CONFLICT(account_id) DO UPDATE SET username=excluded.username,record=excluded.record,synced_at=excluded.synced_at", username, data, now); err != nil {
+		if _, err = tx.Exec(ctx, "INSERT INTO account_article_snapshots(account_id,username,record,synced_at) VALUES(pb_account(),$1,$2,$3) ON CONFLICT(account_id) DO UPDATE SET username=excluded.username,record=excluded.record,synced_at=excluded.synced_at", username, data, now); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, "DELETE FROM account_articles WHERE account_id='csdn-main'"); err != nil {
+		if _, err = tx.Exec(ctx, "DELETE FROM account_articles WHERE account_id=pb_account()"); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, "DELETE FROM account_article_bodies WHERE account_id='csdn-main'"); err != nil {
+		if _, err = tx.Exec(ctx, "DELETE FROM account_article_bodies WHERE account_id=pb_account()"); err != nil {
 			return err
 		}
 		batch := &pgx.Batch{}
@@ -73,7 +73,7 @@ func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, i
 			if err != nil {
 				return err
 			}
-			batch.Queue("INSERT INTO account_articles(account_id,username,id,record) VALUES('csdn-main',$1,$2,$3)", username, item.ID, data)
+			batch.Queue("INSERT INTO account_articles(account_id,username,id,record) VALUES(pb_account(),$1,$2,$3)", username, item.ID, data)
 		}
 		results := tx.SendBatch(ctx, batch)
 		if err = results.Close(); err != nil {
@@ -85,7 +85,7 @@ func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, i
 		return ErrInvalid
 	}
 	var exists bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM account_articles WHERE account_id='csdn-main' AND username=$1 AND id=$2)", username, r.ArticleID).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM account_articles WHERE account_id=pb_account() AND username=$1 AND id=$2)", username, r.ArticleID).Scan(&exists); err != nil {
 		return err
 	}
 	if !exists {
@@ -102,12 +102,12 @@ func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, i
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "INSERT INTO account_article_bodies(account_id,username,id,record,fetched_at) VALUES('csdn-main',$1,$2,$3,$4) ON CONFLICT(account_id,id) DO UPDATE SET username=excluded.username,record=excluded.record,fetched_at=excluded.fetched_at", username, r.ArticleID, data, now)
+	_, err = tx.Exec(ctx, "INSERT INTO account_article_bodies(account_id,username,id,record,fetched_at) VALUES(pb_account(),$1,$2,$3,$4) ON CONFLICT(account_id,id) DO UPDATE SET username=excluded.username,record=excluded.record,fetched_at=excluded.fetched_at", username, r.ArticleID, data, now)
 	return err
 }
 func latestArticleJob(ctx context.Context, tx pgx.Tx, username, kind, id string) (*Job, error) {
 	var data []byte
-	err := tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'kind'=$1 AND record->>'account_username'=$2 AND COALESCE(record->>'article_id','')=$3 ORDER BY created_at DESC,id DESC LIMIT 1", kind, username, id).Scan(&data)
+	err := tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=pb_account() AND record->>'kind'=$1 AND record->>'account_username'=$2 AND COALESCE(record->>'article_id','')=$3 ORDER BY created_at DESC,id DESC LIMIT 1", kind, username, id).Scan(&data)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -123,7 +123,7 @@ func latestArticleJob(ctx context.Context, tx pgx.Tx, username, kind, id string)
 }
 func currentArticleAccount(ctx context.Context, tx pgx.Tx) (string, error) {
 	var username string
-	err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&username)
+	err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id=pb_account()").Scan(&username)
 	return username, err
 }
 func (s *Store) Articles(ctx context.Context, q, status string, page, size int) (ArticlePage, error) {
@@ -141,7 +141,7 @@ func (s *Store) Articles(ctx context.Context, q, status string, page, size int) 
 		return result, err
 	}
 	var data []byte
-	err = tx.QueryRow(ctx, "SELECT record FROM account_article_snapshots WHERE account_id='csdn-main' AND username=$1", username).Scan(&data)
+	err = tx.QueryRow(ctx, "SELECT record FROM account_article_snapshots WHERE account_id=pb_account() AND username=$1", username).Scan(&data)
 	if err == nil {
 		var info ArticleSnapshotInfo
 		if err = json.Unmarshal(data, &info); err != nil {
@@ -154,7 +154,7 @@ func (s *Store) Articles(ctx context.Context, q, status string, page, size int) 
 	if result.SyncJob, err = latestArticleJob(ctx, tx, username, "sync_articles", ""); err != nil {
 		return result, err
 	}
-	where := " FROM account_articles WHERE account_id='csdn-main' AND username=$1 AND ($2='' OR strpos(lower(record->>'title'),lower($2))>0 OR id=$2) AND ($3='' OR record->>'status'=$3)"
+	where := " FROM account_articles WHERE account_id=pb_account() AND username=$1 AND ($2='' OR strpos(lower(record->>'title'),lower($2))>0 OR id=$2) AND ($3='' OR record->>'status'=$3)"
 	if err = tx.QueryRow(ctx, "SELECT count(*)"+where, username, q, status).Scan(&result.Total); err != nil {
 		return result, err
 	}
@@ -199,7 +199,7 @@ func (s *Store) Article(ctx context.Context, id string) (ArticleDetail, error) {
 		return result, err
 	}
 	var data []byte
-	err = tx.QueryRow(ctx, "SELECT record FROM account_articles WHERE account_id='csdn-main' AND username=$1 AND id=$2", username, id).Scan(&data)
+	err = tx.QueryRow(ctx, "SELECT record FROM account_articles WHERE account_id=pb_account() AND username=$1 AND id=$2", username, id).Scan(&data)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, ErrNotFound
 	}
@@ -211,7 +211,7 @@ func (s *Store) Article(ctx context.Context, id string) (ArticleDetail, error) {
 	}
 	articleLinks(&result.Article, username)
 	var fetchedAt time.Time
-	err = tx.QueryRow(ctx, "SELECT record,fetched_at FROM account_article_bodies WHERE account_id='csdn-main' AND username=$1 AND id=$2 AND fetched_at >= $3", username, id, s.now().Add(-30*24*time.Hour)).Scan(&data, &fetchedAt)
+	err = tx.QueryRow(ctx, "SELECT record,fetched_at FROM account_article_bodies WHERE account_id=pb_account() AND username=$1 AND id=$2 AND fetched_at >= $3", username, id, s.now().Add(-30*24*time.Hour)).Scan(&data, &fetchedAt)
 	if err == nil {
 		var body ArticleBody
 		if err = json.Unmarshal(data, &body); err != nil {

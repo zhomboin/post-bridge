@@ -24,6 +24,9 @@ type CreateInput struct {
 	Markdown  string `json:"markdown"`
 }
 type Job struct {
+	CreatedBy                 string              `json:"created_by,omitempty"`
+	OwnerUserID               string              `json:"owner_user_id,omitempty"`
+	ConnectionVersion         int64               `json:"connection_version,omitempty"`
 	AccountNativeID           string              `json:"account_native_id,omitempty"`
 	PublishedHTMLSHA256       string              `json:"published_html_sha256,omitempty"`
 	PublishFromJobID          string              `json:"publish_from_job_id,omitempty"`
@@ -118,7 +121,7 @@ type workerProof struct {
 }
 
 func ValidateCreate(in CreateInput) error {
-	if in.AccountID != "" && in.AccountID != "csdn-main" {
+	if in.AccountID != "" && !validKey(in.AccountID) {
 		return ErrInvalid
 	}
 	if in.ArticleID != "" || !validKey(in.RequestID) || in.Kind != "save_draft" || in.Platform != "csdn" || utf8.RuneCountInString(strings.TrimSpace(in.Title)) < 5 || utf8.RuneCountInString(in.Title) > 100 || strings.TrimSpace(in.Markdown) == "" || utf8.RuneCountInString(in.Markdown) > 200000 || !utf8.ValidString(in.Markdown) {
@@ -187,12 +190,15 @@ func randomToken() string {
 	return hex.EncodeToString(b[:])
 }
 func newRecord(in CreateInput, now time.Time) *record {
+	if in.AccountID == "" {
+		in.AccountID = "csdn-main"
+	}
 	return &record{
 		Job: Job{
 			ID:          randomToken(),
 			RequestID:   in.RequestID,
 			Platform:    "csdn",
-			AccountID:   "csdn-main",
+			AccountID:   in.AccountID,
 			Kind:        in.Kind,
 			ArticleID:   in.ArticleID,
 			Title:       in.Title,

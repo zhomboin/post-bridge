@@ -99,6 +99,13 @@ func (s *IntegrationService) Invite(ctx context.Context, in IntegrationInvitatio
 		return result, e
 	}
 	defer tx.Rollback(ctx)
+	owner, err := integrationOwner(ctx, tx)
+	if err != nil {
+		return result, err
+	}
+	if err = integrationOwnedAccounts(ctx, tx, owner, in.Accounts); err != nil {
+		return result, err
+	}
 	_, e = tx.Exec(ctx, "INSERT INTO integration_invitations(id,token_hash,settings,expires_at,created_at) VALUES($1,$2,$3,$4,$5)", result.ID, hashToken(result.Token), raw, in.ExpiresAt, now)
 	if e != nil {
 		return IntegrationInvitation{}, e
@@ -127,11 +134,14 @@ func (s *IntegrationService) Register(ctx context.Context, token string, in Inte
 		_ = tx.Commit(ctx)
 		return result, e
 	}
-	var id string
+	var id, owner string
 	var raw []byte
-	e = tx.QueryRow(ctx, "SELECT id,settings FROM integration_invitations WHERE token_hash=$1 AND expires_at>$2 AND consumed_at IS NULL FOR UPDATE", hashToken(token), now).Scan(&id, &raw)
+	e = tx.QueryRow(ctx, "SELECT id,settings,owner_user_id FROM integration_invitations WHERE token_hash=$1 AND expires_at>$2 AND consumed_at IS NULL FOR UPDATE", hashToken(token), now).Scan(&id, &raw, &owner)
 	if e != nil {
 		return result, ErrIntegrationAuthentication
+	}
+	if _, e = tx.Exec(ctx, "SELECT set_config('post_bridge.user_id',$1,true)", owner); e != nil {
+		return result, e
 	}
 	var cap IntegrationInvitationInput
 	if e = json.Unmarshal(raw, &cap); e != nil {
@@ -157,6 +167,13 @@ func (s *IntegrationService) Register(ctx context.Context, token string, in Inte
 	return result, e
 }
 func (s *IntegrationService) issue(ctx context.Context, tx pgx.Tx, c IntegrationClient) (IntegrationIssued, error) {
+	owner, err := integrationOwner(ctx, tx)
+	if err != nil {
+		return IntegrationIssued{}, err
+	}
+	if err = integrationOwnedAccounts(ctx, tx, owner, c.Accounts); err != nil {
+		return IntegrationIssued{}, err
+	}
 	raw := make([]byte, 32)
 	if _, e := rand.Read(raw); e != nil {
 		return IntegrationIssued{}, e
@@ -372,7 +389,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 	if s == nil || h == nil {
 		return
 	}
-	h.mux.HandleFunc("GET /api/integration-invitations", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-invitations", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		rows, e := s.store.pool.Query(r.Context(), "SELECT id,settings,expires_at,consumed_at,created_at FROM integration_invitations ORDER BY created_at DESC LIMIT 100")
 		if e != nil {
 			integrationError(w, e)
@@ -420,7 +437,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))
-	h.mux.HandleFunc("POST /api/integration-invitations", h.admin(func(w http.ResponseWriter, r *http.Request, admin session) {
+	h.mux.HandleFunc("POST /api/integration-invitations", h.authenticated(func(w http.ResponseWriter, r *http.Request, admin session) {
 		var in IntegrationInvitationInput
 		if !integrationDecode(w, r, &in) {
 			return
@@ -452,7 +469,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 201, map[string]string{"registration_id": out.ID, "status": out.Status})
 	})
-	h.mux.HandleFunc("GET /api/integration-registrations", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-registrations", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		rows, e := s.store.pool.Query(r.Context(), "SELECT application,status FROM integration_registrations ORDER BY created_at DESC LIMIT 100")
 		if e != nil {
 			integrationError(w, e)
@@ -481,7 +498,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))
-	h.mux.HandleFunc("POST /api/integration-registrations/{id}/approve", h.admin(func(w http.ResponseWriter, r *http.Request, a session) {
+	h.mux.HandleFunc("POST /api/integration-registrations/{id}/approve", h.authenticated(func(w http.ResponseWriter, r *http.Request, a session) {
 		var in IntegrationGrantInput
 		if !integrationDecode(w, r, &in) {
 			return
@@ -493,7 +510,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 201, out)
 	}))
-	h.mux.HandleFunc("POST /api/integration-registrations/{id}/reject", h.admin(func(w http.ResponseWriter, r *http.Request, a session) {
+	h.mux.HandleFunc("POST /api/integration-registrations/{id}/reject", h.authenticated(func(w http.ResponseWriter, r *http.Request, a session) {
 		tx, e := s.store.pool.Begin(r.Context())
 		if e != nil {
 			integrationError(w, e)
@@ -516,7 +533,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 200, map[string]string{"status": "rejected"})
 	}))
-	h.mux.HandleFunc("GET /api/integration-clients", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-clients", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		rows, e := s.store.pool.Query(r.Context(), "SELECT metadata FROM integration_clients ORDER BY created_at DESC LIMIT 100")
 		if e != nil {
 			integrationError(w, e)
@@ -542,7 +559,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))
-	h.mux.HandleFunc("GET /api/integration-clients/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-clients/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		out, e := s.Client(r.Context(), r.PathValue("id"))
 		if e != nil {
 			integrationError(w, e)
@@ -550,7 +567,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 200, out)
 	}))
-	h.mux.HandleFunc("PUT /api/integration-clients/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, a session) {
+	h.mux.HandleFunc("PUT /api/integration-clients/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, a session) {
 		var in IntegrationGrantInput
 		if !integrationDecode(w, r, &in) {
 			return
@@ -562,7 +579,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 200, out)
 	}))
-	h.mux.HandleFunc("POST /api/integration-clients/{id}/rotate", h.admin(func(w http.ResponseWriter, r *http.Request, a session) {
+	h.mux.HandleFunc("POST /api/integration-clients/{id}/rotate", h.authenticated(func(w http.ResponseWriter, r *http.Request, a session) {
 		out, e := s.Rotate(r.Context(), r.PathValue("id"), a.Username)
 		if e != nil {
 			integrationError(w, e)
@@ -571,7 +588,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		writeJSON(w, 201, out)
 	}))
 	for _, action := range []string{"suspend", "resume", "revoke"} {
-		h.mux.HandleFunc("POST /api/integration-clients/{id}/"+action, h.admin(func(w http.ResponseWriter, r *http.Request, a session) {
+		h.mux.HandleFunc("POST /api/integration-clients/{id}/"+action, h.authenticated(func(w http.ResponseWriter, r *http.Request, a session) {
 			if e := s.Transition(r.Context(), r.PathValue("id"), action, a.Username); e != nil {
 				integrationError(w, e)
 				return
@@ -591,7 +608,7 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 		}
 		writeJSON(w, 200, map[string]string{"status": "active"})
 	})
-	h.mux.HandleFunc("GET /api/integration-audit", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-audit", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		rows, e := s.store.pool.Query(r.Context(), "SELECT id,client_id,action,actor,created_at FROM integration_audit WHERE ($1='' OR client_id=$1) ORDER BY id DESC LIMIT 100", r.URL.Query().Get("client_id"))
 		if e != nil {
 			integrationError(w, e)

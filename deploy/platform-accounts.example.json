@@ -3,6 +3,7 @@
     {
       "id": "xiaohongshu-main",
       "platform": "xiaohongshu",
+      "owner_username": "<已存在的本站用户名>",
       "username": "<预期小红书号>",
       "user_id": "<官方稳定用户标识>",
       "display_name": "<后台显示名称>",

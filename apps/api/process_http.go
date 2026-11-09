@@ -9,8 +9,8 @@ import (
 )
 
 func (h *handler) processRoutes() {
-	h.mux.HandleFunc("GET /api/processes", h.admin(h.processes))
-	h.mux.HandleFunc("GET /api/jobs/{id}/history", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/processes", h.authenticated(h.processes))
+	h.mux.HandleFunc("GET /api/jobs/{id}/history", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		page, size, ok := pagination(w, r)
 		if !ok {
 			return
@@ -22,7 +22,7 @@ func (h *handler) processRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": page, "page_size": size, "transitions": transitions})
 	}))
-	h.mux.HandleFunc("GET /api/jobs/{id}/changes", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/jobs/{id}/changes", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		attempt := 0
 		if r.URL.Query().Has("attempt") {
 			var err error

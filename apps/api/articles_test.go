@@ -174,14 +174,14 @@ func TestArticleFailedSyncRetainsSnapshotAndRejectsWrongAccount(t *testing.T) {
 	}
 	c, _ = s.Claim(ctx, "reader")
 	s.Progress(ctx, c.Job.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "verifying"})
-	if _, err = s.pool.Exec(ctx, "UPDATE account SET username='other' WHERE id='csdn-main'"); err != nil {
+	if _, err = s.pool.Exec(ctx, "UPDATE account SET connection_version=connection_version+1 WHERE id='csdn-main'"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Complete(ctx, c.Job.ID, CompleteInput{LeaseToken: c.LeaseToken, Status: "succeeded", Articles: sampleArticles()}); err != ErrConflict {
 		t.Fatal("old account late result accepted", err)
 	}
 	p, err = s.Articles(ctx, "", "", 1, 20)
-	if err != nil || p.Total != 0 || p.Snapshot != nil {
+	if err != nil || p.Total != 2 || p.Snapshot == nil {
 		t.Fatal("account data leaked", err)
 	}
 }
@@ -315,7 +315,7 @@ func TestArticleAccountSwitchRejectsFailureAndHeartbeat(t *testing.T) {
 				t.Fatal(err)
 			}
 			c, _ := s.Claim(ctx, "reader")
-			s.pool.Exec(ctx, "UPDATE account SET username='new-account',status='connected' WHERE id='csdn-main'")
+			s.pool.Exec(ctx, "UPDATE account SET connection_version=connection_version+1,status='connected' WHERE id='csdn-main'")
 			if err = s.Complete(ctx, j.ID, CompleteInput{LeaseToken: c.LeaseToken, Status: status, ErrorCode: "needs_login"}); err != ErrConflict {
 				t.Fatal("old account failure accepted", err)
 			}

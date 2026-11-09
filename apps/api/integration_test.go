@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func testStore(t *testing.T) *Store {
+func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -40,11 +40,15 @@ func testStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := NewStore(ctx, pool, "tester", "测试账号")
+	t.Cleanup(pool.Close)
+	return pool
+}
+func testStore(t *testing.T) *Store {
+	t.Helper()
+	store, err := NewStore(context.Background(), testPool(t), "tester", "测试账号")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(pool.Close)
 	return store
 }
 func createTest(t *testing.T, s *Store, key string) Job {
@@ -223,7 +227,7 @@ func TestHTTPAuthCSRFAndInputBoundaries(t *testing.T) {
 	if w := request("GET", "/api/jobs", "", nil, "", "", "private-test-worker-token-32-characters"); w.Code != 401 {
 		t.Fatal("worker called admin")
 	}
-	for _, body := range []string{`{"request_id":"a","kind":"publish","platform":"csdn","title":"valid title","markdown":"body"}`, `{"request_id":"a","kind":"save_draft","platform":"zhihu","title":"valid title","markdown":"body"}`, `{"request_id":"a","kind":"save_draft","platform":"csdn","title":"valid title","markdown":"<script>bad</script>"}`, `{"request_id":"a","kind":"save_draft","platform":"csdn","title":"valid title","markdown":"body","account_id":"foreign"}`} {
+	for _, body := range []string{`{"request_id":"a","kind":"publish","platform":"csdn","title":"valid title","markdown":"body"}`, `{"request_id":"a","kind":"save_draft","platform":"zhihu","title":"valid title","markdown":"body"}`, `{"request_id":"a","kind":"save_draft","platform":"csdn","title":"valid title","markdown":"<script>bad</script>"}`} {
 		if w := request("POST", "/api/jobs", body, cookie, data.CSRF, "http://localhost", ""); w.Code != 400 {
 			t.Fatal("invalid input accepted", w.Code, w.Body.String())
 		}

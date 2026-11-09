@@ -52,22 +52,36 @@ test.beforeEach(async ({ page }) => {
     const value =
       path === '/api/session'
         ? { user: { username: '演示管理员' }, csrf_token: 'synthetic-csrf' }
-        : path === '/api/integration-clients'
-          ? { items: [client] }
-          : path === '/api/integration-clients/client-example'
-            ? client
-            : path === '/api/integration-registrations'
-              ? {
-                  items: [
-                    {
-                      ...client,
-                      grant_version: undefined,
-                      status: 'pending',
-                      created_at: '2026-01-01T00:00:00Z',
-                    },
-                  ],
-                }
-              : { items: [], total: 0, page: 1, page_size: 50 };
+        : path === '/api/accounts'
+          ? {
+              items: [
+                {
+                  account: {
+                    id: 'csdn-example',
+                    platform: 'csdn',
+                    display_name: '合成 CSDN 账号',
+                    status: 'connected',
+                    verified: true,
+                  },
+                },
+              ],
+            }
+          : path === '/api/integration-clients'
+            ? { items: [client] }
+            : path === '/api/integration-clients/client-example'
+              ? client
+              : path === '/api/integration-registrations'
+                ? {
+                    items: [
+                      {
+                        ...client,
+                        grant_version: undefined,
+                        status: 'pending',
+                        created_at: '2026-01-01T00:00:00Z',
+                      },
+                    ],
+                  }
+                : { items: [], total: 0, page: 1, page_size: 50 };
     await route.fulfill({ json: value });
   });
 });
@@ -115,7 +129,7 @@ test('审批不要求反向服务，邀请弹窗支持键盘关闭与焦点返�
   await page.goto(previewUrl + '/integrations?tab=registrations');
   await page.getByRole('button', { name: '审批', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '批准 演示内容中心' })).toBeVisible();
-  await expect(page.getByLabel('允许账号（逗号分隔）')).toHaveValue('csdn-example');
+  await expect(page.getByRole('checkbox', { name: '合成 CSDN 账号', exact: true })).toBeChecked();
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '批准并签发密钥', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -127,6 +141,7 @@ test('审批不要求反向服务，邀请弹窗支持键盘关闭与焦点返�
   await open.click();
   const dialog = page.getByRole('dialog', { name: '创建邀请' });
   const close = dialog.getByRole('button', { name: '关闭', exact: true });
+  await expect(dialog.getByRole('button', { name: '生成邀请', exact: true })).toBeEnabled();
   await expect(close).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(dialog.getByRole('button', { name: '生成邀请', exact: true })).toBeFocused();

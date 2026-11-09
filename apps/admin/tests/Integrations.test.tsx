@@ -49,17 +49,30 @@ beforeEach(() => {
   calls = [];
   window.history.replaceState({}, '', '/integrations');
   handler = (url) =>
-    url === '/api/session'
-      ? response({ user: { username: '管理员' }, csrf_token: 'csrf' })
-      : url === '/api/integration-clients'
-        ? response({ items: [client] })
-        : url === '/api/integration-clients/client-one'
-          ? response(client)
-          : url.startsWith('/api/integration-preparations?')
-            ? response({ items: [preparation], total: 1, page: 1, page_size: 20 })
-            : url === '/api/integration-preparations/prep-one'
-              ? response(preparation)
-              : response({ items: [] });
+    url === '/api/accounts'
+      ? response({
+          items: [
+            {
+              account: {
+                id: 'csdn-main',
+                platform: 'csdn',
+                display_name: '合成 CSDN 账号',
+                status: 'connected',
+              },
+            },
+          ],
+        })
+      : url === '/api/session'
+        ? response({ user: { username: '管理员' }, csrf_token: 'csrf' })
+        : url === '/api/integration-clients'
+          ? response({ items: [client] })
+          : url === '/api/integration-clients/client-one'
+            ? response(client)
+            : url.startsWith('/api/integration-preparations?')
+              ? response({ items: [preparation], total: 1, page: 1, page_size: 20 })
+              : url === '/api/integration-preparations/prep-one'
+                ? response(preparation)
+                : response({ items: [] });
   vi.stubGlobal(
     'fetch',
     vi.fn((url, init) => {
@@ -188,11 +201,11 @@ it('离开邀请页后迟到的签发响应不显示密钥', async () => {
   fireEvent.click(await screen.findByRole('button', { name: '创建邀请' }));
   fireEvent.change(screen.getByLabelText('来源标识'), { target: { value: 'editorial' } });
   fireEvent.change(screen.getByLabelText('运行环境'), { target: { value: 'test' } });
-  fireEvent.change(screen.getByLabelText('允许账号（逗号分隔）'), {
-    target: { value: 'csdn-main' },
-  });
+  fireEvent.click(await screen.findByLabelText('合成 CSDN 账号'));
   fireEvent.change(screen.getByLabelText('邀请有效期'), { target: { value: '2099-01-01T00:00' } });
   fireEvent.change(screen.getByLabelText('应用有效期'), { target: { value: '2099-02-01T00:00' } });
+  if (!((await screen.findByLabelText('合成 CSDN 账号')) as HTMLInputElement).checked)
+    fireEvent.click(screen.getByLabelText('合成 CSDN 账号'));
   fireEvent.click(screen.getByRole('button', { name: '生成邀请' }));
   window.history.pushState({}, '', '/integrations?tab=clients');
   fireEvent.popState(window);
@@ -224,11 +237,12 @@ it('创建邀请携带CSRF且关闭和离开均清除一次令牌', async () => 
   for (const [label, value] of [
     ['来源标识', 'editorial'],
     ['运行环境', 'test'],
-    ['允许账号（逗号分隔）', 'csdn-main'],
     ['邀请有效期', '2099-01-01T00:00'],
     ['应用有效期', '2099-02-01T00:00'],
   ])
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  if (!((await screen.findByLabelText('合成 CSDN 账号')) as HTMLInputElement).checked)
+    fireEvent.click(screen.getByLabelText('合成 CSDN 账号'));
   fireEvent.click(screen.getByRole('button', { name: '生成邀请' }));
   await screen.findByText('one-time-invitation');
   const call = calls.find((item) => item.init?.method === 'POST')!;
@@ -252,6 +266,7 @@ it('应用授权只提交固定接入字段，无需反向服务配置', async (
   expect(screen.queryByText('反向来源')).toBeNull();
   expect(screen.queryByLabelText('来源地址')).toBeNull();
   expect(screen.queryByLabelText('来源密钥')).toBeNull();
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
   fireEvent.click(screen.getByRole('button', { name: '保存应用配置' }));
   await waitFor(() => expect(calls.some((call) => call.init?.method === 'PUT')).toBe(true));
   const body = JSON.parse(calls.find((call) => call.init?.method === 'PUT')!.init!.body as string);
@@ -328,6 +343,7 @@ it('审批只签发一次密钥并发送当前权限和账号', async () => {
         : base(url, init);
   render(<App />);
   fireEvent.click(await screen.findByRole('button', { name: '审批' }));
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
   fireEvent.click(screen.getByRole('button', { name: '批准并签发密钥' }));
   await screen.findByText('approval-example-secret');
   const call = calls.find((item) => item.url.endsWith('/approve'))!;
@@ -552,4 +568,21 @@ it('分发子任务来源暂停显示来源待处理', async () => {
   await screen.findByRole('heading', { name: '分发 article-one' });
   expect(screen.getByText('来源待处理')).toBeTruthy();
   expect(screen.queryByRole('button', { name: '恢复原任务' })).toBeNull();
+});
+
+it('保存来源权限时移除已解绑账号，不影响仍有效的授权账号', async () => {
+  window.history.replaceState({}, '', '/integrations?tab=clients');
+  const base = handler;
+  handler = (url, init) =>
+    url === '/api/integration-clients/client-one' && init?.method !== 'PUT'
+      ? response({ ...client, accounts: ['csdn-main', 'unbound-account'] })
+      : base(url, init);
+  render(<App />);
+  fireEvent.click(await screen.findByRole('button', { name: '内容中心' }));
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
+  await screen.findByRole('checkbox', { name: '合成 CSDN 账号' });
+  fireEvent.click(screen.getByRole('button', { name: '保存应用配置' }));
+  await waitFor(() => expect(calls.some((call) => call.init?.method === 'PUT')).toBe(true));
+  const sent = calls.find((call) => call.init?.method === 'PUT')!;
+  expect(JSON.parse(String(sent.init?.body)).accounts).toEqual(['csdn-main']);
 });

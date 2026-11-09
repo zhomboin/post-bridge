@@ -180,7 +180,7 @@ func validateIntegrationTargets(targets []IntegrationTarget) error {
 		return ErrIntegrationUnsupported
 	}
 	for _, target := range targets {
-		if target.Platform != "csdn" || target.AccountID != "csdn-main" || target.Operation != "save_draft" {
+		if target.Platform != "csdn" || !validKey(target.AccountID) || target.Operation != "save_draft" {
 			return ErrIntegrationUnsupported
 		}
 	}

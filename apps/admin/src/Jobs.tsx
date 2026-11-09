@@ -27,13 +27,14 @@ import {
   useAction,
   useResource,
   useWorkspace,
+  type Account,
   type Job,
   type PageData,
 } from './runtime';
 
 const platformText = (job: Job) => (job.platform === 'xiaohongshu' ? '小红书' : 'CSDN');
 const accountSettings = (job: Job) =>
-  job.platform === 'xiaohongshu'
+  job.account_id && job.account_id !== 'csdn-main'
     ? '/account?tab=settings&account=' + encodeURIComponent(job.account_id)
     : '/account?tab=settings';
 const readOnlyJob = (job: Job) =>
@@ -193,7 +194,16 @@ export function Jobs() {
 }
 
 export function NewJob() {
-  const { api, navigate } = useWorkspace();
+  const { api, navigate, route } = useWorkspace();
+  const accounts = useResource<{ items: { account: Account }[] }>('/api/accounts');
+  const eligible =
+    accounts.data?.items.filter(
+      (item) => item.account.platform === 'csdn' && item.account.verified !== false,
+    ) || [];
+  const [chosen, setChosen] = useState(
+    new URLSearchParams(route.split('?')[1]).get('account') || '',
+  );
+  const accountID = chosen || eligible[0]?.account.id || '';
   const [title, setTitle] = useState('');
   const [markdown, setMarkdown] = useState('');
   const [preview, setPreview] = useState(false);
@@ -220,11 +230,16 @@ export function NewJob() {
       );
       return;
     }
-    const fingerprint = JSON.stringify({ title: title.trim(), markdown });
+    if (!eligible.some((item) => item.account.id === accountID)) {
+      action.setError('请选择可用的 CSDN 账号。');
+      return;
+    }
+    const fingerprint = JSON.stringify({ account_id: accountID, title: title.trim(), markdown });
     if (request.current?.fingerprint !== fingerprint)
       request.current = { fingerprint, id: crypto.randomUUID() };
     const body = {
       request_id: request.current.id,
+      account_id: accountID,
       kind: 'save_draft',
       platform: 'csdn',
       title: title.trim(),
@@ -237,7 +252,7 @@ export function NewJob() {
     const result = await action.run((signal) =>
       api<Job>('/api/jobs', { method: 'POST', body: JSON.stringify(body), signal }),
     );
-    if (result) navigate(jobHref(result.id));
+    if (result) navigate(jobHref(result.id) + '?account=' + encodeURIComponent(accountID));
   }
   return (
     <div className="page">
@@ -254,6 +269,23 @@ export function NewJob() {
         <section className="surface">
           <div className="surface-body">
             <form className="form-grid" onSubmit={submit} noValidate>
+              <label>
+                发布账号
+                <select
+                  aria-label="发布账号"
+                  value={accountID}
+                  disabled={action.pending || accounts.loading}
+                  onChange={(event) => setChosen(event.target.value)}
+                >
+                  {eligible.map(({ account }) => (
+                    <option key={account.id} value={account.id}>
+                      {account.display_name || account.username}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ResourceError error={accounts.error} />
+
               <label>
                 文章标题
                 <input
@@ -308,7 +340,11 @@ export function NewJob() {
                 </div>
               )}
               <div className="form-footer">
-                <button type="submit" className="primary" disabled={action.pending}>
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={action.pending || accounts.loading}
+                >
                   {action.pending ? '正在提交…' : '保存到CSDN草稿'}
                 </button>
               </div>

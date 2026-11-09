@@ -204,7 +204,7 @@ func (s *Store) saveCSDNPublishPreset(ctx context.Context, revision int64, optio
 	if err != nil || options.Summary != "" || options.OriginalURL != "" || options.RightsConfirmed {
 		return csdnPublishPreset{}, ErrInvalid
 	}
-	const accountID = "csdn-main"
+	accountID := accountOf(ctx)
 	var result csdnPublishPreset
 	err = s.locked(ctx, func(tx pgx.Tx, _ time.Time) error {
 		current, err := readCSDNPublishPreset(ctx, tx, accountID)
@@ -233,9 +233,9 @@ func (s *Store) saveCSDNPublishPreset(ctx context.Context, revision int64, optio
 
 func (h *handler) csdnPublishPresetRoutes() {
 	const path = "/api/account/csdn-publish-preset"
-	h.mux.HandleFunc("GET "+path, h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
-		const accountID = "csdn-main"
+	h.mux.HandleFunc("GET "+path, h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		ctx := r.Context()
+		accountID := accountOf(ctx)
 		preset, err := readCSDNPublishPreset(ctx, h.store.pool, accountID)
 		if err == nil {
 			preset.AvailableCategories, err = availableCSDNCategories(ctx, h.store.pool, accountID, preset.Options.Categories)
@@ -246,7 +246,7 @@ func (h *handler) csdnPublishPresetRoutes() {
 		}
 		writeJSON(w, http.StatusOK, preset)
 	}))
-	h.mux.HandleFunc("PUT "+path, h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("PUT "+path, h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			Revision *int64              `json:"revision"`
 			Options  *CSDNPublishOptions `json:"options"`

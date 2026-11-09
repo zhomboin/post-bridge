@@ -138,7 +138,7 @@ func TestIntegrationGuardClaimRejectsCurrentPermissionChanges(t *testing.T) {
 					AuthorizationValid: false,
 				}
 				raw, _ := json.Marshal(event)
-				if _, err := s.pool.Exec(context.Background(), "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", c.SourceID, d.ArticleID, event.StateSeq, raw); err != nil {
+				if _, err := s.pool.Exec(context.Background(), "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(owner_user_id,source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", c.SourceID, d.ArticleID, event.StateSeq, raw); err != nil {
 					t.Fatal(err)
 				}
 			}

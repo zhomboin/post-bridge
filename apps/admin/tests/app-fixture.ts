@@ -33,6 +33,19 @@ beforeEach(() => {
   appFixture.calls = [];
   appFixture.handler = (url) => {
     if (url === '/api/session') return response(session);
+    if (url === '/api/accounts')
+      return response({
+        items: [
+          {
+            account: {
+              id: 'csdn-main',
+              platform: 'csdn',
+              display_name: '测试账号',
+              status: 'needs_login',
+            },
+          },
+        ],
+      });
     if (url.startsWith('/api/jobs?'))
       return response({ items: [job], total: 1, page: 1, page_size: 50 });
     if (url === '/api/jobs/job-1') return response(job);

@@ -28,6 +28,7 @@ export async function startLoginControl(
   address: string,
   token: string,
   manager: RemoteLoginManager,
+  shutdown?: () => void,
 ): Promise<{ url: string; close(): Promise<void> }> {
   const { host, port } = loginControlAddress(address);
   if (token.length < 32) throw new Error('登录控制密钥无效');
@@ -62,6 +63,12 @@ export async function startLoginControl(
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1');
       if (url.search || url.hash) throw new LoginError(404, '登录接口不存在');
+      if (url.pathname === '/shutdown' && request.method === 'POST' && shutdown) {
+        request.resume();
+        reply(response, 200, { ok: true });
+        setImmediate(shutdown);
+        return;
+      }
       if (url.pathname === '/login' && request.method === 'GET') {
         reply(response, 200, manager.status());
         return;

@@ -83,7 +83,7 @@ describe('多平台账号工作台', () => {
     expect(screen.queryByText('公开发布')).toBeNull();
     fireEvent.click(screen.getByText('账号设置'));
     expect(await screen.findByRole('button', { name: '检查登录状态' })).toBeTruthy();
-    expect(api.mock.calls.some(([path]) => path.startsWith('/api/account/'))).toBe(false);
+    expect(api.mock.calls.some(([path]) => path.startsWith('/api/account/articles'))).toBe(false);
   });
   it('账号切换清空旧列表，不把延迟请求显示到另一账号', async () => {
     const api = apiMock();

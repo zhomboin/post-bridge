@@ -11,6 +11,11 @@ import (
 )
 
 func (s *Store) integrationGuardAllowed(ctx context.Context, tx pgx.Tx, r *record, now time.Time) error {
+	restore, scopeErr := recordOwnerScope(ctx, tx, r.OwnerUserID)
+	if scopeErr != nil {
+		return scopeErr
+	}
+	defer restore()
 	if s.integrations == nil || r.SourceGuardBlocked {
 		return ErrIntegrationAuthentication
 	}
@@ -193,6 +198,8 @@ func (s *Store) integrationProgress(ctx context.Context, id string, in ProgressI
 }
 
 func (s *Store) maintainIntegrations(ctx context.Context, tx pgx.Tx, now time.Time) error {
+	original := scopeOf(ctx).UserID
+	defer func() { _, _ = tx.Exec(ctx, "SELECT set_config('post_bridge.user_id',$1,true)", original) }()
 	rows, err := tx.Query(ctx, "SELECT record FROM integration_preparations FOR UPDATE")
 	if err != nil {
 		return err
@@ -218,6 +225,18 @@ func (s *Store) maintainIntegrations(ctx context.Context, tx pgx.Tx, now time.Ti
 	}
 	cutoff := now.Add(-30 * 24 * time.Hour)
 	for _, p := range preparations {
+		if original == "" {
+			if _, err = tx.Exec(ctx, "SELECT set_config('post_bridge.user_id','',true)"); err != nil {
+				return err
+			}
+			var owner string
+			if err = tx.QueryRow(ctx, "SELECT owner_user_id FROM integration_preparations WHERE id=$1", p.ID).Scan(&owner); err != nil {
+				return err
+			}
+			if _, err = tx.Exec(ctx, "SELECT set_config('post_bridge.user_id',$1,true)", owner); err != nil {
+				return err
+			}
+		}
 		var distributionID string
 		err = tx.QueryRow(ctx, "SELECT id FROM integration_distributions WHERE preparation_id=$1", p.ID).Scan(&distributionID)
 		purge := false

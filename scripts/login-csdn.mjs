@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import { activeBrowserProfile } from '../apps/worker/dist/account-credentials.js';
 import { acquireProfile } from '../apps/worker/dist/profile.js';
 import { loadConfig } from '../apps/worker/dist/config.js';
 import { loginSession } from './login-session.mjs';
@@ -12,7 +13,11 @@ try {
   console.log('请在隔离窗口完成 CSDN 登录，指定身份确认后自动关闭，最长等待五分钟。');
   const matched = await loginSession(
     config,
-    { launch: chromium.launchPersistentContext.bind(chromium), acquire: acquireProfile },
+    {
+      launch: chromium.launchPersistentContext.bind(chromium),
+      acquire: acquireProfile,
+      browserProfile: activeBrowserProfile,
+    },
     stop.signal,
   );
   console.log(

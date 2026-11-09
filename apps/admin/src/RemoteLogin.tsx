@@ -14,15 +14,22 @@ type Point = { x: number; y: number };
 const labels: Record<string, string> = {
   idle: '准备远程登录',
   pending: '正在等待执行器空闲',
-  active: '请完成 CSDN 登录验证',
+  active: '请完成平台登录验证',
   succeeded: '指定账号登录成功，等待任务已恢复',
   failed: '远程登录未完成',
   expired: '远程登录已超时，请重新开始',
   cancelled: '远程登录已结束',
-  busy: '另一个管理员会话正在验证',
+  busy: '另一个用户会话正在验证',
 };
-export default function RemoteLogin({ onVerified }: { onVerified: () => void }) {
-  const { api } = useWorkspace();
+export default function RemoteLogin({
+  onVerified,
+  platformLabel = 'CSDN',
+}: {
+  onVerified: () => void;
+  platformLabel?: string;
+}) {
+  const { api, route } = useWorkspace();
+  const accountID = new URLSearchParams(route.split('?')[1]).get('account');
   const [open, setOpen] = useState(false);
   const dismissed = useRef(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -95,12 +102,15 @@ export default function RemoteLogin({ onVerified }: { onVerified: () => void }) 
         }
         if (state.status === 'active' && visible.current) {
           const response = await fetch(
-            '/api/account/login/' + encodeURIComponent(state.id) + '/frame',
+            '/api/account/login/' +
+              encodeURIComponent(state.id) +
+              '/frame' +
+              (accountID ? '?account_id=' + encodeURIComponent(accountID) : ''),
             { credentials: 'same-origin', cache: 'no-store', signal: controller.signal },
           );
           if (!response.ok)
             throw Error(
-              response.status === 401 ? '管理员会话已失效，请重新登录' : '登录画面暂时不可用',
+              response.status === 401 ? '用户会话已失效，请重新登录' : '登录画面暂时不可用',
             );
           if (!response.headers.get('Content-Type')?.startsWith('image/jpeg'))
             throw Error('登录画面格式异常');
@@ -336,7 +346,7 @@ export default function RemoteLogin({ onVerified }: { onVerified: () => void }) 
         {!open && remote?.error && <div className="notice warning">{remote.error}</div>}
       </div>
       {open && (
-        <LoginDialog onClose={stop} trigger={trigger}>
+        <LoginDialog title={platformLabel + ' 登录'} onClose={stop} trigger={trigger}>
           <div className="remote-toolbar">
             <p role="status">
               {remote && remote.status !== 'idle'
@@ -357,7 +367,7 @@ export default function RemoteLogin({ onVerified }: { onVerified: () => void }) 
                 {frame ? (
                   <img
                     src={frame}
-                    alt="CSDN 远程登录画面"
+                    alt={platformLabel + ' 远程登录画面'}
                     draggable={false}
                     tabIndex={0}
                     onPointerDown={down}

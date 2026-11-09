@@ -179,7 +179,7 @@ func TestNotesLeaseAndIdentityFencing(t *testing.T) {
 	if s.WorkerHeartbeatForAccount(ctx, "xhs-worker", "csdn-main", true, true) != ErrConflict {
 		t.Fatal("worker crossed accounts")
 	}
-	s.pool.Exec(ctx, "UPDATE account SET native_user_id=$1 WHERE id='xhs-main'", strings.Repeat("c", 24))
+	s.pool.Exec(ctx, "UPDATE account SET connection_version=connection_version+1 WHERE id='xhs-main'")
 	if s.Complete(ctx, c.Job.ID, notesResult(c, noteSnapshot())) != ErrConflict {
 		t.Fatal("changed identity accepted")
 	}
@@ -346,7 +346,7 @@ func TestPlatformAccountBindingCannotBeReplaced(t *testing.T) {
 	if err = s.Complete(ctx, c.Job.ID, notesResult(c, noteSnapshot())); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := NewStore(ctx, s.pool, "tester", "测试账号")
+	restarted, err := NewStore(ctx, s.pool.Pool, "tester", "测试账号")
 	if err != nil {
 		t.Fatal("restart migration", err)
 	}

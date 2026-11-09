@@ -40,31 +40,33 @@ func (h *handler) integrationEndpoint(scope string, next func(http.ResponseWrite
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		next(w, r, principal)
+		next(w, r.WithContext(scoped(r.Context(), tenantScope{UserID: principal.OwnerUserID, CallerID: "client:" + principal.ID})), principal)
 	}
 }
 func (h *handler) integrationRoutes() {
 	h.mux.HandleFunc("GET /api/integrations/v1/targets", h.integrationEndpoint("targets:read", func(w http.ResponseWriter, r *http.Request, p IntegrationPrincipal) {
 		items := []any{}
-		account, err := h.store.Account(r.Context())
+		accounts, err := h.store.Accounts(r.Context())
 		if err != nil {
 			integrationContentError(w, err)
 			return
 		}
-		if integrationHas(p.Accounts, account.ID) && integrationHas(p.Operations, "save_draft") {
-			items = append(items, map[string]any{
-				"platform":        "csdn",
-				"account_id":      account.ID,
-				"display_name":    account.DisplayName,
-				"status":          account.Status,
-				"last_checked_at": account.LastCheckedAt,
-				"operations":      []string{"save_draft"},
-				"body_formats":    []string{"markdown"},
-				"images":          len(csdnImageHosts()) != 0,
-				"title_min":       5,
-				"title_max":       100,
-				"body_max":        200000,
-			})
+		for _, account := range accounts {
+			if account.Platform == "csdn" && account.Enabled && account.Verified && integrationHas(p.Accounts, account.ID) && integrationHas(p.Operations, "save_draft") {
+				items = append(items, map[string]any{
+					"platform":        "csdn",
+					"account_id":      account.ID,
+					"display_name":    account.DisplayName,
+					"status":          account.Status,
+					"last_checked_at": account.LastCheckedAt,
+					"operations":      []string{"save_draft"},
+					"body_formats":    []string{"markdown"},
+					"images":          len(csdnImageHosts()) != 0,
+					"title_min":       5,
+					"title_max":       100,
+					"body_max":        200000,
+				})
+			}
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))
@@ -205,7 +207,7 @@ func (h *handler) integrationRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"received": true, "applied": applied})
 	}))
-	h.mux.HandleFunc("GET /api/integration-preparations", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-preparations", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		page, size, ok := pagination(w, r)
 		if !ok {
 			return
@@ -245,7 +247,7 @@ func (h *handler) integrationRoutes() {
 		}
 		writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": page, "page_size": size})
 	}))
-	h.mux.HandleFunc("GET /api/integration-preparations/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-preparations/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		p, err := integrationReadPreparation(r.Context(), h.store.pool, r.PathValue("id"), false)
 		if err != nil {
 			integrationAdminContentError(w, err)
@@ -253,7 +255,7 @@ func (h *handler) integrationRoutes() {
 		}
 		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
-	h.mux.HandleFunc("PUT /api/integration-preparations/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("PUT /api/integration-preparations/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			Revision int64              `json:"revision"`
 			Drafts   []IntegrationDraft `json:"drafts"`
@@ -268,7 +270,7 @@ func (h *handler) integrationRoutes() {
 		}
 		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
-	h.mux.HandleFunc("POST /api/integration-preparations/{id}/confirm", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/integration-preparations/{id}/confirm", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			Revision int64 `json:"revision"`
 		}
@@ -282,7 +284,7 @@ func (h *handler) integrationRoutes() {
 		}
 		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
-	h.mux.HandleFunc("POST /api/integration-preparations/{id}/revoke", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/integration-preparations/{id}/revoke", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		p, err := h.revokeIntegrationPreparation(r.Context(), r.PathValue("id"))
 		if err != nil {
 			integrationAdminContentError(w, err)
@@ -290,10 +292,10 @@ func (h *handler) integrationRoutes() {
 		}
 		writeJSON(w, 200, integrationAdminPreparationResponse(p, h.origin, h.store.now()))
 	}))
-	h.mux.HandleFunc("GET /api/integration-distributions", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-distributions", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		h.listIntegrationDistributions(w, r)
 	}))
-	h.mux.HandleFunc("GET /api/integration-distributions/{id}", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("GET /api/integration-distributions/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		d, err := integrationReadDistribution(r.Context(), h.store.pool, r.PathValue("id"))
 		if err != nil {
 			integrationAdminContentError(w, err)
@@ -301,7 +303,7 @@ func (h *handler) integrationRoutes() {
 		}
 		h.writeIntegrationDistribution(w, r, d, 200)
 	}))
-	h.mux.HandleFunc("POST /api/integration-distributions/{id}/resume", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	h.mux.HandleFunc("POST /api/integration-distributions/{id}/resume", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
 			ConfirmationFingerprint string `json:"confirmation_fingerprint"`
 		}
@@ -356,7 +358,7 @@ func integrationAdminContentError(w http.ResponseWriter, err error) {
 }
 
 func (h *handler) disabledIntegrationRoutes() {
-	unavailable := h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
+	unavailable := h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		fail(w, 503, "integration_disabled", "外部平台接入尚未配置")
 	})
 	for _, path := range []string{"/api/integration-clients", "/api/integration-clients/", "/api/integration-invitations", "/api/integration-invitations/", "/api/integration-registrations", "/api/integration-registrations/", "/api/integration-audit"} {
