@@ -141,6 +141,7 @@ test('审批不要求反向服务，邀请弹窗支持键盘关闭与焦点返�
   await open.click();
   const dialog = page.getByRole('dialog', { name: '创建邀请' });
   const close = dialog.getByRole('button', { name: '关闭', exact: true });
+  await expect(dialog.getByRole('button', { name: '生成邀请', exact: true })).toBeEnabled();
   await expect(close).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(dialog.getByRole('button', { name: '生成邀请', exact: true })).toBeFocused();
