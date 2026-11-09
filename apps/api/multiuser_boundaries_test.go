@@ -189,3 +189,43 @@ func TestMultiuserCannotUnbindUnresolvedPlatformResult(t *testing.T) {
 		t.Fatal("failed unbind revoked active connection", err)
 	}
 }
+
+func TestMultiuserRemovingImportedConfigDoesNotRevokeCredentials(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	cfg := Config{Store: store, AdminUsername: "admin", AdminPassword: "administrator-secret", WorkerToken: strings.Repeat("w", 32), Origin: "http://bridge.test", PlatformAccounts: []PlatformAccountConfig{{ID: "imported-second", Platform: "csdn", Username: "configured_second", DisplayName: "导入账号", WorkerToken: strings.Repeat("x", 32)}}}
+	if _, err := NewHandler(ctx, cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.PlatformAccounts = nil
+	h, err := NewHandler(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest("GET", "/internal/worker/accounts", nil)
+	request.Header.Set("Authorization", "Bearer "+cfg.WorkerToken)
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, request)
+	var out struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+			Revoked bool   `json:"credentials_revoked"`
+		}
+	}
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &out) != nil {
+		t.Fatal("scheduler metadata", response.Code)
+	}
+	found := false
+	for _, item := range out.Items {
+		if item.ID == "imported-second" {
+			found = true
+			if item.Enabled || item.Revoked {
+				t.Fatal("removing config requested destructive credential cleanup")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("retained imported account lost")
+	}
+}

@@ -210,7 +210,7 @@ func (h *handler) accountManagementRoutes() {
 			fail(w, 401, "unauthorized", "需要调度器身份")
 			return
 		}
-		rows, err := h.store.pool.Query(r.Context(), `SELECT a.id,a.platform,a.username,a.native_user_id,a.owner_user_id,a.connection_version,c.profile_ref,a.enabled AND u.enabled,NOT a.enabled,(coalesce(c.wanted_at>now()-interval '30 seconds',false) OR EXISTS(SELECT 1 FROM jobs wanted WHERE wanted.account_id=a.id AND (wanted.record->>'status'='running' OR wanted.record->>'Ready'='true'))),ARRAY(SELECT profile_ref FROM account_connections retired WHERE retired.account_id=a.id AND NOT retired.enabled ORDER BY retired.version)
+		rows, err := h.store.pool.Query(r.Context(), `SELECT a.id,a.platform,a.username,a.native_user_id,a.owner_user_id,a.connection_version,c.profile_ref,a.enabled AND u.enabled,a.credentials_revoked,(coalesce(c.wanted_at>now()-interval '30 seconds',false) OR EXISTS(SELECT 1 FROM jobs wanted WHERE wanted.account_id=a.id AND (wanted.record->>'status'='running' OR wanted.record->>'Ready'='true'))),ARRAY(SELECT profile_ref FROM account_connections retired WHERE retired.account_id=a.id AND NOT retired.enabled ORDER BY retired.version)
  FROM account a JOIN users u ON u.id=a.owner_user_id LEFT JOIN LATERAL (SELECT profile_ref,wanted_at FROM account_connections WHERE account_id=a.id ORDER BY version DESC LIMIT 1) c ON true ORDER BY EXISTS(SELECT 1 FROM jobs running WHERE running.account_id=a.id AND running.record->>'status'='running') DESC,c.wanted_at DESC,a.id`)
 		if err != nil {
 			replyError(w, err)
