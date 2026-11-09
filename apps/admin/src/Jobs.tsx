@@ -1,3 +1,4 @@
+import { contentOperations, platformLabel } from './content-operations';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -32,25 +33,22 @@ import {
   type PageData,
 } from './runtime';
 
-const platformText = (job: Job) => (job.platform === 'xiaohongshu' ? '小红书' : 'CSDN');
+const platformText = (job: Job) => platformLabel(job.platform);
 const accountSettings = (job: Job) =>
   job.account_id && job.account_id !== 'csdn-main'
     ? '/account?tab=settings&account=' + encodeURIComponent(job.account_id)
     : '/account?tab=settings';
-const readOnlyJob = (job: Job) =>
-  job.platform === 'xiaohongshu' || job.kind === 'sync_articles' || job.kind === 'read_article';
+const readOnlyJob = (job: Job) => job.kind === 'check_account' || !!contentOperations[job.kind];
 const kindText = (job: Job) =>
+  contentOperations[job.kind]?.result ||
   (
-    ({
-      sync_notes: '笔记同步',
-      sync_articles: '文章同步',
-      read_article: '正文读取',
-      read_note: '笔记正文读取',
+    {
       check_account: '账号检查',
       publish: '正式发布',
       save_draft: '保存草稿',
-    }) as Record<string, string>
-  )[job.kind] || '未知操作';
+    } as Record<string, string>
+  )[job.kind] ||
+  '未知操作';
 function autoReconcileActive(job: Job) {
   return (
     !job.manual_resolved &&

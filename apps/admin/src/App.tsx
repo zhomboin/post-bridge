@@ -1,3 +1,4 @@
+import { ContentDetailPage } from './ContentAccount';
 import {
   lazy,
   Suspense,
@@ -321,6 +322,18 @@ export default function App() {
         id={pathname.slice('/notes/'.length)}
       />
     );
+  } else if (
+    /^\/contents\/[^/]+$/.test(pathname) &&
+    new URLSearchParams(route.split('?')[1]).get('account')
+  ) {
+    const account = new URLSearchParams(route.split('?')[1]).get('account')!;
+    content = (
+      <ContentDetailPage
+        key={account + pathname}
+        account={account}
+        id={decodeURIComponent(pathname.slice('/contents/'.length))}
+      />
+    );
   } else if (pathname === '/jobs') content = <Jobs />;
   else if (pathname === '/jobs/new') content = <NewJob />;
   else if (/^\/jobs\/[^/]+$/.test(pathname))
@@ -369,7 +382,9 @@ export default function App() {
             item.href ===
             (pathname.startsWith('/integration-preparations')
               ? '/integrations'
-              : pathname.startsWith('/articles') || pathname.startsWith('/notes')
+              : pathname.startsWith('/articles') ||
+                  pathname.startsWith('/notes') ||
+                  pathname.startsWith('/contents')
                 ? '/account'
                 : pathname.startsWith('/jobs')
                   ? '/jobs'
@@ -405,7 +420,9 @@ export default function App() {
                   href ===
                   (pathname.startsWith('/integration-preparations')
                     ? '/integrations'
-                    : pathname.startsWith('/articles') || pathname.startsWith('/notes')
+                    : pathname.startsWith('/articles') ||
+                        pathname.startsWith('/notes') ||
+                        pathname.startsWith('/contents')
                       ? '/account'
                       : pathname.startsWith('/jobs')
                         ? '/jobs'

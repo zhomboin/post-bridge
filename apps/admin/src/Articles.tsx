@@ -1,3 +1,13 @@
+import { useContentTask } from './content-task';
+import { contentBase, contentAccount, useContentDetail } from './content-resource';
+import type {
+  ArticleStatus,
+  Article,
+  ArticleSnapshot,
+  ArticlePage,
+  ArticleDetailData,
+} from './article-types';
+export type { ArticlePage } from './article-types';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, RefreshCw } from 'lucide-react';
 import AccountTrend from './AccountTrend';
@@ -11,7 +21,6 @@ import {
   Status,
   queryPage,
   time,
-  useAction,
   useResource,
   useWorkspace,
   type Account,
@@ -19,76 +28,6 @@ import {
   type PageData,
 } from './runtime';
 
-type ArticleStatus = 'published' | 'draft' | 'rejected' | 'recycled' | 'unknown';
-export type Article = {
-  id: string;
-  title: string;
-  status: ArticleStatus;
-  platform_status: string;
-  posted_at: string;
-  type: string;
-  views: number;
-  likes: number;
-  comments: number;
-  favorites: number;
-  exposures: number;
-  gained_fans: number | null;
-  quality_score: number | null;
-  is_top: boolean;
-  fans_only: boolean;
-  vip_only: boolean;
-  editor_type: number;
-  cover_urls: string[];
-  blog_url?: string;
-  editor_url?: string;
-};
-type Metrics = Record<string, number | null>;
-export type ArticleSnapshot = {
-  username: string;
-  profile: {
-    nickname: string;
-    avatar_url: string;
-    level: number | null;
-    points: number | null;
-    original_articles: number | null;
-    followers: number | null;
-  };
-  counts: Record<string, number>;
-  stats: Metrics;
-  trend: {
-    date: string;
-    views: number | null;
-    comments: number | null;
-    favorites: number | null;
-    followers: number | null;
-    promotion_clicks: number | null;
-    outlink_clicks: number | null;
-  }[];
-  synced_at: string;
-};
-type ArticleBody = {
-  id: string;
-  title: string;
-  markdown: string;
-  html: string;
-  description: string;
-  tags: string[];
-  categories: string[];
-  type: string;
-  visibility: string;
-  platform_status: string;
-  reason: string;
-};
-export type ArticlePage = PageData<Article> & {
-  snapshot: ArticleSnapshot | null;
-  sync_job: Job | null;
-};
-type ArticleDetailData = {
-  article: Article;
-  body: ArticleBody | null;
-  fetched_at: string | null;
-  read_job: Job | null;
-};
 const articleStatuses: Record<ArticleStatus, string> = {
   published: '已发布',
   draft: '草稿',
@@ -166,7 +105,7 @@ export function AccountStats({ snapshot }: { snapshot: ArticleSnapshot }) {
   );
 }
 export function Articles({ resource }: { resource: ReturnType<typeof useResource<ArticlePage>> }) {
-  const { api, route, navigate } = useWorkspace();
+  const { route, navigate } = useWorkspace();
   const params = new URLSearchParams(route.split('?')[1]);
   const [q, setQ] = useState(params.get('q') || '');
   const [status, setStatus] = useState(params.get('status') || '');
@@ -176,9 +115,8 @@ export function Articles({ resource }: { resource: ReturnType<typeof useResource
     setStatus(next.get('status') || '');
   }, [route]);
   const page = queryPage(params);
-  const action = useAction();
+  const action = useContentTask();
   const [submitted, setSubmitted] = useState<Job | null>(null);
-  const requestId = useRef<string | undefined>(undefined);
   const remoteJob = resource.data?.sync_job;
   useEffect(() => {
     if (remoteJob && remoteJob.id === submitted?.id) setSubmitted(null);
@@ -186,16 +124,8 @@ export function Articles({ resource }: { resource: ReturnType<typeof useResource
   const job = submitted || remoteJob;
   async function sync() {
     if (activeJob(job)) return;
-    requestId.current ??= crypto.randomUUID();
-    const result = await action.run((signal) =>
-      api<Job>('/api/account/articles/sync', {
-        method: 'POST',
-        body: JSON.stringify({ request_id: requestId.current }),
-        signal,
-      }),
-    );
+    const result = await action.submit(contentBase(contentAccount(route)) + '/sync');
     if (result) {
-      requestId.current = undefined;
       setSubmitted(result);
       resource.refresh();
     }
@@ -380,15 +310,16 @@ function safeBodyLink(value: string) {
   }
 }
 export function ArticleDetail({ id }: { id: string }) {
-  const { api, route } = useWorkspace();
-  const resource = useResource<ArticleDetailData>(
-    '/api/account/articles/' + encodeURIComponent(id),
+  const { route } = useWorkspace();
+  const resource = useContentDetail<ArticleDetailData>(
+    contentBase(contentAccount(route)) + '/' + encodeURIComponent(id),
+    'csdn',
+    'article',
   );
   const account = useResource<Account>('/api/account');
-  const action = useAction();
+  const action = useContentTask();
   const autoAttempted = useRef(false);
   const [submitted, setSubmitted] = useState<Job | null>(null);
-  const requestId = useRef<string | undefined>(undefined);
   const remoteJob = resource.data?.read_job;
   useEffect(() => {
     if (remoteJob && remoteJob.id === submitted?.id) setSubmitted(null);
@@ -399,16 +330,10 @@ export function ArticleDetail({ id }: { id: string }) {
   async function read() {
     if (activeJob(job)) return;
     autoAttempted.current = true;
-    requestId.current ??= crypto.randomUUID();
-    const result = await action.run((signal) =>
-      api<Job>('/api/account/articles/' + encodeURIComponent(id) + '/read', {
-        method: 'POST',
-        body: JSON.stringify({ request_id: requestId.current }),
-        signal,
-      }),
+    const result = await action.submit(
+      contentBase(contentAccount(route)) + '/' + encodeURIComponent(id) + '/read',
     );
     if (result) {
-      requestId.current = undefined;
       setSubmitted(result);
       resource.refresh();
     }

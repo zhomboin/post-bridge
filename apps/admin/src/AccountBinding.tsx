@@ -1,3 +1,4 @@
+import { contentPlatforms } from './content-contract';
 import { useState, type FormEvent } from 'react';
 import { errorText, useWorkspace, type Account } from './runtime';
 
@@ -76,8 +77,11 @@ export default function AccountBinding({
               disabled={pending}
               onChange={(event) => setPlatform(event.target.value)}
             >
-              <option value="csdn">CSDN</option>
-              <option value="xiaohongshu">小红书</option>
+              {contentPlatforms.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.label}
+                </option>
+              ))}
             </select>
           </label>
           <label>

@@ -110,7 +110,7 @@ test('账号文章只读同步、分页、筛选、正文、安全外链和窄�
   await expect(page.getByText('暂无文章快照', { exact: true })).toBeVisible();
   const accepted = page.waitForResponse(
     (response) =>
-      response.url().endsWith('/api/account/articles/sync') &&
+      response.url().endsWith('/api/accounts/csdn-main/contents/sync') &&
       response.request().method() === 'POST',
   );
   await page.getByRole('button', { name: '同步文章', exact: true }).click();
@@ -155,7 +155,7 @@ test('账号文章只读同步、分页、筛选、正文、安全外链和窄�
   }
   const bodyResponse = page.waitForResponse(
     (response) =>
-      response.url().endsWith('/api/account/articles/101/read') &&
+      response.url().endsWith('/api/accounts/csdn-main/contents/101/read') &&
       response.request().method() === 'POST',
   );
   await page.getByRole('link', { name: title, exact: true }).click();
@@ -222,7 +222,7 @@ test('账号文章只读同步、分页、筛选、正文、安全外链和窄�
   await expect(page).toHaveURL(/\/account\?q=.*status=published/);
   await expect(page.getByLabel('搜索文章', { exact: true })).toHaveValue('只读文章');
   const token = await csrf(page.request);
-  const failedSync = await page.request.post('/api/account/articles/sync', {
+  const failedSync = await page.request.post('/api/accounts/csdn-main/contents/sync', {
     headers: { Origin: stack.url, 'X-CSRF-Token': token },
     data: { request_id: 'failing-sync' },
   });
@@ -246,7 +246,7 @@ test('平台账号页签与正文保持文章筛选、分页和浏览器历史',
   await syntheticAvatar(page);
   await login(page, stack);
   const token = await csrf(page.request);
-  const accepted = await page.request.post('/api/account/articles/sync', {
+  const accepted = await page.request.post('/api/accounts/csdn-main/contents/sync', {
     headers: { Origin: stack.url, 'X-CSRF-Token': token },
     data: { request_id: 'account-tabs-seed' },
   });
@@ -324,7 +324,7 @@ test('平台账号页签与正文保持文章筛选、分页和浏览器历史',
   await expect(page.getByText('第 2 页 / 2 页', { exact: true })).toBeVisible();
   const automaticRead = page.waitForResponse(
     (response) =>
-      /\/api\/account\/articles\/\d+\/read$/.test(response.url()) &&
+      /\/api\/accounts\/csdn-main\/contents\/\d+\/read$/.test(response.url()) &&
       response.request().method() === 'POST',
   );
   const first = page.locator('.article-table tbody .title-link').first();

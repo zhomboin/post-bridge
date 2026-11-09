@@ -114,7 +114,7 @@ type ArticleDetail struct {
 }
 
 func readKind(kind string) bool {
-	return kind == "sync_articles" || kind == "read_article" || kind == "sync_notes" || kind == "read_note"
+	return kind == "sync_articles" || kind == "read_article" || kind == "sync_notes" || kind == "read_note" || kind == "sync_contents" || kind == "read_content"
 }
 func articleStatus(raw string) string {
 	switch raw {

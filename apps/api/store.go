@@ -23,10 +23,14 @@ var tenantSchemaSQL string
 //go:embed integration_content_schema.sql
 var integrationContentSchemaSQL string
 
+//go:embed content_schema.sql
+var contentSchemaSQL string
+
 type Store struct {
 	pool         *tenantPool
 	now          func() time.Time
 	integrations *IntegrationService
+	contents     *contentRegistry
 }
 type Claim struct {
 	Job            Job       `json:"job"`
@@ -81,13 +85,18 @@ func NewStore(ctx context.Context, pool *pgxpool.Pool, username, display string)
 	if _, err = tx.Exec(ctx, tenantSchemaSQL); err != nil {
 		return nil, err
 	}
+	if _, err = tx.Exec(ctx, contentSchemaSQL); err != nil {
+		return nil, err
+	}
 	if _, err = tx.Exec(ctx, "INSERT INTO account(id,username,display_name) VALUES('csdn-main',$1,$2) ON CONFLICT(id) DO NOTHING", username, display); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return &Store{pool: &tenantPool{Pool: pool}, now: func() time.Time { return time.Now().UTC() }}, nil
+	store := &Store{pool: &tenantPool{Pool: pool}, now: func() time.Time { return time.Now().UTC() }}
+	store.contents = builtinContentRegistry(store)
+	return store, nil
 }
 func (s *Store) locked(ctx context.Context, fn func(pgx.Tx, time.Time) error) error {
 	tx, err := s.pool.Begin(ctx)
@@ -147,10 +156,12 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		return Job{}, false, ErrInvalid
 	}
 	if readKind(in.Kind) {
-		if !validKey(in.RequestID) || in.Platform != "csdn" || in.Title != "" || in.Markdown != "" || (in.Kind == "sync_articles" && in.ArticleID != "") || (in.Kind == "read_article" && !numericID.MatchString(in.ArticleID)) {
+		if in.Platform != "csdn" {
 			return Job{}, false, ErrInvalid
 		}
-	} else if in.Kind == "check_account" {
+		return s.createReadJob(ctx, accountOf(ctx), in)
+	}
+	if in.Kind == "check_account" {
 		if in.ArticleID != "" || !validKey(in.RequestID) || in.Platform != "csdn" || in.Title != "" || in.Markdown != "" {
 			return Job{}, false, ErrInvalid
 		}
@@ -173,9 +184,6 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		}
 		if err := tx.QueryRow(ctx, "SELECT username FROM account WHERE id=pb_account() AND platform='csdn'").Scan(&currentUsername); err != nil {
 			return err
-		}
-		if readKind(in.Kind) && !csdnUsername.MatchString(currentUsername) {
-			return ErrInvalid
 		}
 		var hash string
 		var data []byte
@@ -215,44 +223,9 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		if readKind(in.Kind) {
-			if in.Kind == "read_article" {
-				var exists bool
-				if e := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM account_articles WHERE account_id=pb_account() AND username=$1 AND id=$2)", currentUsername, in.ArticleID).Scan(&exists); e != nil {
-					return e
-				}
-				if !exists {
-					return ErrNotFound
-				}
-			}
-			var active []byte
-			e := tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=pb_account() AND record->>'kind'=$1 AND COALESCE(record->>'article_id','')=$2 AND record->>'account_username'=$3 AND record->>'status' IN ('queued','running','waiting_user') ORDER BY created_at DESC,id DESC LIMIT 1", in.Kind, in.ArticleID, currentUsername).Scan(&active)
-			if e == nil {
-				var existing record
-				if e = json.Unmarshal(active, &existing); e != nil {
-					return e
-				}
-				if _, e = tx.Exec(ctx, "INSERT INTO article_read_requests(request_id,fingerprint,job_id) VALUES($1,$2,$3)", in.RequestID, fingerprint(in), existing.ID); e != nil {
-					return e
-				}
-				job = existing.Job
-				return nil
-			}
-			if !errors.Is(e, pgx.ErrNoRows) {
-				return e
-			}
-		}
 		r := newRecord(in, now)
 		r.AccountID = accountOf(ctx)
 		r.AccountUsername = currentUsername
-		if readKind(in.Kind) {
-			r.AccountUsername = currentUsername
-			if in.Kind == "read_article" {
-				if err = tx.QueryRow(ctx, "SELECT record->>'title' FROM account_articles WHERE account_id=pb_account() AND username=$1 AND id=$2", currentUsername, in.ArticleID).Scan(&r.Title); err != nil {
-					return err
-				}
-			}
-		}
 		data, err = json.Marshal(r)
 		if err != nil {
 			return err
@@ -502,7 +475,7 @@ func (s *Store) Progress(ctx context.Context, id string, in ProgressInput) error
 }
 func (s *Store) Complete(ctx context.Context, id string, in CompleteInput) error {
 	return s.mutateLease(ctx, id, in.LeaseToken, func(tx pgx.Tx, r *record, now time.Time) error {
-		if err := s.acceptArticleResult(ctx, tx, r, in, now); err != nil {
+		if err := s.acceptContentResult(ctx, tx, r, in, now); err != nil {
 			return err
 		}
 		if in.RemoteID != "" {
@@ -788,6 +761,13 @@ func (s *Store) Maintain(ctx context.Context) error {
 		if _, err = tx.Exec(ctx, "DELETE FROM account_article_bodies WHERE fetched_at<$1", now.Add(-30*24*time.Hour)); err != nil {
 
 			return err
+		}
+		for _, a := range s.contentRegistry().adapters {
+			if a.BodyTTLSeconds > 0 {
+				if _, err = tx.Exec(ctx, "DELETE FROM content_bodies b USING account a WHERE b.account_id=a.id AND a.platform=$1 AND b.fetched_at<$2", a.ID, now.Add(-time.Duration(a.BodyTTLSeconds)*time.Second)); err != nil {
+					return err
+				}
+			}
 		}
 		if _, err = tx.Exec(ctx, "DELETE FROM process_snapshots WHERE job_id IN (SELECT id FROM jobs WHERE record->>'status' IN ('succeeded','failed','cancelled') AND record->>'outcome' NOT IN ('unknown','submitted') AND record->>'retry_allowed'<>'true' AND (record->>'updated_at')::timestamptz<$1)", now.Add(-30*24*time.Hour)); err != nil {
 			return err

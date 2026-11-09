@@ -1,0 +1,53 @@
+{
+  "ContentIdentity": { "username": "string", "user_id": "string" },
+  "ContentMetric": {
+    "value": "number?",
+    "unit": "string",
+    "begin_at": "string",
+    "end_at": "string"
+  },
+  "ContentItem": {
+    "id": "string",
+    "title": "string",
+    "status": "string",
+    "platform_status": "string",
+    "posted_at": "string",
+    "kind": "string",
+    "cover_urls": "string[]",
+    "metrics": "map:ContentMetric",
+    "extensions": "json"
+  },
+  "ContentSnapshot": {
+    "identity": "ContentIdentity",
+    "scope": "string",
+    "complete": "boolean",
+    "items": "ContentItem[]",
+    "extensions": "json"
+  },
+  "ContentBody": {
+    "id": "string",
+    "format": "string",
+    "text": "string",
+    "html": "string",
+    "images": "string[]",
+    "tags": "string[]",
+    "extensions": "json"
+  },
+  "ContentCapability": { "enabled": "boolean", "formats": "string[]", "kinds": "string[]" },
+  "ContentPlatform": {
+    "id": "string",
+    "label": "string",
+    "id_pattern": "string",
+    "username_pattern": "string",
+    "user_id_pattern": "string",
+    "sync_job": "string",
+    "read_job": "string",
+    "sync_result": "string",
+    "read_result": "string",
+    "identity_result": "string",
+    "body_ttl_seconds": "integer",
+    "invalidate_body_on_sync": "boolean",
+    "read_statuses": "string[]",
+    "capabilities": "map:ContentCapability"
+  }
+}

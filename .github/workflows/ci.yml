@@ -54,6 +54,8 @@ jobs:
           python3 scripts/ci_database.py
       - name: 代码格式检查
         run: npm run format:check
+      - name: 内容契约一致性检查
+        run: npm run contracts:check
       - name: npm 依赖安全检查
         run: npm audit --registry=https://registry.npmjs.org
       - name: Go 依赖调用路径安全检查

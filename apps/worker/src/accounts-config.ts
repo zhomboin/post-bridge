@@ -1,3 +1,4 @@
+import { contentPlatforms } from './content-contract.js';
 import { lstatSync, readFileSync } from 'node:fs';
 import { profilesOverlap } from './account-sandbox.js';
 import { isAbsolute } from 'node:path';
@@ -28,6 +29,7 @@ export async function loadConfigs(env: NodeJS.ProcessEnv = process.env): Promise
   )
     throw Error('平台账号配置无效');
   for (const a of data.accounts) {
+    const definition = contentPlatforms.find((entry) => entry.id === a?.platform);
     const keys = [
       'id',
       'platform',
@@ -41,16 +43,17 @@ export async function loadConfigs(env: NodeJS.ProcessEnv = process.env): Promise
     if (
       !a ||
       Object.keys(a).some((key) => !keys.includes(key)) ||
-      !['csdn', 'xiaohongshu'].includes(a.platform) ||
+      !definition ||
       typeof a.id !== 'string' ||
       !/^[A-Za-z0-9_-]{1,128}$/.test(a.id) ||
       a.id === 'csdn-main' ||
       typeof a.user_id !== 'string' ||
-      (a.platform === 'xiaohongshu' && !/^[a-f0-9]{24}$/.test(a.user_id)) ||
+      (definition && !new RegExp(definition.user_id_pattern).test(a.user_id)) ||
       typeof a.display_name !== 'string' ||
       !a.display_name.trim() ||
       a.display_name.length > 400 ||
       typeof a.username !== 'string' ||
+      (definition && !new RegExp(definition.username_pattern).test(a.username)) ||
       typeof a.profile_dir !== 'string' ||
       typeof a.worker_token_file !== 'string'
     )

@@ -44,8 +44,8 @@ async function stop(child?: ChildProcess) {
   }
 }
 export const test = base.extend<
-  {},
-  { stack: Stack; remoteLoginMethod: 'sms' | 'qr'; xiaohongshu: boolean }
+  { stack: Stack },
+  { remoteLoginMethod: 'sms' | 'qr'; xiaohongshu: boolean }
 >({
   xiaohongshu: [false, { scope: 'worker', option: true }],
   remoteLoginMethod: ['sms', { scope: 'worker', option: true }],
@@ -171,7 +171,8 @@ export const test = base.extend<
         }
       }
     },
-    { scope: 'worker', timeout: 180_000 },
+    // 每个用例独立服务与数据库，登录额度和未决任务不跨用例累积。
+    { scope: 'test', timeout: 180_000 },
   ],
   baseURL: async ({ stack }, use) => {
     await use(stack.url);

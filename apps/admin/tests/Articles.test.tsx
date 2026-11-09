@@ -1,3 +1,4 @@
+import { contentFixture } from './content-fixtures';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -73,7 +74,8 @@ const readJob = {
 };
 let calls: { url: string; init?: RequestInit }[];
 let handler: (url: string, init?: RequestInit) => Response | Promise<Response>;
-const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+const response = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(contentFixture(body, 'csdn')), { status });
 const listing = () => ({
   items: [article],
   total: 21,
@@ -108,8 +110,8 @@ beforeEach(() => {
     if (url === '/api/account') return response({ username: 'example', status: 'connected' });
     if (url === '/api/session')
       return response({ user: { username: '管理员' }, csrf_token: 'csrf' });
-    if (url.startsWith('/api/account/articles?')) return response(listing());
-    if (url === '/api/account/articles/12345') return response(detail());
+    if (url.startsWith('/api/accounts/csdn-main/contents?')) return response(listing());
+    if (url === '/api/accounts/csdn-main/contents/12345') return response(detail());
     return response({ message: '不存在' }, 404);
   };
   vi.stubGlobal(
@@ -135,7 +137,7 @@ describe('CSDN 账号文章', () => {
     const statusFilter = screen.getByRole('combobox', { name: '文章状态' }) as HTMLSelectElement;
     expect(statusFilter.value).toBe('draft');
     expect(statusFilter.getAttribute('aria-label')).toBe('文章状态');
-    const url = calls.find((call) => call.url.startsWith('/api/account/articles?'))!.url;
+    const url = calls.find((call) => call.url.startsWith('/api/accounts/csdn-main/contents?'))!.url;
     expect(new URL(url, 'http://local').searchParams.get('page_size')).toBe('20');
     expect(new URL(url, 'http://local').searchParams.get('page')).toBe('2');
     fireEvent.click(screen.getByRole('link', { name: article.title }));
@@ -155,7 +157,7 @@ describe('CSDN 账号文章', () => {
     const base = handler;
     let failed = false;
     handler = (url, init) =>
-      failed && url.startsWith('/api/account/articles?')
+      failed && url.startsWith('/api/accounts/csdn-main/contents?')
         ? response({ message: '连接中断' }, 503)
         : base(url, init);
     render(<App />);
@@ -176,7 +178,7 @@ describe('CSDN 账号文章', () => {
     const base = handler;
     let finish: (value: Response) => void = () => {};
     handler = (url, init) =>
-      url.startsWith('/api/account/articles?')
+      url.startsWith('/api/accounts/csdn-main/contents?')
         ? response({ ...listing(), items: [], total: 0, snapshot: null })
         : url.endsWith('/sync')
           ? new Promise((resolve) => {
@@ -202,7 +204,7 @@ describe('CSDN 账号文章', () => {
     window.history.replaceState({}, '', '/articles/12345');
     const base = handler;
     handler = (url, init) =>
-      url === '/api/account/articles/12345'
+      url === '/api/accounts/csdn-main/contents/12345'
         ? response({
             ...detail({
               id: '12345',
@@ -243,7 +245,7 @@ describe('CSDN 账号文章', () => {
     window.history.replaceState({}, '', '/articles/12345');
     const base = handler;
     handler = (url, init) =>
-      url === '/api/account/articles/12345'
+      url === '/api/accounts/csdn-main/contents/12345'
         ? response(
             detail(
               {
@@ -300,7 +302,7 @@ describe('CSDN 账号文章', () => {
   it('同步失败显示上次快照，缺失统计保持未知而非零', async () => {
     const base = handler;
     handler = (url, init) =>
-      url.startsWith('/api/account/articles?')
+      url.startsWith('/api/accounts/csdn-main/contents?')
         ? response({
             ...listing(),
             snapshot: {
@@ -370,7 +372,7 @@ describe('CSDN 账号文章', () => {
     window.history.replaceState({}, '', '/articles/12345');
     const base = handler;
     handler = (url, init) =>
-      url === '/api/account/articles/12345'
+      url === '/api/accounts/csdn-main/contents/12345'
         ? response({
             ...detail(),
             article: {
@@ -399,7 +401,7 @@ describe('CSDN 账号文章', () => {
     handler = (url, init) =>
       url.endsWith('/read')
         ? ((queued = true), response(readJob))
-        : url === '/api/account/articles/12345'
+        : url === '/api/accounts/csdn-main/contents/12345'
           ? response(detail(null, queued ? readJob : null))
           : base(url, init);
     render(<App />);
@@ -407,7 +409,7 @@ describe('CSDN 账号文章', () => {
     fireEvent.click(screen.getByRole('button', { name: '刷新本地状态' }));
     await waitFor(() =>
       expect(
-        calls.filter((call) => call.url === '/api/account/articles/12345').length,
+        calls.filter((call) => call.url === '/api/accounts/csdn-main/contents/12345').length,
       ).toBeGreaterThan(1),
     );
     expect(calls.filter((call) => call.url.endsWith('/read'))).toHaveLength(1);
@@ -436,7 +438,9 @@ describe('平台账号工作台', () => {
     expect(screen.getByText('昨日 +22')).toBeTruthy();
     expect(screen.queryByRole('link', { name: article.title })).toBeNull();
     expect(screen.queryByLabelText('搜索文章')).toBeNull();
-    expect(calls.filter((call) => call.url.startsWith('/api/account/articles?'))).toHaveLength(1);
+    expect(
+      calls.filter((call) => call.url.startsWith('/api/accounts/csdn-main/contents?')),
+    ).toHaveLength(1);
   });
 
   it('三页签保留筛选分页，键盘与浏览器历史恢复当前页签', async () => {
@@ -528,7 +532,7 @@ describe('正文自动读取边界', () => {
       window.history.replaceState({}, '', '/articles/12345');
       const base = handler;
       handler = (url, init) =>
-        url === '/api/account/articles/12345'
+        url === '/api/accounts/csdn-main/contents/12345'
           ? response(detail(null, { ...readJob, status }))
           : url.endsWith('/read')
             ? response(readJob)
@@ -554,7 +558,7 @@ describe('正文自动读取边界', () => {
     fireEvent.click(screen.getByRole('button', { name: '刷新本地状态' }));
     await waitFor(() =>
       expect(
-        calls.filter((call) => call.url === '/api/account/articles/12345').length,
+        calls.filter((call) => call.url === '/api/accounts/csdn-main/contents/12345').length,
       ).toBeGreaterThan(1),
     );
     expect(calls.filter((call) => call.url.endsWith('/read'))).toHaveLength(1);
@@ -567,11 +571,11 @@ describe('正文自动读取边界', () => {
     const base = handler;
     let finish: (value: Response) => void = () => {};
     handler = (url, init) =>
-      url === '/api/account/articles/12345/read'
+      url === '/api/accounts/csdn-main/contents/12345/read'
         ? new Promise((resolve) => {
             finish = resolve;
           })
-        : url === '/api/account/articles/67890'
+        : url === '/api/accounts/csdn-main/contents/67890'
           ? response({
               ...detail({
                 id: '67890',
@@ -595,7 +599,9 @@ describe('正文自动读取边界', () => {
     await act(async () => finish(response(readJob)));
     expect(screen.getByLabelText('Markdown 源文').textContent).toBe('新文章源文');
     expect(screen.queryByText('排队中')).toBeNull();
-    expect(calls.filter((call) => call.url === '/api/account/articles/67890/read')).toHaveLength(0);
+    expect(
+      calls.filter((call) => call.url === '/api/accounts/csdn-main/contents/67890/read'),
+    ).toHaveLength(0);
   });
 });
 
@@ -608,7 +614,7 @@ describe('正文异步状态隔离', () => {
     handler = (url, init) =>
       url.endsWith('/read')
         ? ((queued = true), response(readJob))
-        : url === '/api/account/articles/12345'
+        : url === '/api/accounts/csdn-main/contents/12345'
           ? response(
               detail(
                 null,
@@ -636,11 +642,11 @@ describe('正文异步状态隔离', () => {
     const base = handler;
     let finish: (value: Response) => void = () => {};
     handler = (url, init) =>
-      url === '/api/account/articles/12345'
+      url === '/api/accounts/csdn-main/contents/12345'
         ? new Promise((resolve) => {
             finish = resolve;
           })
-        : url === '/api/account/articles/67890'
+        : url === '/api/accounts/csdn-main/contents/67890'
           ? response({
               ...detail({ markdown: '新缓存', html: '', tags: [], categories: [] }),
               article: { ...article, id: '67890', title: '新文章' },
@@ -648,9 +654,11 @@ describe('正文异步状态隔离', () => {
           : base(url, init);
     render(<App />);
     await waitFor(() =>
-      expect(calls.filter((call) => call.url === '/api/account/articles/12345')).toHaveLength(1),
+      expect(
+        calls.filter((call) => call.url === '/api/accounts/csdn-main/contents/12345'),
+      ).toHaveLength(1),
     );
-    const old = calls.find((call) => call.url === '/api/account/articles/12345')!;
+    const old = calls.find((call) => call.url === '/api/accounts/csdn-main/contents/12345')!;
     act(() => {
       window.history.pushState({}, '', '/articles/67890');
       window.dispatchEvent(new PopStateEvent('popstate'));

@@ -97,6 +97,9 @@ type ProgressInput struct {
 	Message             string       `json:"message"`
 }
 type CompleteInput struct {
+	Contents        *ContentSnapshot `json:"contents,omitempty"`
+	Content         *ContentBody     `json:"content,omitempty"`
+	ContentIdentity *ContentIdentity `json:"content_identity,omitempty"`
 	Notes           *NotesSnapshot   `json:"notes,omitempty"`
 	Note            *NoteBody        `json:"note,omitempty"`
 	AccountIdentity *AccountIdentity `json:"account_identity,omitempty"`

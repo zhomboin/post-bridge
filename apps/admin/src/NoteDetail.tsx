@@ -1,3 +1,5 @@
+import { useContentTask } from './content-task';
+import { useContentDetail } from './content-resource';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
@@ -8,7 +10,6 @@ import {
   Status,
   jobHref,
   time,
-  useAction,
   useResource,
   useWorkspace,
   type Job,
@@ -39,12 +40,12 @@ function NoteImage({ url, index }: { url: string; index: number }) {
 }
 
 export default function NoteDetail({ id, account }: { id: string; account: string }) {
-  const { api, route } = useWorkspace();
-  const base = '/api/accounts/' + encodeURIComponent(account) + '/notes/' + id;
-  const data = useResource<NoteDetailData>(base);
-  const action = useAction();
+  const { route } = useWorkspace();
+  const base =
+    '/api/accounts/' + encodeURIComponent(account) + '/contents/' + encodeURIComponent(id);
+  const data = useContentDetail<NoteDetailData>(base, 'xiaohongshu', 'note');
+  const action = useContentTask();
   const once = useRef(false);
-  const request = useRef<string | undefined>(undefined);
   const detail = data.data;
   const active =
     !!detail?.read_job && ['queued', 'running', 'waiting_user'].includes(detail.read_job.status);
@@ -56,16 +57,8 @@ export default function NoteDetail({ id, account }: { id: string; account: strin
       ? candidate
       : '/account?' + new URLSearchParams({ account });
   async function read() {
-    request.current ??= crypto.randomUUID();
-    const job = await action.run((signal) =>
-      api<Job>(base + '/read', {
-        method: 'POST',
-        body: JSON.stringify({ request_id: request.current }),
-        signal,
-      }),
-    );
+    const job = await action.submit(base + '/read');
     if (job) {
-      request.current = undefined;
       data.refresh();
     }
   }

@@ -31,7 +31,8 @@ test('小红书账号隔离、只读快照、键盘及窄屏', async ({ page, st
   await expect(picker).toHaveValue('xhs-main');
   await expect(page.getByText('尚未同步笔记', { exact: true })).toBeVisible();
   const accepted = page.waitForResponse(
-    (r) => r.url().endsWith('/api/accounts/xhs-main/notes/sync') && r.request().method() === 'POST',
+    (r) =>
+      r.url().endsWith('/api/accounts/xhs-main/contents/sync') && r.request().method() === 'POST',
   );
   await page.getByRole('button', { name: '同步笔记', exact: true }).click();
   const job = await (await accepted).json();
@@ -148,7 +149,7 @@ test('小红书账号隔离、只读快照、键盘及窄屏', async ({ page, st
   await page.getByRole('button', { name: '笔记', exact: true }).click();
   const noteID = entries[0].id;
   const acceptedRead = page.waitForResponse(
-    (r) => r.url().endsWith('/notes/' + noteID + '/read') && r.request().method() === 'POST',
+    (r) => r.url().endsWith('/contents/' + noteID + '/read') && r.request().method() === 'POST',
   );
   await page.getByRole('link', { name: '合成笔记 0', exact: true }).click();
   const reading = await (await acceptedRead).json();

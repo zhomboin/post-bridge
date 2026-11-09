@@ -1,3 +1,5 @@
+import { ContentAccount } from './ContentAccount';
+import { contentBase, contentAccount, platformLabel, useContentPage } from './content-resource';
 import XiaohongshuAccount from './XiaohongshuAccount';
 import AccountBinding from './AccountBinding';
 import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from 'react';
@@ -92,7 +94,10 @@ function CSDNAccount({ picker }: { picker: ReactNode }) {
   const search = new URLSearchParams({ page: String(queryPage(params)), page_size: '20' });
   if (params.get('q')) search.set('q', params.get('q')!);
   if (params.get('status')) search.set('status', params.get('status')!);
-  const articles = useResource<ArticlePage>('/api/account/articles?' + search);
+  const articles = useContentPage<ArticlePage>(
+    contentBase(contentAccount(route)) + '?' + search,
+    'csdn',
+  );
   const snapshot = articles.data?.snapshot;
   const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
   function select(value: string) {
@@ -241,7 +246,7 @@ export default function PlatformAccount() {
         )}
         {items.map(({ account }) => (
           <option key={account.id} value={account.id}>
-            {account.platform === 'xiaohongshu' ? '小红书' : 'CSDN'} ·{' '}
+            {platformLabel(account.platform)} ·{' '}
             {account.display_name || account.username || account.id}
           </option>
         ))}
@@ -270,8 +275,10 @@ export default function PlatformAccount() {
       </div>
       {selected?.platform === 'xiaohongshu' ? (
         <XiaohongshuAccount key={id} id={id} picker={picker} />
-      ) : (
+      ) : selected.platform === 'csdn' ? (
         <CSDNAccount key={id} picker={picker} />
+      ) : (
+        <ContentAccount key={id} account={id} platform={selected.platform} picker={picker} />
       )}
     </>
   );

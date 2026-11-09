@@ -52,7 +52,7 @@ func loadPlatformAccounts(path, legacyToken string) ([]PlatformAccountConfig, er
 	}
 	for i := range file.Accounts {
 		a := &file.Accounts[i]
-		if !validKey(a.ID) || a.ID == "csdn-main" || (a.Platform != "xiaohongshu" && a.Platform != "csdn") || !xhsUsername.MatchString(a.Username) || a.Platform == "xiaohongshu" && !xhsUserID.MatchString(a.UserID) || strings.TrimSpace(a.DisplayName) == "" || !boundedText(a.DisplayName, 400) || !filepath.IsAbs(a.ProfileDir) {
+		if !validKey(a.ID) || a.ID == "csdn-main" || !registeredIdentity(a.Platform, a.Username, a.UserID) || strings.TrimSpace(a.DisplayName) == "" || !boundedText(a.DisplayName, 400) || !filepath.IsAbs(a.ProfileDir) {
 			return nil, ErrInvalid
 		}
 		tokenInfo, tokenErr := os.Lstat(a.WorkerTokenFile)
@@ -73,7 +73,8 @@ func (s *Store) ConfigurePlatformAccounts(ctx context.Context, accounts []Platfo
 	}
 	return s.locked(ctx, func(tx pgx.Tx, _ time.Time) error {
 		for _, a := range accounts {
-			if (a.Platform != "xiaohongshu" && a.Platform != "csdn") || !validKey(a.ID) || a.ID == "csdn-main" || !xhsUsername.MatchString(a.Username) || a.Platform == "xiaohongshu" && !xhsUserID.MatchString(a.UserID) {
+			aDefinition, definitionErr := s.contentRegistry().get(a.Platform)
+			if definitionErr != nil || !validKey(a.ID) || a.ID == "csdn-main" || !aDefinition.identity(a.Username, a.UserID) {
 				return ErrInvalid
 			}
 			var owner string
@@ -128,17 +129,15 @@ func (s *Store) Accounts(ctx context.Context) ([]Account, error) {
 	return out, rows.Err()
 }
 
-func accountCapabilities(a Account) map[string]bool {
-	return map[string]bool{
-		"check_login":   true,
-		"sync_articles": a.Platform == "csdn",
-		"read_article":  a.Platform == "csdn",
-		"read_note":     a.Platform == "xiaohongshu",
-		"sync_notes":    a.Platform == "xiaohongshu",
-		"remote_login":  true,
-		"save_draft":    a.Platform == "csdn",
-		"publish":       a.Platform == "csdn",
+func (s *Store) accountCapabilities(a Account) map[string]bool {
+	definition, err := s.contentRegistry().get(a.Platform)
+	if err != nil {
+		return map[string]bool{}
 	}
+	out := map[string]bool{"check_login": definition.supports("check_account"), "remote_login": definition.supports("remote_login"), "save_draft": definition.supports("save_draft"), "publish": definition.supports("publish"), "sync_articles": false, "read_article": false, "sync_notes": false, "read_note": false}
+	out[definition.SyncJob] = definition.supports("list")
+	out[definition.ReadJob] = definition.supports("body")
+	return out
 }
 func (h *handler) platformAccountRoutes() {
 	h.noteDetailRoutes()
@@ -153,7 +152,7 @@ func (h *handler) platformAccountRoutes() {
 			if !a.Enabled {
 				continue
 			}
-			items = append(items, map[string]any{"account": a, "capabilities": accountCapabilities(a)})
+			items = append(items, map[string]any{"account": a, "capabilities": h.store.accountCapabilities(a)})
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))
@@ -163,7 +162,7 @@ func (h *handler) platformAccountRoutes() {
 			replyError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"account": a, "capabilities": accountCapabilities(a)})
+		writeJSON(w, 200, map[string]any{"account": a, "capabilities": h.store.accountCapabilities(a)})
 	}))
 	h.mux.HandleFunc("POST /api/accounts/{account}/check", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {
@@ -177,13 +176,7 @@ func (h *handler) platformAccountRoutes() {
 			replyError(w, err)
 			return
 		}
-		var job Job
-		var created bool
-		if a.Platform == "csdn" {
-			job, created, err = h.store.Create(r.Context(), CreateInput{AccountID: a.ID, Platform: a.Platform, Kind: "check_account", RequestID: in.RequestID})
-		} else {
-			job, created, err = h.store.CreateAccountJob(r.Context(), a.ID, "check_account", in.RequestID)
-		}
+		job, created, err := h.store.CreateAccountJob(r.Context(), a.ID, "check_account", in.RequestID)
 		if err != nil {
 			replyError(w, err)
 			return
@@ -231,7 +224,7 @@ func jobAccountMatches(ctx context.Context, tx pgx.Tx, r *record) (bool, error) 
 	var version int64
 	var enabled, verified bool
 	err := tx.QueryRow(ctx, "SELECT username,native_user_id,platform,connection_version,enabled,verified FROM account WHERE id=$1", r.AccountID).Scan(&current, &native, &platform, &version, &enabled, &verified)
-	return enabled && verified && (r.ConnectionVersion == 0 || r.ConnectionVersion == version) && current == r.AccountUsername && current != "" && platform == r.Platform && (platform != "xiaohongshu" || native == r.AccountNativeID), err
+	return enabled && verified && (r.ConnectionVersion == 0 || r.ConnectionVersion == version) && current == r.AccountUsername && current != "" && platform == r.Platform && native == r.AccountNativeID, err
 }
 
 func (h *handler) configuredAccount(id string) bool {
