@@ -1,5 +1,5 @@
 import { useId, useState, type KeyboardEvent } from 'react';
-import type { ArticleSnapshot } from './Articles';
+import type { ArticleSnapshot } from './article-types';
 import './AccountTrend.css';
 
 const series = [

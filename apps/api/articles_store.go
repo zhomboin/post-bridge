@@ -10,9 +10,6 @@ import (
 )
 
 func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, in CompleteInput, now time.Time) error {
-	if r.Platform == "xiaohongshu" {
-		return s.acceptNotesResult(ctx, tx, r, in, now)
-	}
 	if in.Notes != nil || in.Note != nil || in.AccountIdentity != nil {
 		return ErrInvalid
 	}

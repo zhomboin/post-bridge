@@ -1,3 +1,4 @@
+import { contentOperations } from './content-operations';
 import {
   createContext,
   useContext,
@@ -405,18 +406,8 @@ export function jobOutcome(job: Job) {
       )[job.status] || '发布尚未提交'
     );
   }
-  if (
-    job.kind === 'sync_notes' ||
-    job.kind === 'sync_articles' ||
-    job.kind === 'read_article' ||
-    job.kind === 'read_note'
-  ) {
-    const name =
-      job.kind === 'sync_notes'
-        ? '笔记同步'
-        : job.kind === 'sync_articles'
-          ? '文章同步'
-          : '正文读取';
+  if (contentOperations[job.kind]) {
+    const name = contentOperations[job.kind].result;
     return (
       name +
       ((

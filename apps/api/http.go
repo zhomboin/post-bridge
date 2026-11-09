@@ -120,6 +120,7 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 	h.routes()
 	h.remoteLoginRoutes()
 	h.articleRoutes()
+	h.contentRoutes()
 	h.csdnPublishPresetRoutes()
 	h.csdnPublishRoutes()
 	if cfg.IntegrationMasterKey != "" {

@@ -75,7 +75,8 @@ func (h *handler) accountManagementRoutes() {
 		if !decodeLimit(w, r, &in, 4096) {
 			return
 		}
-		if (in.Platform != "csdn" && in.Platform != "xiaohongshu") || !xhsUsername.MatchString(in.Username) || !boundedText(in.DisplayName, 400) || in.UserID != "" && (in.Platform != "xiaohongshu" || !xhsUserID.MatchString(in.UserID)) {
+		definition, definitionErr := h.store.contentRegistry().get(in.Platform)
+		if definitionErr != nil || !definition.validUsername(in.Username) || !boundedText(in.DisplayName, 400) || in.UserID != "" && !definition.identity(in.Username, in.UserID) {
 			replyError(w, ErrInvalid)
 			return
 		}
@@ -132,7 +133,7 @@ func (h *handler) accountManagementRoutes() {
 			replyError(w, err)
 			return
 		}
-		writeJSON(w, 201, map[string]any{"account": a, "capabilities": accountCapabilities(a)})
+		writeJSON(w, 201, map[string]any{"account": a, "capabilities": h.store.accountCapabilities(a)})
 	}))
 	h.mux.HandleFunc("DELETE /api/accounts/{account}", h.authenticated(func(w http.ResponseWriter, r *http.Request, current session) {
 		id := r.PathValue("account")
@@ -311,7 +312,8 @@ func (h *handler) accountManagementRoutes() {
 			replyError(w, err)
 			return
 		}
-		if a.Platform == "xiaohongshu" && !xhsUserID.MatchString(in.UserID) || a.Platform == "csdn" && in.UserID != "" {
+		definition, definitionErr := h.store.contentRegistry().get(a.Platform)
+		if definitionErr != nil || !definition.identity(a.Username, in.UserID) {
 			replyError(w, ErrInvalid)
 			return
 		}

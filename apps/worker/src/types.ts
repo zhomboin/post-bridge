@@ -1,3 +1,10 @@
+import type {
+  ContentBody,
+  ContentIdentity,
+  ContentPlatform,
+  ContentSnapshot,
+} from './content-contract.js';
+
 export interface Article {
   id: string;
   title: string;
@@ -93,6 +100,8 @@ export interface Job {
   account_id?: string;
   account_native_id?: string;
   kind:
+    | 'sync_contents'
+    | 'read_content'
     | 'sync_notes'
     | 'read_note'
     | 'save_draft'
@@ -136,6 +145,9 @@ export interface Progress {
   published_html_sha256?: string;
 }
 export interface JobResult {
+  contents?: ContentSnapshot;
+  content?: ContentBody;
+  content_identity?: ContentIdentity;
   status: 'succeeded' | 'failed' | 'waiting_user' | 'reconciling' | 'cancelled';
   remote_id?: string;
   publish_accepted?: boolean;
@@ -152,6 +164,7 @@ export interface Hooks {
   progress(value: Progress): Promise<void>;
 }
 export interface Session {
+  platform?: ContentPlatform;
   run(job: Job, hooks: Hooks, signal: AbortSignal): Promise<JobResult>;
   close(): Promise<void>;
 }

@@ -103,6 +103,24 @@ snapshot 的 profile 为昵称、头像、简介、关注、粉丝和获赞与�
 
 read_note 的成功上报使用 account_identity 与 note，笔记标识、作者、任务账号、连接及有效租约同时核对；不接受 articles、article 或 notes 冒充正文。实现和使用见[小红书只读工作台](xiaohongshu-readonly.md)。
 
+## 统一账号内容接口
+
+所有入口要求当前用户会话；POST 同时要求本站来源和 CSRF。账号必须属于当前用户，平台由账号绑定决定。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET | /api/content-platforms | 查询平台注册能力和内容限制；不代表当前调用者获得写入授权 |
+| GET | /api/accounts/{account}/contents | 查询本地内容；支持 q、status、page、page_size |
+| POST | /api/accounts/{account}/contents/sync | 使用 request_id 创建列表同步任务 |
+| GET | /api/accounts/{account}/contents/{id} | 查询摘要、正文缓存、采集时间与读取任务 |
+| POST | /api/accounts/{account}/contents/{id}/read | 使用 request_id 创建正文读取任务 |
+
+列表返回 items、total、page、page_size、snapshot、sync_job。摘要含字符串 id、title、status、platform_status、posted_at、kind、cover_urls、metrics 和经校验的 extensions，不含正文。状态支持 published、draft、reviewing、rejected、recycled、unknown；平台不认识的状态保持 unknown。指标包含 value、unit、begin_at、end_at，缺失值保留 null。
+
+详情返回 platform、item、body、fetched_at、read_job。body 区分 format、text、html、images、tags 和平台扩展，HTML 作为文本处理。平台标识需按 URL 路径段编码；不要求纯数字。请求分页上限 100 条，每次同步上限 2000 条；快照与正文大小限制分别为 6 MiB、2 MiB。
+
+新平台使用 sync_contents／read_content，成功结果使用 contents／content 和 content_identity；服务端核对任务账号、原生身份、连接版本与租约。完整同步替换列表，部分同步只更新取得的条目，失败保留已有数据。CSDN 与小红书执行器继续使用各自受校验的结果格式，并在同一事务建立公共投影。新旧任务入口共享请求去重，现有专属接口继续可用。缓存与平台注册规则见[内容平台接入](content-platforms.md)。
+
 ## 账号文章契约
 
 列表返回 items、total、page、page_size、snapshot 与 sync_job。状态参数为 published、draft、rejected、recycled、unknown，空值查询全部含草稿。snapshot 包含账号、profile、counts、stats、trend、synced_at；分页与筛选只操作持久化快照。

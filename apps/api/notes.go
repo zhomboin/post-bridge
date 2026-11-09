@@ -77,113 +77,23 @@ func validateNotes(snapshot *NotesSnapshot, username, userID string) error {
 }
 
 func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID string) (Job, bool, error) {
-	return s.createNoteJob(ctx, accountID, kind, requestID, "")
+	var platform string
+	if err := s.pool.QueryRow(ctx, "SELECT platform FROM account WHERE id=$1", accountID).Scan(&platform); err != nil {
+		return Job{}, false, err
+	}
+	if kind == "check_account" && platform == "csdn" {
+		return s.Create(ctx, CreateInput{AccountID: accountID, Platform: platform, Kind: kind, RequestID: requestID})
+	}
+	return s.createReadJob(ctx, accountID, CreateInput{AccountID: accountID, Platform: platform, Kind: kind, RequestID: requestID})
 }
 func (s *Store) createNoteJob(ctx context.Context, accountID, kind, requestID, noteID string) (Job, bool, error) {
-
 	if accountID == "csdn-main" && kind == "check_account" {
 		return s.Create(ctx, CreateInput{RequestID: requestID, Kind: kind, Platform: "csdn"})
 	}
-	var out Job
-	created := false
-	if !validKey(accountID) || !validKey(requestID) || (kind != "check_account" && kind != "sync_notes" && kind != "read_note") || (kind == "read_note" && !xhsUserID.MatchString(noteID)) || (kind != "read_note" && noteID != "") {
-		return out, false, ErrInvalid
+	if kind != "check_account" && kind != "sync_notes" && kind != "read_note" {
+		return Job{}, false, ErrInvalid
 	}
-	if err := s.executableAccount(ctx, accountID); err != nil {
-		return out, false, err
-	}
-	err := s.locked(ctx, func(tx pgx.Tx, now time.Time) error {
-		var verified bool
-		if err := tx.QueryRow(ctx, "SELECT verified FROM account WHERE id=$1 FOR SHARE", accountID).Scan(&verified); err != nil {
-			return err
-		}
-		if !verified {
-			return ErrConflict
-		}
-		var platform, username, native string
-		err := tx.QueryRow(ctx, "SELECT platform,username,native_user_id FROM account WHERE id=$1", accountID).Scan(&platform, &username, &native)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if platform != "xiaohongshu" {
-			return ErrInvalid
-		}
-		var note *Note
-		input := CreateInput{RequestID: requestID, Kind: kind, Platform: platform, AccountID: accountID, ArticleID: noteID}
-		fp := fingerprint(input)
-		var hash string
-		var data []byte
-		err = tx.QueryRow(ctx, "SELECT fingerprint,record FROM jobs WHERE request_id=$1 AND request_namespace=pb_caller() UNION ALL SELECT a.fingerprint,j.record FROM article_read_requests a JOIN jobs j ON j.id=a.job_id WHERE a.request_id=$1 AND a.request_namespace=pb_caller()", requestID).Scan(&hash, &data)
-		if err == nil {
-			var r record
-			if json.Unmarshal(data, &r) != nil {
-				return ErrInvalid
-			}
-			if hash != fp || r.AccountID != accountID || r.AccountUsername != username || r.AccountNativeID != native {
-				return ErrConflict
-			}
-			out = r.Job
-			return nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-		if kind == "sync_notes" || kind == "read_note" {
-			err = tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=$1 AND record->>'kind'=$2 AND record->>'account_username'=$3 AND COALESCE(record->>'article_id','')=$4 AND record->>'status' IN ('queued','running','waiting_user') ORDER BY created_at DESC,id DESC LIMIT 1", accountID, kind, username, noteID).Scan(&data)
-			if err == nil {
-				var r record
-				if json.Unmarshal(data, &r) != nil {
-					return ErrInvalid
-				}
-				if r.AccountNativeID != native {
-					return ErrConflict
-				}
-				if _, err = tx.Exec(ctx, "INSERT INTO article_read_requests(request_id,fingerprint,job_id) VALUES($1,$2,$3)", requestID, fp, r.ID); err != nil {
-					return err
-				}
-				out = r.Job
-				return nil
-			}
-			if !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-		}
-		if kind == "read_note" {
-			var e error
-			note, e = currentNote(ctx, tx, accountID, noteID, username, native)
-			if e != nil {
-				return e
-			}
-			if note.Status != "published" {
-				return ErrConflict
-			}
-		}
-		r := newRecord(input, now)
-		r.Platform = platform
-		r.AccountID = accountID
-		r.AccountUsername = username
-		r.AccountNativeID = native
-		if note != nil {
-			r.Title = note.Title
-		}
-		data, err = json.Marshal(r)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, "INSERT INTO jobs(id,request_id,fingerprint,record,created_at) VALUES($1,$2,$3,$4,$5)", r.ID, requestID, fp, data, now); err != nil {
-			return err
-		}
-		out = r.Job
-		created = true
-		return appendLog(ctx, tx, r, "info", "只读任务已加入队列", now)
-	})
-	if err == nil && created {
-		out, err = s.Get(ctx, out.ID)
-	}
-	return out, created, err
+	return s.createReadJob(ctx, accountID, CreateInput{AccountID: accountID, Platform: "xiaohongshu", Kind: kind, RequestID: requestID, ArticleID: noteID})
 }
 
 func (s *Store) acceptNotesResult(ctx context.Context, tx pgx.Tx, r *record, in CompleteInput, now time.Time) error {

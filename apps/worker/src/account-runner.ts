@@ -1,16 +1,10 @@
-import { activeBrowserProfile, candidateLogin } from './account-credentials.js';
-import { chromium } from 'playwright';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { runtimePlatforms } from './content-platforms.js';
+import { candidateLogin } from './account-credentials.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { readPrivateToken, type Config } from './config.js';
 import { loadConfig } from './config.js';
 import { openXiaohongshuLoginBrowser } from './xiaohongshu-login.js';
 import { WorkerAPI } from './api.js';
-import { CSDNAdapter } from './csdn.js';
-import { CSDNReadAdapter } from './csdn-read.js';
-import { XiaohongshuAdapter } from './xiaohongshu.js';
 import { runWorker } from './worker.js';
 import { RemoteLoginManager } from './remote-login.js';
 import { startLoginControl } from './login-control.js';
@@ -68,51 +62,7 @@ async function accountWorker(config: Config) {
       await runWorker(
         api,
         config.profileDir,
-        async () => {
-          const temp = await mkdtemp(join(tmpdir(), 'pb-'));
-          try {
-            const context = await chromium.launchPersistentContext(
-              await activeBrowserProfile(config.profileDir),
-              {
-                headless: config.headless,
-                executablePath: config.executablePath,
-                serviceWorkers: 'block',
-                chromiumSandbox: true,
-                timeout: 30000,
-                acceptDownloads: false,
-                env: { ...process.env, TMPDIR: temp },
-              },
-            );
-            const adapter = new CSDNAdapter(context, {
-              username: config.username,
-              displayName: config.displayName,
-            });
-            const reader = new CSDNReadAdapter(context, { username: config.username });
-            const xhs = new XiaohongshuAdapter(context, {
-              accountId: config.accountId!,
-              username: config.username,
-              userId: config.userId || '',
-            });
-            return {
-              run: (job, hooks, signal) =>
-                config.platform === 'xiaohongshu'
-                  ? xhs.run(job, hooks, signal)
-                  : ['sync_articles', 'read_article'].includes(job.kind)
-                    ? reader.run(job, hooks, signal)
-                    : adapter.run(job, hooks, signal),
-              close: async () => {
-                try {
-                  await context.close();
-                } finally {
-                  await rm(temp, { recursive: true, force: true });
-                }
-              },
-            };
-          } catch (error) {
-            await rm(temp, { recursive: true, force: true });
-            throw error;
-          }
-        },
+        () => runtimePlatforms.open(config),
         stop.signal,
         config.pollIntervalMs,
         {

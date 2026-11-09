@@ -76,7 +76,13 @@ func (h *handler) processes(w http.ResponseWriter, r *http.Request, _ session) {
 		Page:     page,
 		Size:     size,
 	}
-	if to.Before(from) || to.Sub(from) > 31*24*time.Hour || !utf8.ValidString(f.Q) || strings.ContainsRune(f.Q, 0) || strings.ContainsRune(f.JobID, 0) || utf8.RuneCountInString(f.Q) > 200 || len(f.JobID) > 128 || f.Status != "" && !validStatus(f.Status) || f.Platform != "" && f.Platform != "csdn" && f.Platform != "xiaohongshu" || f.Kind != "" && f.Kind != "save_draft" && f.Kind != "publish" && f.Kind != "check_account" && !readKind(f.Kind) || f.Level != "" && f.Level != "info" && f.Level != "warning" && f.Level != "error" {
+	if f.Platform != "" {
+		if _, err := h.store.contentRegistry().get(f.Platform); err != nil {
+			replyError(w, ErrInvalid)
+			return
+		}
+	}
+	if to.Before(from) || to.Sub(from) > 31*24*time.Hour || !utf8.ValidString(f.Q) || strings.ContainsRune(f.Q, 0) || strings.ContainsRune(f.JobID, 0) || utf8.RuneCountInString(f.Q) > 200 || len(f.JobID) > 128 || f.Status != "" && !validStatus(f.Status) || f.Kind != "" && f.Kind != "save_draft" && f.Kind != "publish" && f.Kind != "check_account" && !readKind(f.Kind) || f.Level != "" && f.Level != "info" && f.Level != "warning" && f.Level != "error" {
 		replyError(w, ErrInvalid)
 		return
 	}

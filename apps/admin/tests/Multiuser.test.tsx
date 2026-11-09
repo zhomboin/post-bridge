@@ -72,6 +72,18 @@ beforeEach(() => {
         accounts = accounts.filter((account) => account.id !== url.pathname.split('/').at(-1));
         return json({ ok: true });
       }
+      if (/^\/api\/accounts\/[^/]+\/contents$/.test(url.pathname)) {
+        const account = url.pathname.split('/')[3];
+        if (!accounts.some((entry) => entry.id === account)) throw Error('请求未绑定所选账号');
+        return json({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+          snapshot: null,
+          sync_job: null,
+        });
+      }
       if (url.pathname.startsWith('/api/account')) {
         const id = url.searchParams.get('account_id');
         if (!id || !accounts.some((account) => account.id === id))

@@ -1,3 +1,4 @@
+import { sanitizeContentResult } from './content-runtime.js';
 import type { Claim, JobAPI, JobResult, Session } from './types.js';
 import { WorkerAPI } from './api.js';
 import { acquireProfile, profileAvailable, type ProfileOwner } from './profile.js';
@@ -101,12 +102,7 @@ export async function executeClaim(
   if (external && ['failed', 'cancelled'].includes(result.status))
     result = { ...result, status: 'reconciling', retryable: false };
   if (remoteID && claim.job.run_mode !== 'reconcile') result.remote_id = remoteID;
-  if (result.status !== 'succeeded' || claim.job.kind !== 'sync_articles') delete result.articles;
-  if (result.status !== 'succeeded' || claim.job.kind !== 'read_article') delete result.article;
-  if (result.status !== 'succeeded' || claim.job.kind !== 'sync_notes') delete result.notes;
-  if (result.status !== 'succeeded' || claim.job.kind !== 'read_note') delete result.note;
-  if (result.status !== 'succeeded' || claim.job.platform !== 'xiaohongshu')
-    delete result.account_identity;
+  sanitizeContentResult(claim.job, result, session?.platform);
   await api.complete(claim.job.id, claim.lease_token, result);
 }
 

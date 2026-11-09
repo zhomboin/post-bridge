@@ -1,10 +1,12 @@
+import { useContentTask } from './content-task';
+import { useContentPage } from './content-resource';
 import RemoteLogin from './RemoteLogin';
 import AccountAvatar from './AccountAvatar';
 import XiaohongshuStats from './XiaohongshuStats';
 import { platformMediaURL, notePublicURL } from './platform-media';
 import { noteHref, noteLabels as labels, noteNumber, type NotePage } from './xiaohongshu-types';
 import './Xiaohongshu.css';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Empty,
   Pagination,
@@ -15,7 +17,6 @@ import {
   jobHref,
   queryPage,
   time,
-  useAction,
   useResource,
   useWorkspace,
   type Account,
@@ -26,7 +27,7 @@ const active = (job?: Job | null) =>
   !!job && ['queued', 'running', 'waiting_user'].includes(job.status);
 
 export default function XiaohongshuAccount({ id, picker }: { id: string; picker: ReactNode }) {
-  const { api, route, navigate } = useWorkspace();
+  const { route, navigate } = useWorkspace();
   const params = new URLSearchParams(route.split('?')[1]);
   const settings = params.get('tab') === 'settings';
   const stats = params.get('tab') === 'stats';
@@ -38,9 +39,8 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
     q: params.get('q') || '',
     status: params.get('status') || '',
   });
-  const notes = useResource<NotePage>(base + '/notes?' + query);
-  const action = useAction();
-  const requestId = useRef<string | undefined>(undefined);
+  const notes = useContentPage<NotePage>(base + '/contents?' + query, 'xiaohongshu');
+  const action = useContentTask();
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const [q, setQ] = useState(params.get('q') || '');
   const [status, setStatus] = useState(params.get('status') || '');
@@ -63,16 +63,8 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
     navigate('/account?' + next);
   }
   async function submit(check = false) {
-    requestId.current ??= crypto.randomUUID();
-    const result = await action.run((signal) =>
-      api<Job>(base + (check ? '/check' : '/notes/sync'), {
-        method: 'POST',
-        body: JSON.stringify({ request_id: requestId.current }),
-        signal,
-      }),
-    );
+    const result = await action.submit(base + (check ? '/check' : '/contents/sync'));
     if (result) {
-      requestId.current = undefined;
       if (check) navigate(jobHref(result.id, route));
       else {
         setSubmitted(result);

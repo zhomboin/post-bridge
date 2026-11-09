@@ -1,3 +1,4 @@
+import { contentFixture } from './content-fixtures';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import PlatformAccount from '../src/PlatformAccount';
@@ -39,7 +40,13 @@ afterEach(() => vi.restoreAllMocks());
 function Harness({ api, initial = '/account?account=xhs-main' }: { api: Api; initial?: string }) {
   const [route, navigate] = useState(initial);
   return (
-    <WorkspaceContext.Provider value={{ api, route, navigate }}>
+    <WorkspaceContext.Provider
+      value={{
+        api: (async (path, init) => contentFixture(await api(path, init), 'xiaohongshu')) as Api,
+        route,
+        navigate,
+      }}
+    >
       <PlatformAccount />
     </WorkspaceContext.Provider>
   );
@@ -48,9 +55,9 @@ function apiMock() {
   return vi.fn(async (path: string) => {
     if (path === '/api/accounts') return response;
     if (path === '/api/accounts/xhs-main') return { account: account('xhs-main', 'xiaohongshu') };
-    if (path.startsWith('/api/accounts/xhs-main/notes?')) return listing;
+    if (path.startsWith('/api/accounts/xhs-main/contents?')) return listing;
     if (path === '/api/account') return account('csdn-main', 'csdn');
-    if (path.startsWith('/api/account/articles?'))
+    if (path.startsWith('/api/accounts/csdn-main/contents?'))
       return { items: [], total: 0, page: 1, page_size: 20, snapshot: null, sync_job: null };
     throw Error('未预期请求');
   });
@@ -83,7 +90,9 @@ describe('多平台账号工作台', () => {
     expect(screen.queryByText('公开发布')).toBeNull();
     fireEvent.click(screen.getByText('账号设置'));
     expect(await screen.findByRole('button', { name: '检查登录状态' })).toBeTruthy();
-    expect(api.mock.calls.some(([path]) => path.startsWith('/api/account/articles'))).toBe(false);
+    expect(
+      api.mock.calls.some(([path]) => path.startsWith('/api/accounts/csdn-main/contents')),
+    ).toBe(false);
   });
   it('账号切换清空旧列表，不把延迟请求显示到另一账号', async () => {
     const api = apiMock();
@@ -111,7 +120,7 @@ describe('多平台账号工作台', () => {
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', '连接失败');
     expect(screen.getByText('合成小红书笔记')).toBeTruthy();
     expect(api.mock.calls.find(([, init]) => init?.method === 'POST')?.[0]).toBe(
-      '/api/accounts/xhs-main/notes/sync',
+      '/api/accounts/xhs-main/contents/sync',
     );
   });
 });

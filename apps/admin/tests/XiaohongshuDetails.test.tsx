@@ -1,3 +1,4 @@
+import { contentFixture } from './content-fixtures';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
@@ -52,7 +53,13 @@ function Harness({ api, detail = false }: { api: Api; detail?: boolean }) {
       : '/account?account=xhs',
   );
   return (
-    <WorkspaceContext.Provider value={{ api, route, navigate }}>
+    <WorkspaceContext.Provider
+      value={{
+        api: (async (path, init) => contentFixture(await api(path, init), 'xiaohongshu')) as Api,
+        route,
+        navigate,
+      }}
+    >
       {detail ? <NoteDetail id={id} account="xhs" /> : <PlatformAccount />}
     </WorkspaceContext.Provider>
   );
@@ -77,7 +84,7 @@ describe('小红书资料和详情', () => {
         };
       if (path === '/api/accounts/xhs')
         return { account: { id: 'xhs', platform: 'xiaohongshu', status: 'connected' } };
-      if (path.startsWith('/api/accounts/xhs/notes?'))
+      if (path.startsWith('/api/accounts/xhs/contents?'))
         return { items: [note], total: 1, page: 1, page_size: 20, snapshot, sync_job: null };
       throw Error('unexpected');
     });
@@ -146,7 +153,7 @@ describe('小红书资料和详情', () => {
     await screen.findByText('正文读取失败');
     await waitFor(() => expect(reads).toBe(1));
     expect(api.mock.calls.find(([, init]) => init?.method === 'POST')?.[0]).toBe(
-      '/api/accounts/xhs/notes/' + id + '/read',
+      '/api/accounts/xhs/contents/' + id + '/read',
     );
   });
   it('拒绝伪装域、明文和带凭据媒体地址', () => {

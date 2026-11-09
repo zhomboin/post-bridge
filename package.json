@@ -12,6 +12,8 @@
     "apps/worker"
   ],
   "scripts": {
+    "contracts:generate": "node scripts/content-contract.mjs",
+    "contracts:check": "node scripts/content-contract.mjs --check",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

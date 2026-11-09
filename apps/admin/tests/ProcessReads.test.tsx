@@ -17,7 +17,7 @@ beforeEach(() => {
         id: 'read-process',
         title: '',
         kind,
-        article_id: kind === 'read_article' ? '12345' : undefined,
+        article_id: ['read_article', 'read_content'].includes(kind) ? '12345' : undefined,
         platform: 'csdn',
         account_id: 'csdn-main',
         status: 'succeeded',
@@ -34,9 +34,15 @@ beforeEach(() => {
                 items: [
                   {
                     ...job,
-                    object_type: kind === 'sync_articles' ? 'account' : 'article',
-                    object_id: kind === 'sync_articles' ? 'csdn-main' : '12345',
-                    object_name: kind === 'sync_articles' ? '平台账号' : '只读文章',
+                    object_type: ['sync_articles', 'sync_contents'].includes(kind)
+                      ? 'account'
+                      : 'article',
+                    object_id: ['sync_articles', 'sync_contents'].includes(kind)
+                      ? 'csdn-main'
+                      : '12345',
+                    object_name: ['sync_articles', 'sync_contents'].includes(kind)
+                      ? '平台账号'
+                      : '只读文章',
                     event_count: 1,
                     error_count: 0,
                     warning_count: 0,
@@ -72,6 +78,8 @@ beforeEach(() => {
 it.each([
   ['sync_articles', '同步文章', '文章同步完成', '账号', 'csdn-main'],
   ['read_article', '读取正文', '正文读取完成', '文章', '12345'],
+  ['sync_contents', '同步内容', '内容同步完成', '账号', 'csdn-main'],
+  ['read_content', '读取内容正文', '正文读取完成', '文章', '12345'],
 ])('处理列表和操作筛选正确支持%s', async (value, operation, outcome, objectType, objectID) => {
   kind = value;
   render(<App />);
@@ -79,7 +87,7 @@ it.each([
   expect(action.getAttribute('value')).toBe(value);
   const row = (
     await within(await screen.findByRole('table')).findByRole('link', {
-      name: value === 'sync_articles' ? '平台账号' : '只读文章',
+      name: ['sync_articles', 'sync_contents'].includes(value) ? '平台账号' : '只读文章',
     })
   ).closest('tr')!;
   expect(within(row).getByText(operation)).toBeTruthy();
@@ -102,6 +110,8 @@ it.each([
 it.each([
   ['sync_articles', '同步文章', '文章同步完成', 'csdn-main'],
   ['read_article', '读取正文', '正文读取完成', '12345'],
+  ['sync_contents', '同步内容', '内容同步完成', 'csdn-main'],
+  ['read_content', '读取内容正文', '正文读取完成', '12345'],
 ])('处理详情正确支持%s且保留时间线', async (value, operation, outcome, objectID) => {
   kind = value;
   window.history.replaceState({}, '', '/logs/read-process?back=%2Flogs%3Fkind%3D' + value);

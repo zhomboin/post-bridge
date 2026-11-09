@@ -1,3 +1,4 @@
+import { contentOperations } from './content-operations';
 import { useEffect, useState } from 'react';
 import { Empty, ResourceError, RefreshBar, statusLabels, time, useResource } from './runtime';
 import type { ContentChanges, ProcessSnapshot } from './process-types';
@@ -188,7 +189,7 @@ export default function ContentComparison({
   kind?: string;
 }) {
   const [open, setOpen] = useState(false);
-  if (kind === 'sync_articles' || kind === 'read_article' || kind === 'read_note') return null;
+  if (kind && contentOperations[kind]) return null;
   return (
     <section className="surface section-gap" aria-label="内容变更">
       <div className="surface-header">
