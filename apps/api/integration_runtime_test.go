@@ -2,7 +2,6 @@ package bridge
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,17 +10,36 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestRuntimeIntegrationConfigurationIsIndependentAndHTTPS(t *testing.T) {
 	dir := t.TempDir()
 	password, worker, key := filepath.Join(dir, "admin"), filepath.Join(dir, "worker"), filepath.Join(dir, "integration")
-	for path, value := range map[string]string{password: "long-test-admin-password", worker: "worker-at-least-thirty-two-characters", key: strings.Repeat("ab", 32)} {
+	for path, value := range map[string]string{
+		password: "long-test-admin-password",
+		worker:   "worker-at-least-thirty-two-characters",
+		key:      strings.Repeat("ab", 32),
+	} {
 		if err := os.WriteFile(path, []byte(value), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for name, value := range map[string]string{"DATABASE_URL": "postgres://project/db", "ADMIN_USERNAME": "admin", "ADMIN_PASSWORD_FILE": password, "WORKER_TOKEN_FILE": worker, "CSDN_USERNAME": "tester", "CSDN_DISPLAY_NAME": "测试账号", "API_ADDR": "127.0.0.1:18080", "API_BASE_URL": "http://127.0.0.1:18080", "PUBLIC_ORIGIN": "https://bridge.example.test", "INTEGRATION_MASTER_KEY_FILE": key, "INTEGRATION_ENVIRONMENT": "test", "INTEGRATION_SERVICE_ID": "bridge"} {
+	for name, value := range map[string]string{
+		"DATABASE_URL":                "postgres://project/db",
+		"ADMIN_USERNAME":              "admin",
+		"ADMIN_PASSWORD_FILE":         password,
+		"WORKER_TOKEN_FILE":           worker,
+		"CSDN_USERNAME":               "tester",
+		"CSDN_DISPLAY_NAME":           "测试账号",
+		"API_ADDR":                    "127.0.0.1:18080",
+		"API_BASE_URL":                "http://127.0.0.1:18080",
+		"PUBLIC_ORIGIN":               "https://bridge.example.test",
+		"INTEGRATION_MASTER_KEY_FILE": key,
+		"INTEGRATION_ENVIRONMENT":     "test",
+		"INTEGRATION_SERVICE_ID":      "bridge",
+	} {
 		t.Setenv(name, value)
 	}
 	cfg, err := LoadRuntimeConfig()
@@ -66,7 +84,19 @@ func TestIntegrationRuntimeStartsAndStopsWithoutWorker(t *testing.T) {
 	if err != nil || parsed.ConnConfig.RuntimeParams["search_path"] != schemaName {
 		t.Fatal("隔离schema未随连接串传递")
 	}
-	cfg := RuntimeConfig{DatabaseURL: connectionURL.String(), Address: address, Origin: "https://bridge.example.test", Username: "admin", Password: "long-test-admin-password", WorkerToken: "worker-at-least-thirty-two-characters", CSDNUsername: "runtime_fixture", CSDNDisplayName: "运行验证账号", IntegrationMasterKey: strings.Repeat("ab", 32), IntegrationEnvironment: "test", IntegrationServiceID: "bridge"}
+	cfg := RuntimeConfig{
+		DatabaseURL:            connectionURL.String(),
+		Address:                address,
+		Origin:                 "https://bridge.example.test",
+		Username:               "admin",
+		Password:               "long-test-admin-password",
+		WorkerToken:            "worker-at-least-thirty-two-characters",
+		CSDNUsername:           "runtime_fixture",
+		CSDNDisplayName:        "运行验证账号",
+		IntegrationMasterKey:   strings.Repeat("ab", 32),
+		IntegrationEnvironment: "test",
+		IntegrationServiceID:   "bridge",
+	}
 	go func() { done <- Run(ctx, cfg) }()
 	t.Cleanup(func() {
 		cancel()

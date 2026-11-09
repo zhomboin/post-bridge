@@ -41,6 +41,18 @@ jobs:
         run: npm install --global npm@10.9.4
       - name: 安装固定依赖
         run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 安装 Python 格式化工具
+        run: python3 -m pip install black==25.1.0
+      - name: 代码格式检查
+        run: npm run format:check
+      - name: npm 依赖安全检查
+        run: npm audit --registry=https://registry.npmjs.org
+      - name: Go 依赖调用路径安全检查
+        working-directory: apps/api
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: 安装匹配的 Chromium
         run: npx --no-install playwright install --with-deps chromium
       - name: Go 并发与真实数据库验证

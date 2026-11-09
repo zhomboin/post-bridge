@@ -255,6 +255,28 @@ nano "$PB_STATE/runtime.json"
 
 ## 六、按范围验证与结束开发
 
+### 格式与安全检查
+
+Go 使用 gofmt；TypeScript、TSX、JavaScript、CSS、HTML、JSON 和 YAML 使用锁定的 Prettier；Python 使用 Black 25.1.0。统一入口见[格式化脚本](../scripts/format.mjs)，规则见[Prettier 配置](../.prettierrc.json)和[Python 配置](../pyproject.toml)。文件采用 UTF-8 无 BOM、LF 换行，不手动压缩多个语句或组件到一行。
+
+以下命令在 WSL Bash 中逐条执行。首次准备独立 Python 环境，后续只需激活；格式化工具只用于开发，服务器运行不需要安装 Black。
+
+```bash
+sudo apt-get install -y python3-venv
+python3 -m venv .local-tmp/format-venv
+source .local-tmp/format-venv/bin/activate
+python3 -m pip install black==25.1.0
+npm run format
+npm run format:check
+npm audit --registry=https://registry.npmjs.org
+go -C apps/api run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+deactivate
+```
+
+CI 检查格式、npm 已知漏洞及 Go 实际调用路径。依赖安全报告不等于真实平台或生产验收；现行审阅范围和限制见[代码质量与安全](code-quality.md)。
+
+### 功能回归
+
 日常只执行受影响用例，示例中的路径和名称换为本次改动范围；完整验证交给 GitHub CI。Go 数据库测试需专属测试连接，勿使用生产库。
 
 需要数据库的 Go 用例先输入专属测试连接；输入不回显，也不写入命令历史。用例结束后清理该环境变量。

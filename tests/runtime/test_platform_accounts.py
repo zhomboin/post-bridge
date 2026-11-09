@@ -27,8 +27,12 @@ class PlatformAccountDeploymentTests(unittest.TestCase):
             "WORKER_PLATFORM_ACCOUNTS_FILE": str(deploy.STATE / "worker/accounts.json"),
         }
         api, worker = deploy.environments(deploy.validate_config(config))
-        self.assertEqual(api["PLATFORM_ACCOUNTS_FILE"], config["API_PLATFORM_ACCOUNTS_FILE"])
-        self.assertEqual(worker["PLATFORM_ACCOUNTS_FILE"], config["WORKER_PLATFORM_ACCOUNTS_FILE"])
+        self.assertEqual(
+            api["PLATFORM_ACCOUNTS_FILE"], config["API_PLATFORM_ACCOUNTS_FILE"]
+        )
+        self.assertEqual(
+            worker["PLATFORM_ACCOUNTS_FILE"], config["WORKER_PLATFORM_ACCOUNTS_FILE"]
+        )
         self.assertNotIn("DATABASE_URL", worker)
         for changed in [
             {"WORKER_PLATFORM_ACCOUNTS_FILE": "/tmp/accounts.json"},
@@ -48,8 +52,13 @@ class PlatformAccountDeploymentTests(unittest.TestCase):
             "DATABASE_URL": "private-db",
             "INTEGRATION_MASTER_KEY_FILE": "/private/master",
         }
-        self.assertEqual(runtime.child_env(config)["PLATFORM_ACCOUNTS_FILE"], config["PLATFORM_ACCOUNTS_FILE"])
+        self.assertEqual(
+            runtime.child_env(config)["PLATFORM_ACCOUNTS_FILE"],
+            config["PLATFORM_ACCOUNTS_FILE"],
+        )
         worker = runtime.child_env(config, worker=True)
-        self.assertEqual(worker["PLATFORM_ACCOUNTS_FILE"], config["PLATFORM_ACCOUNTS_FILE"])
+        self.assertEqual(
+            worker["PLATFORM_ACCOUNTS_FILE"], config["PLATFORM_ACCOUNTS_FILE"]
+        )
         self.assertNotIn("DATABASE_URL", worker)
         self.assertNotIn("INTEGRATION_MASTER_KEY_FILE", worker)

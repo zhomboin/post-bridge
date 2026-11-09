@@ -22,9 +22,7 @@
       "post": {
         "operationId": "integration_1_post",
         "summary": "持一次性邀请提交注册申请",
-        "tags": [
-          "注册"
-        ],
+        "tags": ["注册"],
         "security": [
           {
             "Invitation": []
@@ -92,9 +90,7 @@
       "post": {
         "operationId": "integration_2_post",
         "summary": "用待激活密钥签名完成激活",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -157,9 +153,7 @@
       "get": {
         "operationId": "integration_3_get",
         "summary": "读取当前授权的实际目标能力",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -222,9 +216,7 @@
       "post": {
         "operationId": "integration_4_post",
         "summary": "创建或重取平台准备稿",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -308,9 +300,7 @@
       "get": {
         "operationId": "integration_5_get",
         "summary": "读取准备稿与管理员确认结果",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -384,9 +374,7 @@
       "post": {
         "operationId": "integration_6_post",
         "summary": "提交已确认平台稿到草稿队列",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -468,9 +456,7 @@
       "get": {
         "operationId": "integration_7_get",
         "summary": "按稳定request_id恢复原分发结果",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -544,9 +530,7 @@
       "get": {
         "operationId": "integration_8_get",
         "summary": "读取父分发和各平台子任务状态",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -620,9 +604,7 @@
       "post": {
         "operationId": "integration_9_post",
         "summary": "接收来源状态事件",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -696,9 +678,7 @@
       "get": {
         "operationId": "integration_10_get",
         "summary": "列出最近100条邀请，不含令牌",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -753,9 +733,7 @@
       "post": {
         "operationId": "integration_11_post",
         "summary": "创建一次性注册邀请",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -834,9 +812,7 @@
       "get": {
         "operationId": "integration_12_get",
         "summary": "列出最近100条注册申请",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -893,9 +869,7 @@
       "post": {
         "operationId": "integration_13_post",
         "summary": "审批并一次签发待激活密钥",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -983,9 +957,7 @@
       "post": {
         "operationId": "integration_14_post",
         "summary": "拒绝待审批申请",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -1063,9 +1035,7 @@
       "get": {
         "operationId": "integration_15_get",
         "summary": "列出最近100条应用，绝不含密钥",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -1122,9 +1092,7 @@
       "get": {
         "operationId": "integration_16_get",
         "summary": "读取应用身份与授权",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -1190,9 +1158,7 @@
       "put": {
         "operationId": "integration_17_put",
         "summary": "更新当前应用授权",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -1281,9 +1247,7 @@
       "post": {
         "operationId": "integration_18_post",
         "summary": "一次签发待激活的新密钥",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -1362,9 +1326,7 @@
       "post": {
         "operationId": "integration_19_post",
         "summary": "暂停应用",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -1442,9 +1404,7 @@
       "post": {
         "operationId": "integration_20_post",
         "summary": "启用应用",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -1522,9 +1482,7 @@
       "post": {
         "operationId": "integration_21_post",
         "summary": "撤销应用",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -1602,9 +1560,7 @@
       "get": {
         "operationId": "integration_22_get",
         "summary": "读取最近100条接入审计",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -1670,9 +1626,7 @@
       "get": {
         "operationId": "integration_23_get",
         "summary": "管理员分页读取准备稿摘要",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -1749,13 +1703,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": [
-                "prepared",
-                "confirmed",
-                "submitted",
-                "revoked",
-                "expired"
-              ]
+              "enum": ["prepared", "confirmed", "submitted", "revoked", "expired"]
             }
           }
         ],
@@ -1766,9 +1714,7 @@
       "get": {
         "operationId": "integration_24_get",
         "summary": "管理员读取准备稿详情",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -1834,9 +1780,7 @@
       "put": {
         "operationId": "integration_25_put",
         "summary": "保存平台稿的新不可变修订",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -1925,9 +1869,7 @@
       "post": {
         "operationId": "integration_26_post",
         "summary": "确认指定平台稿修订",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -2016,9 +1958,7 @@
       "post": {
         "operationId": "integration_27_post",
         "summary": "撤销未提交的准备稿",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -2096,9 +2036,7 @@
       "get": {
         "operationId": "integration_28_get",
         "summary": "管理员分页读取父分发记录",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -2175,11 +2113,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": [
-                "in_progress",
-                "needs_attention",
-                "completed"
-              ]
+              "enum": ["in_progress", "needs_attention", "completed"]
             },
             "description": "按聚合状态筛选后分页，total为筛选结果数量。"
           }
@@ -2190,9 +2124,7 @@
       "get": {
         "operationId": "integration_29_get",
         "summary": "管理员读取父分发详情",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": []
@@ -2260,9 +2192,7 @@
       "post": {
         "operationId": "integration_30_post",
         "summary": "重新确认来源授权并恢复原任务",
-        "tags": [
-          "管理员接入管理"
-        ],
+        "tags": ["管理员接入管理"],
         "security": [
           {
             "AdminSession": [],
@@ -2351,9 +2281,7 @@
       "post": {
         "operationId": "integration_distribution_cancel",
         "summary": "取消当前应用尚未产生外站副作用的分发",
-        "tags": [
-          "外部调用"
-        ],
+        "tags": ["外部调用"],
         "security": [
           {
             "SignatureInput": [],
@@ -2493,10 +2421,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code",
-          "message"
-        ],
+        "required": ["code", "message"],
         "additionalProperties": false
       },
       "Scope": {
@@ -2512,10 +2437,7 @@
       },
       "GrantOperation": {
         "type": "string",
-        "enum": [
-          "save_draft",
-          "publish"
-        ],
+        "enum": ["save_draft", "publish"],
         "description": "publish仅是注册权限数据允许的保留值；当前能力和执行接口不开放公开发布。调用方应仅申请save_draft。"
       },
       "Target": {
@@ -2535,11 +2457,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "platform",
-          "account_id",
-          "operation"
-        ],
+        "required": ["platform", "account_id", "operation"],
         "additionalProperties": false
       },
       "InvitationInput": {
@@ -2625,11 +2543,7 @@
             "format": "date-time"
           }
         },
-        "required": [
-          "invitation_id",
-          "invitation_token",
-          "expires_at"
-        ],
+        "required": ["invitation_id", "invitation_token", "expires_at"],
         "additionalProperties": false
       },
       "Invitation": {
@@ -2687,11 +2601,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "consumed",
-              "expired"
-            ]
+            "enum": ["pending", "consumed", "expired"]
           },
           "created_at": {
             "type": "string",
@@ -2755,14 +2665,7 @@
             "uniqueItems": true
           }
         },
-        "required": [
-          "name",
-          "environment",
-          "source_id",
-          "scopes",
-          "accounts",
-          "operations"
-        ],
+        "required": ["name", "environment", "source_id", "scopes", "accounts", "operations"],
         "additionalProperties": false
       },
       "RegistrationIssued": {
@@ -2777,10 +2680,7 @@
             "const": "pending"
           }
         },
-        "required": [
-          "registration_id",
-          "status"
-        ],
+        "required": ["registration_id", "status"],
         "additionalProperties": false
       },
       "Registration": {
@@ -2830,11 +2730,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "approved",
-              "rejected"
-            ]
+            "enum": ["pending", "approved", "rejected"]
           },
           "created_at": {
             "type": "string",
@@ -2897,13 +2793,7 @@
             "maximum": 600
           }
         },
-        "required": [
-          "scopes",
-          "accounts",
-          "operations",
-          "expires_at",
-          "rate_limit_per_minute"
-        ],
+        "required": ["scopes", "accounts", "operations", "expires_at", "rate_limit_per_minute"],
         "additionalProperties": false,
         "description": "权限、账号、操作与到期时间不得超出邀请审批上限。应用有效期最多366天。无需来源地址或反向凭据。"
       },
@@ -2931,12 +2821,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending_activation",
-              "active",
-              "suspended",
-              "revoked"
-            ]
+            "enum": ["pending_activation", "active", "suspended", "revoked"]
           },
           "scopes": {
             "type": "array",
@@ -3014,12 +2899,7 @@
             "const": "pending_activation"
           }
         },
-        "required": [
-          "client_id",
-          "key_id",
-          "client_secret",
-          "status"
-        ],
+        "required": ["client_id", "key_id", "client_secret", "status"],
         "additionalProperties": false
       },
       "Status": {
@@ -3029,9 +2909,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "additionalProperties": false
       },
       "Audit": {
@@ -3055,13 +2933,7 @@
             "format": "date-time"
           }
         },
-        "required": [
-          "id",
-          "client_id",
-          "action",
-          "actor",
-          "created_at"
-        ],
+        "required": ["id", "client_id", "action", "actor", "created_at"],
         "additionalProperties": false
       },
       "Capability": {
@@ -3082,10 +2954,7 @@
             "type": "string"
           },
           "last_checked_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "operations": {
@@ -3144,10 +3013,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "checksum"
-        ],
+        "required": ["id", "checksum"],
         "additionalProperties": false
       },
       "SnapshotInput": {
@@ -3198,11 +3064,7 @@
             "description": "可选展示链接；仅http/https且无用户信息；不参与内容指纹。"
           }
         },
-        "required": [
-          "title",
-          "body",
-          "body_format"
-        ],
+        "required": ["title", "body", "body_format"],
         "additionalProperties": false
       },
       "Snapshot": {
@@ -3219,16 +3081,10 @@
           },
           "body_format": {
             "type": "string",
-            "enum": [
-              "markdown",
-              ""
-            ]
+            "enum": ["markdown", ""]
           },
           "tags": {
-            "type": [
-              "array",
-              "null"
-            ],
+            "type": ["array", "null"],
             "items": {
               "type": "string"
             }
@@ -3237,10 +3093,7 @@
             "type": "string"
           },
           "assets": {
-            "type": [
-              "array",
-              "null"
-            ],
+            "type": ["array", "null"],
             "items": {
               "$ref": "#/components/schemas/Asset"
             }
@@ -3285,37 +3138,19 @@
           },
           "article_type": {
             "type": "string",
-            "enum": [
-              "original",
-              "repost",
-              "translated"
-            ]
+            "enum": ["original", "repost", "translated"]
           },
           "creation_declaration": {
             "type": "string",
-            "enum": [
-              "none",
-              "ai_assisted",
-              "online_recreation",
-              "personal_opinion"
-            ]
+            "enum": ["none", "ai_assisted", "online_recreation", "personal_opinion"]
           },
           "visibility": {
             "type": "string",
-            "enum": [
-              "public",
-              "private",
-              "fans",
-              "vip"
-            ]
+            "enum": ["public", "private", "fans", "vip"]
           },
           "template": {
             "type": "string",
-            "enum": [
-              "default",
-              "simple",
-              "moyan"
-            ]
+            "enum": ["default", "simple", "moyan"]
           },
           "cover_image_url": {
             "type": "string"
@@ -3375,15 +3210,7 @@
             "$ref": "#/components/schemas/CSDNPublishOptions"
           }
         },
-        "required": [
-          "id",
-          "platform",
-          "account_id",
-          "operation",
-          "title",
-          "markdown",
-          "revision"
-        ],
+        "required": ["id", "platform", "account_id", "operation", "title", "markdown", "revision"],
         "additionalProperties": false
       },
       "DraftEdit": {
@@ -3420,14 +3247,7 @@
             "$ref": "#/components/schemas/CSDNPublishOptions"
           }
         },
-        "required": [
-          "id",
-          "platform",
-          "account_id",
-          "operation",
-          "title",
-          "markdown"
-        ],
+        "required": ["id", "platform", "account_id", "operation", "title", "markdown"],
         "additionalProperties": false
       },
       "PreparationInput": {
@@ -3576,13 +3396,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "prepared",
-              "confirmed",
-              "submitted",
-              "revoked",
-              "expired"
-            ]
+            "enum": ["prepared", "confirmed", "submitted", "revoked", "expired"]
           },
           "grant_version": {
             "type": "integer",
@@ -3646,10 +3460,7 @@
             "maxItems": 1
           }
         },
-        "required": [
-          "revision",
-          "drafts"
-        ],
+        "required": ["revision", "drafts"],
         "additionalProperties": false
       },
       "Revision": {
@@ -3661,9 +3472,7 @@
             "minimum": 1
           }
         },
-        "required": [
-          "revision"
-        ],
+        "required": ["revision"],
         "additionalProperties": false
       },
       "DistributionInput": {
@@ -3766,20 +3575,13 @@
           },
           "external_status": {
             "type": "string",
-            "enum": [
-              "not_submitted",
-              "draft_saved",
-              "unknown"
-            ]
+            "enum": ["not_submitted", "draft_saved", "unknown"]
           },
           "outcome": {
             "type": "string"
           },
           "last_confirmed_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "remote_id": {
@@ -3885,11 +3687,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "completed",
-              "in_progress",
-              "needs_attention"
-            ]
+            "enum": ["completed", "in_progress", "needs_attention"]
           },
           "children": {
             "type": "array",
@@ -3941,9 +3739,7 @@
             "pattern": "^[a-f0-9]{64}$"
           }
         },
-        "required": [
-          "confirmation_fingerprint"
-        ],
+        "required": ["confirmation_fingerprint"],
         "additionalProperties": false
       },
       "SourceEvent": {
@@ -4017,9 +3813,7 @@
               }
             },
             "then": {
-              "required": [
-                "authorization_id"
-              ],
+              "required": ["authorization_id"],
               "properties": {
                 "authorization_id": {
                   "type": "string",
@@ -4040,9 +3834,7 @@
               }
             },
             "then": {
-              "required": [
-                "content_fingerprint"
-              ],
+              "required": ["content_fingerprint"],
               "properties": {
                 "status": {
                   "const": "published"
@@ -4067,15 +3859,10 @@
               }
             },
             "then": {
-              "required": [
-                "content_fingerprint"
-              ],
+              "required": ["content_fingerprint"],
               "properties": {
                 "status": {
-                  "enum": [
-                    "draft",
-                    "published"
-                  ]
+                  "enum": ["draft", "published"]
                 },
                 "content_fingerprint": {
                   "type": "string",
@@ -4089,11 +3876,7 @@
             "if": {
               "properties": {
                 "type": {
-                  "enum": [
-                    "unpublished",
-                    "private",
-                    "deleted"
-                  ]
+                  "enum": ["unpublished", "private", "deleted"]
                 }
               }
             },
@@ -4120,10 +3903,7 @@
             "description": "重复或旧序列可返回false，仍表示已接收。"
           }
         },
-        "required": [
-          "received",
-          "applied"
-        ],
+        "required": ["received", "applied"],
         "additionalProperties": false
       },
       "Targets": {
@@ -4136,9 +3916,7 @@
             }
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "additionalProperties": false
       },
       "Invitations": {
@@ -4151,9 +3929,7 @@
             }
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "additionalProperties": false
       },
       "Registrations": {
@@ -4166,9 +3942,7 @@
             }
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "additionalProperties": false
       },
       "Clients": {
@@ -4181,9 +3955,7 @@
             }
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "additionalProperties": false
       },
       "Audits": {
@@ -4196,9 +3968,7 @@
             }
           }
         },
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "additionalProperties": false
       },
       "PreparationsPage": {
@@ -4224,12 +3994,7 @@
             "maximum": 100
           }
         },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "page_size"
-        ],
+        "required": ["items", "total", "page", "page_size"],
         "additionalProperties": false
       },
       "DistributionsPage": {
@@ -4255,12 +4020,7 @@
             "maximum": 100
           }
         },
-        "required": [
-          "items",
-          "total",
-          "page",
-          "page_size"
-        ],
+        "required": ["items", "total", "page", "page_size"],
         "additionalProperties": false
       }
     },
@@ -4397,12 +4157,7 @@
       "x-integration-environment",
       "x-integration-service"
     ],
-    "parameters": [
-      "created",
-      "keyid",
-      "nonce",
-      "alg"
-    ],
+    "parameters": ["created", "keyid", "nonce", "alg"],
     "created_tolerance_seconds": 300,
     "nonce_retention_seconds": 601,
     "body_limit_bytes": 1048576,
@@ -4428,13 +4183,8 @@
       "cover_image_url",
       "assets"
     ],
-    "asset_object_fields_in_order": [
-      "id",
-      "checksum"
-    ],
-    "excluded_fields": [
-      "original_url"
-    ]
+    "asset_object_fields_in_order": ["id", "checksum"],
+    "excluded_fields": ["original_url"]
   },
   "x-confirmation-fingerprint-profile": {
     "producer": "PostBridge",
@@ -4448,11 +4198,7 @@
       "drafts",
       "grant_version"
     ],
-    "target_object_fields_in_order": [
-      "platform",
-      "account_id",
-      "operation"
-    ],
+    "target_object_fields_in_order": ["platform", "account_id", "operation"],
     "draft_object_fields_in_order": [
       "id",
       "platform",
@@ -4501,15 +4247,8 @@
       "已有remote_id",
       "普通queued/running等未取消任务"
     ],
-    "allow_only_unwritten": [
-      "cancelled",
-      "来源守卫阻止的waiting_user"
-    ],
-    "requires": [
-      "当前有效授权",
-      "新的平台稿预览与确认",
-      "服务端事务核验所有旧任务"
-    ],
+    "allow_only_unwritten": ["cancelled", "来源守卫阻止的waiting_user"],
+    "requires": ["当前有效授权", "新的平台稿预览与确认", "服务端事务核验所有旧任务"],
     "effect": "安全取代的旧来源暂停任务改为cancelled，清正文与采集快照，保留父分发与关联记录",
     "existing_remote_copy_recreate": false
   }

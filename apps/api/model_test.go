@@ -142,7 +142,13 @@ func TestCancelWaitsForWorkerAndSafeRetryIsBounded(t *testing.T) {
 
 func TestLoginAndReconcileClaimsDoNotSpendSafeRetryBudget(t *testing.T) {
 	now := time.Now().UTC()
-	r := newRecord(CreateInput{RequestID: "login-budget", Kind: "save_draft", Platform: "csdn", Title: "valid title", Markdown: "body"}, now)
+	r := newRecord(CreateInput{
+		RequestID: "login-budget",
+		Kind:      "save_draft",
+		Platform:  "csdn",
+		Title:     "valid title",
+		Markdown:  "body",
+	}, now)
 	for i := 0; i < 6; i++ {
 		r.Status = "running"
 		r.Attempts++

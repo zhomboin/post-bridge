@@ -3,8 +3,9 @@ package bridge
 import (
 	"context"
 	"encoding/json"
-	"github.com/jackc/pgx/v5"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // 登录确认与等待任务恢复共用账号事务锁，重复观察同一结果不会重复恢复。

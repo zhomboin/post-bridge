@@ -13,7 +13,14 @@ import (
 )
 
 func syntheticXHS() PlatformAccountConfig {
-	return PlatformAccountConfig{ID: "xhs-main", Platform: "xiaohongshu", Username: "synthetic-red", UserID: "aaaaaaaaaaaaaaaaaaaaaaaa", DisplayName: "合成小红书账号", WorkerToken: strings.Repeat("x", 32)}
+	return PlatformAccountConfig{
+		ID:          "xhs-main",
+		Platform:    "xiaohongshu",
+		Username:    "synthetic-red",
+		UserID:      "aaaaaaaaaaaaaaaaaaaaaaaa",
+		DisplayName: "合成小红书账号",
+		WorkerToken: strings.Repeat("x", 32),
+	}
 }
 func configureXHS(t *testing.T, s *Store) {
 	t.Helper()
@@ -22,7 +29,11 @@ func configureXHS(t *testing.T, s *Store) {
 	}
 }
 func noteSnapshot() *NotesSnapshot {
-	return &NotesSnapshot{Username: syntheticXHS().Username, UserID: syntheticXHS().UserID, Items: []Note{{ID: "bbbbbbbbbbbbbbbbbbbbbbbb", Title: "合成笔记", Status: "unknown"}}}
+	return &NotesSnapshot{
+		Username: syntheticXHS().Username,
+		UserID:   syntheticXHS().UserID,
+		Items:    []Note{{ID: "bbbbbbbbbbbbbbbbbbbbbbbb", Title: "合成笔记", Status: "unknown"}},
+	}
 }
 func claimNotes(t *testing.T, s *Store, key string) *Claim {
 	t.Helper()
@@ -44,7 +55,12 @@ func claimNotes(t *testing.T, s *Store, key string) *Claim {
 	return c
 }
 func notesResult(c *Claim, snapshot *NotesSnapshot) CompleteInput {
-	return CompleteInput{LeaseToken: c.LeaseToken, Status: "succeeded", Notes: snapshot, AccountIdentity: &AccountIdentity{Username: syntheticXHS().Username, UserID: syntheticXHS().UserID}}
+	return CompleteInput{
+		LeaseToken:      c.LeaseToken,
+		Status:          "succeeded",
+		Notes:           snapshot,
+		AccountIdentity: &AccountIdentity{Username: syntheticXHS().Username, UserID: syntheticXHS().UserID},
+	}
 }
 func TestNotesValidation(t *testing.T) {
 	if validateNotes(noteSnapshot(), syntheticXHS().Username, syntheticXHS().UserID) != nil {
@@ -128,7 +144,13 @@ func TestNotesIsolationLifecycleAndRetention(t *testing.T) {
 	if a.Status != "unchecked" {
 		t.Fatal("other account status changed")
 	}
-	rows, total, err := s.Processes(ctx, ProcessFilter{Platform: "xiaohongshu", From: time.Now().Add(-time.Hour), To: time.Now().Add(time.Hour), Page: 1, Size: 20})
+	rows, total, err := s.Processes(ctx, ProcessFilter{
+		Platform: "xiaohongshu",
+		From:     time.Now().Add(-time.Hour),
+		To:       time.Now().Add(time.Hour),
+		Page:     1,
+		Size:     20,
+	})
 	if err != nil || total != 5 || len(rows) != 5 {
 		t.Fatalf("process duplicates %d %d %v", total, len(rows), err)
 	}
@@ -169,7 +191,14 @@ func TestNotesLeaseAndIdentityFencing(t *testing.T) {
 func TestPlatformAccountHTTPIsolation(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
-	h, err := NewHandler(ctx, Config{Store: s, AdminUsername: "admin", AdminPassword: "test-password-long", WorkerToken: strings.Repeat("w", 32), Origin: "http://localhost", PlatformAccounts: []PlatformAccountConfig{syntheticXHS()}})
+	h, err := NewHandler(ctx, Config{
+		Store:            s,
+		AdminUsername:    "admin",
+		AdminPassword:    "test-password-long",
+		WorkerToken:      strings.Repeat("w", 32),
+		Origin:           "http://localhost",
+		PlatformAccounts: []PlatformAccountConfig{syntheticXHS()},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +259,13 @@ func TestPlatformAccountHTTPIsolation(t *testing.T) {
 			t.Fatal("unexpected write route", w.Code)
 		}
 	}
-	h, err = NewHandler(ctx, Config{Store: s, AdminUsername: "admin", AdminPassword: "test-password-long", WorkerToken: strings.Repeat("w", 32), Origin: "http://localhost"})
+	h, err = NewHandler(ctx, Config{
+		Store:         s,
+		AdminUsername: "admin",
+		AdminPassword: "test-password-long",
+		WorkerToken:   strings.Repeat("w", 32),
+		Origin:        "http://localhost",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

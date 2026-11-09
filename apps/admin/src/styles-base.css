@@ -1,0 +1,154 @@
+@font-face {
+  font-family: 'Noto Sans CJK';
+  src: local('Noto Sans CJK SC'), local('Noto Sans SC'), local('Source Han Sans SC');
+  font-display: swap;
+}
+:root {
+  font-family: 'Noto Sans CJK', 'Microsoft YaHei', system-ui, sans-serif;
+  color: #182230;
+  background: #f6f8fa;
+  font-synthesis: none;
+  --muted: #526176;
+  --line: #d8dee8;
+  --blue: #2557c8;
+  --surface: #fff;
+  line-height: 1.6;
+  font-size: 14px;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+a {
+  color: var(--blue);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #2557c855;
+  outline-offset: 3px;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: -0.4px;
+}
+h2 {
+  font-size: 17px;
+  font-weight: 650;
+}
+h3 {
+  font-size: 14px;
+  font-weight: 650;
+}
+small,
+.muted {
+  color: var(--muted);
+}
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  color: #182230;
+  font-weight: 550;
+  line-height: 1.5;
+  white-space: normal;
+}
+button:active,
+.button:active {
+  transform: scale(0.98);
+}
+button.primary,
+.button.primary {
+  color: #fff;
+  background: var(--blue);
+  border-color: var(--blue);
+}
+button.danger {
+  color: #a42a28;
+  border-color: #e3b5b5;
+}
+.button:hover {
+  text-decoration: none;
+}
+svg {
+  flex-shrink: 0;
+}
+input:not([type='checkbox']),
+select,
+textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #bdc8d7;
+  border-radius: 6px;
+  background: white;
+  padding: 8px 10px;
+  color: #182230;
+}
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue);
+  flex-shrink: 0;
+}
+textarea {
+  resize: vertical;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 550;
+}
+.checkbox {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 9px;
+  font-weight: 400;
+}
+.checkbox input {
+  margin-top: 4px;
+}

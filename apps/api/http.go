@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"golang.org/x/crypto/bcrypt"
 	"io"
 	"net"
 	"net/http"
@@ -18,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Config struct {
@@ -73,7 +74,17 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 	if err = cfg.Store.pool.QueryRow(ctx, "SELECT password_hash FROM admins WHERE username=$1", cfg.AdminUsername).Scan(&hash); err != nil {
 		return nil, err
 	}
-	h := &handler{store: cfg.Store, username: cfg.AdminUsername, hash: hash, workerToken: cfg.WorkerToken, origin: strings.TrimSuffix(cfg.Origin, "/"), secure: origin.Scheme == "https", dist: cfg.AdminDistDir, mux: http.NewServeMux(), attempts: map[string]loginWindow{}}
+	h := &handler{
+		store:       cfg.Store,
+		username:    cfg.AdminUsername,
+		hash:        hash,
+		workerToken: cfg.WorkerToken,
+		origin:      strings.TrimSuffix(cfg.Origin, "/"),
+		secure:      origin.Scheme == "https",
+		dist:        cfg.AdminDistDir,
+		mux:         http.NewServeMux(),
+		attempts:    map[string]loginWindow{},
+	}
 	h.remoteLoginProxy = remote
 	if err = cfg.Store.ConfigurePlatformAccounts(ctx, cfg.PlatformAccounts); err != nil {
 		return nil, err
@@ -266,7 +277,16 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 		replyError(w, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "post_bridge_session", Value: token, Path: "/", HttpOnly: true, Secure: h.secure, SameSite: http.SameSiteStrictMode, MaxAge: 43200, Expires: expires})
+	http.SetCookie(w, &http.Cookie{
+		Name:     "post_bridge_session",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   h.secure,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   43200,
+		Expires:  expires,
+	})
 	writeJSON(w, 200, map[string]any{"user": map[string]string{"username": h.username}, "csrf_token": csrf})
 }
 func (h *handler) routes() {
@@ -288,7 +308,15 @@ func (h *handler) routes() {
 			return
 		}
 		h.closeRemoteLogin(r.Context(), s.CSRF)
-		http.SetCookie(w, &http.Cookie{Name: "post_bridge_session", Value: "", Path: "/", HttpOnly: true, Secure: h.secure, SameSite: http.SameSiteStrictMode, MaxAge: -1})
+		http.SetCookie(w, &http.Cookie{
+			Name:     "post_bridge_session",
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   h.secure,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   -1,
+		})
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	}))
 	h.mux.HandleFunc("GET /api/account", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
@@ -323,7 +351,23 @@ func (h *handler) routes() {
 			replyError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"draft_only": true, "platform": "csdn", "limits": map[string]int{"title_min": 5, "title_max": 100, "markdown_max": 200000, "request_bytes": 1 << 20, "max_retries": 3, "lease_seconds": 60, "logs_retention_days": 30, "content_retention_days": 30, "audit_retention_days": 90}, "poll_interval_ms": 5000, "worker_last_seen_at": seen})
+		writeJSON(w, 200, map[string]any{
+			"draft_only": true,
+			"platform":   "csdn",
+			"limits": map[string]int{
+				"title_min":              5,
+				"title_max":              100,
+				"markdown_max":           200000,
+				"request_bytes":          1 << 20,
+				"max_retries":            3,
+				"lease_seconds":          60,
+				"logs_retention_days":    30,
+				"content_retention_days": 30,
+				"audit_retention_days":   90,
+			},
+			"poll_interval_ms":    5000,
+			"worker_last_seen_at": seen,
+		})
 	}))
 	h.mux.HandleFunc("POST /api/account/check", h.admin(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var in struct {

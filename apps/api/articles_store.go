@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, in CompleteInput, now time.Time) error {
@@ -42,7 +43,14 @@ func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, i
 			return ErrInvalid
 		}
 		snapshot := in.Articles
-		info := ArticleSnapshotInfo{Username: username, Profile: snapshot.Profile, Counts: snapshot.Counts, Stats: snapshot.Stats, Trend: snapshot.Trend, SyncedAt: now}
+		info := ArticleSnapshotInfo{
+			Username: username,
+			Profile:  snapshot.Profile,
+			Counts:   snapshot.Counts,
+			Stats:    snapshot.Stats,
+			Trend:    snapshot.Trend,
+			SyncedAt: now,
+		}
 		if info.Trend == nil {
 			info.Trend = []ArticleTrend{}
 		}

@@ -7,11 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var integrationScopes = []string{"targets:read", "preparations:write", "preparations:read", "distributions:write", "distributions:read", "source-events:write"}
@@ -166,7 +167,12 @@ func (s *IntegrationService) issue(ctx context.Context, tx pgx.Tx, c Integration
 		return IntegrationIssued{}, e
 	}
 	_, e = tx.Exec(ctx, "INSERT INTO integration_keys(id,client_id,encrypted_secret,status,expires_at,created_at) VALUES($1,$2,$3,'pending_activation',$4,$5)", key, c.ID, encrypted, c.ExpiresAt, s.store.now())
-	return IntegrationIssued{ClientID: c.ID, KeyID: key, Secret: base64.StdEncoding.EncodeToString(raw), Status: "pending_activation"}, e
+	return IntegrationIssued{
+		ClientID: c.ID,
+		KeyID:    key,
+		Secret:   base64.StdEncoding.EncodeToString(raw),
+		Status:   "pending_activation",
+	}, e
 }
 func integrationApplyGrant(c *IntegrationClient, in IntegrationGrantInput, now time.Time) error {
 	if !integrationPermissions(in.Scopes, in.Accounts, in.Operations) || !in.ExpiresAt.After(now) || in.ExpiresAt.After(now.Add(366*24*time.Hour)) || in.RateLimitPerMinute < 1 || in.RateLimitPerMinute > 600 {
@@ -206,7 +212,15 @@ func (s *IntegrationService) Approve(ctx context.Context, id string, in Integrat
 	if in.SourceID != "" && in.SourceID != cap.SourceID || !integrationSubset(in.Scopes, cap.Scopes) || !integrationSubset(in.Accounts, cap.Accounts) || !integrationSubset(in.Operations, cap.Operations) || in.ExpiresAt.After(cap.ClientExpiresAt) || in.RateLimitPerMinute > cap.RateLimitPerMinute {
 		return IntegrationIssued{}, ErrIntegrationPermission
 	}
-	c := IntegrationClient{ID: randomToken(), Name: reg.Name, SourceID: reg.SourceID, Environment: s.environment, ServiceID: s.serviceID, Status: "pending_activation", GrantVersion: 1}
+	c := IntegrationClient{
+		ID:           randomToken(),
+		Name:         reg.Name,
+		SourceID:     reg.SourceID,
+		Environment:  s.environment,
+		ServiceID:    s.serviceID,
+		Status:       "pending_activation",
+		GrantVersion: 1,
+	}
 	if e = integrationApplyGrant(&c, in, s.store.now()); e != nil {
 		return IntegrationIssued{}, e
 	}
@@ -386,7 +400,19 @@ func (s *IntegrationService) RegisterRoutes(h *handler) {
 			} else if !expires.After(s.store.now()) {
 				status = "expired"
 			}
-			items = append(items, map[string]any{"invitation_id": id, "source_id": cap.SourceID, "environment": cap.Environment, "scopes": cap.Scopes, "accounts": cap.Accounts, "operations": cap.Operations, "status": status, "expires_at": expires, "client_expires_at": cap.ClientExpiresAt, "rate_limit_per_minute": cap.RateLimitPerMinute, "created_at": created})
+			items = append(items, map[string]any{
+				"invitation_id":         id,
+				"source_id":             cap.SourceID,
+				"environment":           cap.Environment,
+				"scopes":                cap.Scopes,
+				"accounts":              cap.Accounts,
+				"operations":            cap.Operations,
+				"status":                status,
+				"expires_at":            expires,
+				"client_expires_at":     cap.ClientExpiresAt,
+				"rate_limit_per_minute": cap.RateLimitPerMinute,
+				"created_at":            created,
+			})
 		}
 		if e = rows.Err(); e != nil {
 			integrationError(w, e)

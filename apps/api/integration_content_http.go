@@ -52,7 +52,19 @@ func (h *handler) integrationRoutes() {
 			return
 		}
 		if integrationHas(p.Accounts, account.ID) && integrationHas(p.Operations, "save_draft") {
-			items = append(items, map[string]any{"platform": "csdn", "account_id": account.ID, "display_name": account.DisplayName, "status": account.Status, "last_checked_at": account.LastCheckedAt, "operations": []string{"save_draft"}, "body_formats": []string{"markdown"}, "images": len(csdnImageHosts()) != 0, "title_min": 5, "title_max": 100, "body_max": 200000})
+			items = append(items, map[string]any{
+				"platform":        "csdn",
+				"account_id":      account.ID,
+				"display_name":    account.DisplayName,
+				"status":          account.Status,
+				"last_checked_at": account.LastCheckedAt,
+				"operations":      []string{"save_draft"},
+				"body_formats":    []string{"markdown"},
+				"images":          len(csdnImageHosts()) != 0,
+				"title_min":       5,
+				"title_max":       100,
+				"body_max":        200000,
+			})
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	}))

@@ -78,7 +78,12 @@ func (s *Store) csdnPublishSource(ctx context.Context, tx pgx.Tx, parent *record
 	}
 	token := integrationDigest([]any{"postbridge-csdn-publish-v1", parent.ID, parent.RemoteID, parent.AccountID,
 		parent.AccountUsername, p.ConfirmationFingerprint, draft.ID, draft.Revision, parent.Title, markdown, options})
-	return csdnPublishPreview{Title: parent.Title, AccountUsername: parent.AccountUsername, Options: options, ConfirmationToken: token}, markdown, nil
+	return csdnPublishPreview{
+		Title:             parent.Title,
+		AccountUsername:   parent.AccountUsername,
+		Options:           options,
+		ConfirmationToken: token,
+	}, markdown, nil
 }
 
 func (s *Store) csdnPublish(ctx context.Context, id string, token *string) (csdnPublishPreview, error) {

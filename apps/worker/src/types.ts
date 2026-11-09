@@ -93,12 +93,7 @@ export interface Job {
   account_id?: string;
   account_native_id?: string;
   kind:
-    | 'sync_notes'
-    | 'save_draft'
-    | 'publish'
-    | 'check_account'
-    | 'sync_articles'
-    | 'read_article';
+    'sync_notes' | 'save_draft' | 'publish' | 'check_account' | 'sync_articles' | 'read_article';
   title: string;
   markdown: string;
   image_urls?: string[];

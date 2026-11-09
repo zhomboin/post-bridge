@@ -17,15 +17,37 @@ func TestStandaloneRegistryNeedsNoReverseService(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := st.now()
-	invite, err := s.Invite(ctx, IntegrationInvitationInput{SourceID: "caller", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: now.Add(time.Hour), ClientExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 20}, "admin")
+	invite, err := s.Invite(ctx, IntegrationInvitationInput{
+		SourceID:           "caller",
+		Environment:        "test",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		ExpiresAt:          now.Add(time.Hour),
+		ClientExpiresAt:    now.Add(24 * time.Hour),
+		RateLimitPerMinute: 20,
+	}, "admin")
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg, err := s.Register(ctx, invite.Token, IntegrationRegistrationInput{Name: "调用方", SourceID: "caller", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}})
+	reg, err := s.Register(ctx, invite.Token, IntegrationRegistrationInput{
+		Name:        "调用方",
+		SourceID:    "caller",
+		Environment: "test",
+		Scopes:      []string{"targets:read"},
+		Accounts:    []string{"csdn-main"},
+		Operations:  []string{"save_draft"},
+	})
 	if err != nil {
 		t.Fatalf("registration without reverse endpoint: %v", err)
 	}
-	issued, err := s.Approve(ctx, reg.ID, IntegrationGrantInput{Scopes: reg.Scopes, Accounts: reg.Accounts, Operations: reg.Operations, ExpiresAt: now.Add(time.Hour), RateLimitPerMinute: 20}, "admin")
+	issued, err := s.Approve(ctx, reg.ID, IntegrationGrantInput{
+		Scopes:             reg.Scopes,
+		Accounts:           reg.Accounts,
+		Operations:         reg.Operations,
+		ExpiresAt:          now.Add(time.Hour),
+		RateLimitPerMinute: 20,
+	}, "admin")
 	if err != nil || issued.Secret == "" {
 		t.Fatalf("approval without reverse credentials: %v", err)
 	}
@@ -55,7 +77,20 @@ func TestStandaloneMigrationRemovesReverseDataAndPreservesKeysAndJobs(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := IntegrationClient{ID: "migration-client", Name: "迁移调用方", SourceID: "caller", Environment: "test", ServiceID: "bridge-test", Status: "active", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, GrantVersion: 4, ExpiresAt: st.now().Add(time.Hour), RateLimitPerMinute: 20}
+	c := IntegrationClient{
+		ID:                 "migration-client",
+		Name:               "迁移调用方",
+		SourceID:           "caller",
+		Environment:        "test",
+		ServiceID:          "bridge-test",
+		Status:             "active",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		GrantVersion:       4,
+		ExpiresAt:          st.now().Add(time.Hour),
+		RateLimitPerMinute: 20,
+	}
 	if err = seedIntegrationClient(ctx, s, c); err != nil {
 		t.Fatal(err)
 	}
@@ -131,11 +166,30 @@ func TestStandaloneGrantChangesAdvanceVersion(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c := IntegrationClient{ID: "grant-client", Name: "调用方", SourceID: "caller", Environment: "test", ServiceID: "bridge-test", Status: "active", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, GrantVersion: 4, ExpiresAt: st.now().Add(time.Hour), RateLimitPerMinute: 20}
+			c := IntegrationClient{
+				ID:                 "grant-client",
+				Name:               "调用方",
+				SourceID:           "caller",
+				Environment:        "test",
+				ServiceID:          "bridge-test",
+				Status:             "active",
+				Scopes:             []string{"targets:read"},
+				Accounts:           []string{"csdn-main"},
+				Operations:         []string{"save_draft"},
+				GrantVersion:       4,
+				ExpiresAt:          st.now().Add(time.Hour),
+				RateLimitPerMinute: 20,
+			}
 			if err = seedIntegrationClient(ctx, s, c); err != nil {
 				t.Fatal(err)
 			}
-			in := IntegrationGrantInput{Scopes: c.Scopes, Accounts: c.Accounts, Operations: c.Operations, ExpiresAt: c.ExpiresAt, RateLimitPerMinute: c.RateLimitPerMinute}
+			in := IntegrationGrantInput{
+				Scopes:             c.Scopes,
+				Accounts:           c.Accounts,
+				Operations:         c.Operations,
+				ExpiresAt:          c.ExpiresAt,
+				RateLimitPerMinute: c.RateLimitPerMinute,
+			}
 			same, err := s.Update(ctx, c.ID, in, "admin")
 			if err != nil || same.GrantVersion != c.GrantVersion {
 				t.Fatalf("unchanged grant invalidated: %+v %v", same, err)

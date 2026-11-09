@@ -41,13 +41,24 @@ func TestPostgresReadOnlyReconcileAndSanitizedLogs(t *testing.T) {
 	ctx := context.Background()
 	j := createTest(t, s, "readonly")
 	c, _ := s.Claim(ctx, "owner")
-	if err := s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "opening_editor", ExternalStarted: true, Message: "Cookie=secret article body"}); err != nil {
+	if err := s.Progress(ctx, j.ID, ProgressInput{
+		LeaseToken:      c.LeaseToken,
+		Stage:           "opening_editor",
+		ExternalStarted: true,
+		Message:         "Cookie=secret article body",
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress(ctx, j.ID, ProgressInput{LeaseToken: c.LeaseToken, Stage: "draft_acquired", RemoteID: "123"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Complete(ctx, j.ID, CompleteInput{LeaseToken: c.LeaseToken, Status: "failed", Retryable: true, ErrorCode: "raw-password-secret", ErrorMessage: "Cookie=secret article body"}); err != nil {
+	if err := s.Complete(ctx, j.ID, CompleteInput{
+		LeaseToken:   c.LeaseToken,
+		Status:       "failed",
+		Retryable:    true,
+		ErrorCode:    "raw-password-secret",
+		ErrorMessage: "Cookie=secret article body",
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Action(ctx, j.ID, "reconcile", ActionInput{RemoteID: "999"}); err != ErrInvalid {
@@ -111,7 +122,14 @@ func TestHTTPLoginRateLimitSessionExpiryAndStaticFallback(t *testing.T) {
 	s := testStore(t)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><title>工作台</title>"), 0600)
-	h, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "https://localhost", AdminDistDir: dir})
+	h, err := NewHandler(context.Background(), Config{
+		Store:         s,
+		AdminUsername: "admin",
+		AdminPassword: "private-test-password",
+		WorkerToken:   "private-test-worker-token-32-characters",
+		Origin:        "https://localhost",
+		AdminDistDir:  dir,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

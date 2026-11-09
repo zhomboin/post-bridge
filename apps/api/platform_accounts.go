@@ -118,7 +118,15 @@ func (s *Store) Accounts(ctx context.Context) ([]Account, error) {
 }
 
 func accountCapabilities(a Account) map[string]bool {
-	return map[string]bool{"check_login": true, "sync_articles": a.Platform == "csdn", "read_article": a.Platform == "csdn", "sync_notes": a.Platform == "xiaohongshu", "remote_login": a.Platform == "csdn", "save_draft": a.Platform == "csdn", "publish": a.Platform == "csdn"}
+	return map[string]bool{
+		"check_login":   true,
+		"sync_articles": a.Platform == "csdn",
+		"read_article":  a.Platform == "csdn",
+		"sync_notes":    a.Platform == "xiaohongshu",
+		"remote_login":  a.Platform == "csdn",
+		"save_draft":    a.Platform == "csdn",
+		"publish":       a.Platform == "csdn",
+	}
 }
 func (h *handler) platformAccountRoutes() {
 	h.mux.HandleFunc("GET /api/accounts", h.platformAccountAdmin(func(w http.ResponseWriter, r *http.Request, _ session) {

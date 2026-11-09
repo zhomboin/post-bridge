@@ -8,9 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"time"
 )
 
 //go:embed schema.sql
@@ -547,7 +548,13 @@ func (s *Store) Action(ctx context.Context, id, action string, in ActionInput) (
 		if err = save(ctx, tx, r); err != nil {
 			return err
 		}
-		message := map[string]string{"cancel": "管理员请求停止任务", "retry": "管理员请求安全重试", "resume": "管理员恢复等待任务", "reconcile": "管理员请求只读核对", "resolve": "管理员保留草稿并人工结束任务"}[action]
+		message := map[string]string{
+			"cancel":    "管理员请求停止任务",
+			"retry":     "管理员请求安全重试",
+			"resume":    "管理员恢复等待任务",
+			"reconcile": "管理员请求只读核对",
+			"resolve":   "管理员保留草稿并人工结束任务",
+		}[action]
 		if action == "resolve" && r.Kind == "publish" {
 			message = "管理员保留平台现有状态并人工结束任务"
 		}
@@ -627,7 +634,15 @@ func (s *Store) Jobs(ctx context.Context, q, status string, page, size int) ([]J
 	return jobs, total, rows.Err()
 }
 func (s *Store) Counts(ctx context.Context) (map[string]int, error) {
-	result := map[string]int{"queued": 0, "running": 0, "waiting_user": 0, "reconciling": 0, "succeeded": 0, "failed": 0, "cancelled": 0}
+	result := map[string]int{
+		"queued":       0,
+		"running":      0,
+		"waiting_user": 0,
+		"reconciling":  0,
+		"succeeded":    0,
+		"failed":       0,
+		"cancelled":    0,
+	}
 	rows, err := s.pool.Query(ctx, "SELECT record->>'status',count(*) FROM jobs GROUP BY record->>'status'")
 	if err != nil {
 		return nil, err

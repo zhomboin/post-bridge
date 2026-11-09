@@ -74,8 +74,26 @@ func newRemoteLoginProxy(endpoint string) (*remoteLoginProxy, error) {
 	if endpoint == "" {
 		return nil, nil
 	}
-	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}).DialContext, MaxConnsPerHost: 8, MaxIdleConns: 2, MaxIdleConnsPerHost: 2, IdleConnTimeout: 30 * time.Second, ResponseHeaderTimeout: 3 * time.Second, MaxResponseHeaderBytes: 16 << 10, DisableCompression: true}
-	return &remoteLoginProxy{endpoint: endpoint, client: &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, slots: make(chan struct{}, 8)}, nil
+	transport := &http.Transport{
+		Proxy:                  nil,
+		DialContext:            (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		MaxConnsPerHost:        8,
+		MaxIdleConns:           2,
+		MaxIdleConnsPerHost:    2,
+		IdleConnTimeout:        30 * time.Second,
+		ResponseHeaderTimeout:  3 * time.Second,
+		MaxResponseHeaderBytes: 16 << 10,
+		DisableCompression:     true,
+	}
+	return &remoteLoginProxy{
+		endpoint: endpoint,
+		client: &http.Client{
+			Transport:     transport,
+			Timeout:       5 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
+		slots: make(chan struct{}, 8),
+	}, nil
 }
 func (p *remoteLoginProxy) exchange(ctx context.Context, token, method, path string, body []byte, frame bool) ([]byte, int, error) {
 	var reader io.Reader
@@ -428,7 +446,13 @@ func (p *remoteLoginProxy) revoke(ctx context.Context, token string) (remoteLogi
 		var upstream remoteControlError
 		if errors.As(err, &upstream) && upstream.status == 404 {
 			p.current = nil
-			return remoteLoginState{ID: binding.id, Status: "cancelled", ExpiresAt: binding.expires.Format(time.RFC3339), Width: 1280, Height: 800}, nil
+			return remoteLoginState{
+				ID:        binding.id,
+				Status:    "cancelled",
+				ExpiresAt: binding.expires.Format(time.RFC3339),
+				Width:     1280,
+				Height:    800,
+			}, nil
 		}
 		return remoteLoginState{}, err
 	}

@@ -16,9 +16,25 @@ func publishFixture(t *testing.T, tags []string, settings ...func(*CSDNPublishOp
 	h, s := integrationTestHandler(t)
 	c := integrationSeedClient(t, h)
 	ctx := context.Background()
-	snapshot := IntegrationSnapshot{Title: "已核验的正式发布文章", Body: "# 内容\n\n正文", BodyFormat: "markdown", Tags: tags}
+	snapshot := IntegrationSnapshot{
+		Title:      "已核验的正式发布文章",
+		Body:       "# 内容\n\n正文",
+		BodyFormat: "markdown",
+		Tags:       tags,
+	}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	p, _, err := h.prepareIntegration(ctx, c, IntegrationPrepareInput{RequestID: "publish-prepare", SourceID: c.SourceID, ArticleID: "publish-article", SourceVersion: 1, StateSeq: 1, AuthorizationID: "publish-authorization", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}})
+	p, _, err := h.prepareIntegration(ctx, c, IntegrationPrepareInput{
+		RequestID:              "publish-prepare",
+		SourceID:               c.SourceID,
+		ArticleID:              "publish-article",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "publish-authorization",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +51,18 @@ func publishFixture(t *testing.T, tags []string, settings ...func(*CSDNPublishOp
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, _, err := h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{RequestID: "publish-distribute", SourceID: c.SourceID, ArticleID: p.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets})
+	d, _, err := h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{
+		RequestID:               "publish-distribute",
+		SourceID:                c.SourceID,
+		ArticleID:               p.ArticleID,
+		SourceVersion:           1,
+		StateSeq:                1,
+		ContentFingerprint:      fp,
+		PreparationID:           p.ID,
+		DraftRevisionIDs:        p.DraftRevisionIDs,
+		ConfirmationFingerprint: p.ConfirmationFingerprint,
+		Targets:                 p.Targets,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +197,13 @@ func TestCSDNPublishWriteGuardAndReadOnlyRecovery(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			checkpoint := ProgressInput{LeaseToken: claim.LeaseToken, Stage: "saving", ExternalStarted: true, RemoteID: draft.RemoteID, PublishedHTMLSHA256: testPublishHTMLSHA256}
+			checkpoint := ProgressInput{
+				LeaseToken:          claim.LeaseToken,
+				Stage:               "saving",
+				ExternalStarted:     true,
+				RemoteID:            draft.RemoteID,
+				PublishedHTMLSHA256: testPublishHTMLSHA256,
+			}
 			if revokeAtCheckpoint {
 				c.Status = "suspended"
 				guardUpdateClient(t, s, c)
@@ -196,7 +229,12 @@ func TestCSDNPublishWriteGuardAndReadOnlyRecovery(t *testing.T) {
 			}
 			c.Status = "suspended"
 			guardUpdateClient(t, s, c)
-			if err := s.Complete(ctx, job.ID, CompleteInput{LeaseToken: claim.LeaseToken, Status: "reconciling", RemoteID: draft.RemoteID, PublishAccepted: true}); err != nil {
+			if err := s.Complete(ctx, job.ID, CompleteInput{
+				LeaseToken:      claim.LeaseToken,
+				Status:          "reconciling",
+				RemoteID:        draft.RemoteID,
+				PublishAccepted: true,
+			}); err != nil {
 				t.Fatal(err)
 			}
 			stored := guardReadRecord(t, s, job.ID)

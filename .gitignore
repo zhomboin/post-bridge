@@ -1,4 +1,5 @@
 .worktrees/
+.local-tmp/
 node_modules/
 dist/
 coverage/

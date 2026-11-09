@@ -24,11 +24,27 @@ func TestIntegrationRegistryLifecycleReplayAndGrant(t *testing.T) {
 		t.Fatal(e)
 	}
 	now := st.now()
-	inv, e := s.Invite(ctx, IntegrationInvitationInput{SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: now.Add(time.Hour), ClientExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 20}, "admin")
+	inv, e := s.Invite(ctx, IntegrationInvitationInput{
+		SourceID:           "cms",
+		Environment:        "test",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		ExpiresAt:          now.Add(time.Hour),
+		ClientExpiresAt:    now.Add(24 * time.Hour),
+		RateLimitPerMinute: 20,
+	}, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}
-	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
+	registration := IntegrationRegistrationInput{
+		Name:        "CMS",
+		SourceID:    "cms",
+		Environment: "test",
+		Scopes:      []string{"targets:read"},
+		Accounts:    []string{"csdn-main"},
+		Operations:  []string{"save_draft"},
+	}
 	reg, e := s.Register(ctx, inv.Token, registration)
 	if e != nil {
 		t.Fatal(e)
@@ -36,7 +52,13 @@ func TestIntegrationRegistryLifecycleReplayAndGrant(t *testing.T) {
 	if _, e = s.Register(ctx, inv.Token, registration); e == nil {
 		t.Fatal("invitation replay")
 	}
-	grant := IntegrationGrantInput{Scopes: registration.Scopes, Accounts: registration.Accounts, Operations: registration.Operations, ExpiresAt: now.Add(12 * time.Hour), RateLimitPerMinute: 20}
+	grant := IntegrationGrantInput{
+		Scopes:             registration.Scopes,
+		Accounts:           registration.Accounts,
+		Operations:         registration.Operations,
+		ExpiresAt:          now.Add(12 * time.Hour),
+		RateLimitPerMinute: 20,
+	}
 	issue, e := s.Approve(ctx, reg.ID, grant, "admin")
 	if e != nil {
 		t.Fatal(e)
@@ -152,12 +174,28 @@ func TestIntegrationInvitationBoundsAndApprovalCeiling(t *testing.T) {
 		t.Fatal(e)
 	}
 	now := st.now()
-	input := IntegrationInvitationInput{SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: now.Add(time.Hour), ClientExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 3}
+	input := IntegrationInvitationInput{
+		SourceID:           "cms",
+		Environment:        "test",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		ExpiresAt:          now.Add(time.Hour),
+		ClientExpiresAt:    now.Add(24 * time.Hour),
+		RateLimitPerMinute: 3,
+	}
 	inv, e := s.Invite(ctx, input, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}
-	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
+	registration := IntegrationRegistrationInput{
+		Name:        "CMS",
+		SourceID:    "cms",
+		Environment: "test",
+		Scopes:      []string{"targets:read"},
+		Accounts:    []string{"csdn-main"},
+		Operations:  []string{"save_draft"},
+	}
 	bad := registration
 	bad.SourceID = "other"
 	if _, e = s.Register(ctx, inv.Token, bad); e != ErrIntegrationPermission {
@@ -172,7 +210,13 @@ func TestIntegrationInvitationBoundsAndApprovalCeiling(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	grant := IntegrationGrantInput{Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"publish"}, ExpiresAt: now.Add(12 * time.Hour), RateLimitPerMinute: 3}
+	grant := IntegrationGrantInput{
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"publish"},
+		ExpiresAt:          now.Add(12 * time.Hour),
+		RateLimitPerMinute: 3,
+	}
 	if _, e = s.Approve(ctx, reg.ID, grant, "admin"); e != ErrIntegrationPermission {
 		t.Fatal(e)
 	}
@@ -217,7 +261,16 @@ func TestIntegrationInvitationBoundsAndApprovalCeiling(t *testing.T) {
 func TestIntegrationAdminRoutesRequireSessionAndCSRF(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
-	h0, e := NewHandler(ctx, Config{Store: st, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: strings.Repeat("w", 32), Origin: "https://bridge.example", IntegrationMasterKey: strings.Repeat("ab", 32), IntegrationEnvironment: "test", IntegrationServiceID: "bridge-test"})
+	h0, e := NewHandler(ctx, Config{
+		Store:                  st,
+		AdminUsername:          "admin",
+		AdminPassword:          "private-test-password",
+		WorkerToken:            strings.Repeat("w", 32),
+		Origin:                 "https://bridge.example",
+		IntegrationMasterKey:   strings.Repeat("ab", 32),
+		IntegrationEnvironment: "test",
+		IntegrationServiceID:   "bridge-test",
+	})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -262,13 +315,31 @@ func TestIntegrationAdminRoutesRequireSessionAndCSRF(t *testing.T) {
 func TestIntegrationInvitationListNeverReturnsToken(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
-	h0, e := NewHandler(ctx, Config{Store: st, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: strings.Repeat("w", 32), Origin: "https://bridge.example", IntegrationMasterKey: strings.Repeat("ab", 32), IntegrationEnvironment: "test", IntegrationServiceID: "bridge-test"})
+	h0, e := NewHandler(ctx, Config{
+		Store:                  st,
+		AdminUsername:          "admin",
+		AdminPassword:          "private-test-password",
+		WorkerToken:            strings.Repeat("w", 32),
+		Origin:                 "https://bridge.example",
+		IntegrationMasterKey:   strings.Repeat("ab", 32),
+		IntegrationEnvironment: "test",
+		IntegrationServiceID:   "bridge-test",
+	})
 	if e != nil {
 		t.Fatal(e)
 	}
 	h := h0.(*handler)
 	now := st.now()
-	invitation, e := h.integrations.Invite(ctx, IntegrationInvitationInput{SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: now.Add(time.Hour), ClientExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 3}, "admin")
+	invitation, e := h.integrations.Invite(ctx, IntegrationInvitationInput{
+		SourceID:           "cms",
+		Environment:        "test",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		ExpiresAt:          now.Add(time.Hour),
+		ClientExpiresAt:    now.Add(24 * time.Hour),
+		RateLimitPerMinute: 3,
+	}, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -294,7 +365,20 @@ func TestIntegrationRotationHandoverAndClockBoundary(t *testing.T) {
 	}
 	now := time.Unix(1800000000, 0).UTC()
 	st.now = func() time.Time { return now }
-	c := IntegrationClient{ID: "clock-client", Name: "Clock", SourceID: "cms", Environment: "test", ServiceID: "bridge-test", Status: "active", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, GrantVersion: 1, ExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 100}
+	c := IntegrationClient{
+		ID:                 "clock-client",
+		Name:               "Clock",
+		SourceID:           "cms",
+		Environment:        "test",
+		ServiceID:          "bridge-test",
+		Status:             "active",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		GrantVersion:       1,
+		ExpiresAt:          now.Add(24 * time.Hour),
+		RateLimitPerMinute: 100,
+	}
 	if e = seedIntegrationClient(ctx, s, c); e != nil {
 		t.Fatal(e)
 	}
@@ -367,12 +451,28 @@ func TestIntegrationRotationHandoverAndClockBoundary(t *testing.T) {
 func TestIntegrationRegistrationMissingInvitationAndOversizedBody(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
-	h0, e := NewHandler(ctx, Config{Store: st, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: strings.Repeat("w", 32), Origin: "https://bridge.example", IntegrationMasterKey: strings.Repeat("ab", 32), IntegrationEnvironment: "test", IntegrationServiceID: "bridge-test"})
+	h0, e := NewHandler(ctx, Config{
+		Store:                  st,
+		AdminUsername:          "admin",
+		AdminPassword:          "private-test-password",
+		WorkerToken:            strings.Repeat("w", 32),
+		Origin:                 "https://bridge.example",
+		IntegrationMasterKey:   strings.Repeat("ab", 32),
+		IntegrationEnvironment: "test",
+		IntegrationServiceID:   "bridge-test",
+	})
 	if e != nil {
 		t.Fatal(e)
 	}
 	h := h0.(*handler)
-	input := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
+	input := IntegrationRegistrationInput{
+		Name:        "CMS",
+		SourceID:    "cms",
+		Environment: "test",
+		Scopes:      []string{"targets:read"},
+		Accounts:    []string{"csdn-main"},
+		Operations:  []string{"save_draft"},
+	}
 	raw, _ := json.Marshal(input)
 	r := httptest.NewRequest("POST", "https://bridge.example/api/integrations/v1/registrations", strings.NewReader(string(raw)))
 	r.Header.Set("Content-Type", "application/json")
@@ -415,11 +515,27 @@ func TestIntegrationConcurrentInvitationAndNonceSingleConsumption(t *testing.T) 
 		t.Fatal(e)
 	}
 	now := st.now()
-	inv, e := s.Invite(ctx, IntegrationInvitationInput{SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: now.Add(time.Hour), ClientExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 60}, "admin")
+	inv, e := s.Invite(ctx, IntegrationInvitationInput{
+		SourceID:           "cms",
+		Environment:        "test",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		ExpiresAt:          now.Add(time.Hour),
+		ClientExpiresAt:    now.Add(24 * time.Hour),
+		RateLimitPerMinute: 60,
+	}, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}
-	registration := IntegrationRegistrationInput{Name: "CMS", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}}
+	registration := IntegrationRegistrationInput{
+		Name:        "CMS",
+		SourceID:    "cms",
+		Environment: "test",
+		Scopes:      []string{"targets:read"},
+		Accounts:    []string{"csdn-main"},
+		Operations:  []string{"save_draft"},
+	}
 	var wg sync.WaitGroup
 	results := make(chan error, 12)
 	for i := 0; i < 12; i++ {
@@ -437,7 +553,20 @@ func TestIntegrationConcurrentInvitationAndNonceSingleConsumption(t *testing.T) 
 	if success != 1 {
 		t.Fatalf("invitation consumed %d times", success)
 	}
-	c := IntegrationClient{ID: "concurrent-client", Name: "Concurrent", SourceID: "cms", Environment: "test", ServiceID: "bridge-test", Status: "active", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, GrantVersion: 1, ExpiresAt: now.Add(24 * time.Hour), RateLimitPerMinute: 100}
+	c := IntegrationClient{
+		ID:                 "concurrent-client",
+		Name:               "Concurrent",
+		SourceID:           "cms",
+		Environment:        "test",
+		ServiceID:          "bridge-test",
+		Status:             "active",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		GrantVersion:       1,
+		ExpiresAt:          now.Add(24 * time.Hour),
+		RateLimitPerMinute: 100,
+	}
 	if e = seedIntegrationClient(ctx, s, c); e != nil {
 		t.Fatal(e)
 	}
@@ -495,7 +624,20 @@ func TestIntegrationPreauthenticationBoundsAuditAndSubjects(t *testing.T) {
 			}
 			identity := IntegrationSigningIdentity{ClientID: "unknown-client", KeyID: "unknown-key", Environment: "test", ServiceID: "bridge-test"}
 			if kind == "bad_signature" {
-				client := IntegrationClient{ID: "bad-signature-client", Name: "坏签名压测", SourceID: "cms", Environment: "test", ServiceID: "bridge-test", Status: "active", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, GrantVersion: 1, ExpiresAt: clock.Add(time.Hour), RateLimitPerMinute: 60}
+				client := IntegrationClient{
+					ID:                 "bad-signature-client",
+					Name:               "坏签名压测",
+					SourceID:           "cms",
+					Environment:        "test",
+					ServiceID:          "bridge-test",
+					Status:             "active",
+					Scopes:             []string{"targets:read"},
+					Accounts:           []string{"csdn-main"},
+					Operations:         []string{"save_draft"},
+					GrantVersion:       1,
+					ExpiresAt:          clock.Add(time.Hour),
+					RateLimitPerMinute: 60,
+				}
 				if e = seedIntegrationClient(ctx, service, client); e != nil {
 					t.Fatal(e)
 				}

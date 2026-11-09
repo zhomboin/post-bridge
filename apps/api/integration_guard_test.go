@@ -16,9 +16,25 @@ func guardFixture(t *testing.T) (*handler, *Store, IntegrationClient, Integratio
 	h, s := integrationTestHandler(t)
 	c := integrationSeedClient(t, h)
 	ctx := context.Background()
-	snapshot := IntegrationSnapshot{Title: "来源执行安全检查文章", Body: "# 内容\n\n正文", BodyFormat: "markdown", Tags: []string{}}
+	snapshot := IntegrationSnapshot{
+		Title:      "来源执行安全检查文章",
+		Body:       "# 内容\n\n正文",
+		BodyFormat: "markdown",
+		Tags:       []string{},
+	}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	p, _, err := h.prepareIntegration(ctx, c, IntegrationPrepareInput{RequestID: "guard-prepare", SourceID: c.SourceID, ArticleID: "guard-article", SourceVersion: 1, StateSeq: 1, AuthorizationID: "guard-authorization", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}})
+	p, _, err := h.prepareIntegration(ctx, c, IntegrationPrepareInput{
+		RequestID:              "guard-prepare",
+		SourceID:               c.SourceID,
+		ArticleID:              "guard-article",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "guard-authorization",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +43,18 @@ func guardFixture(t *testing.T) (*handler, *Store, IntegrationClient, Integratio
 		t.Fatal(err)
 	}
 
-	d, _, err := h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{RequestID: "guard-distribute", SourceID: c.SourceID, ArticleID: p.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets})
+	d, _, err := h.commitIntegrationDistribution(ctx, c, IntegrationSubmitInput{
+		RequestID:               "guard-distribute",
+		SourceID:                c.SourceID,
+		ArticleID:               p.ArticleID,
+		SourceVersion:           1,
+		StateSeq:                1,
+		ContentFingerprint:      fp,
+		PreparationID:           p.ID,
+		DraftRevisionIDs:        p.DraftRevisionIDs,
+		ConfirmationFingerprint: p.ConfirmationFingerprint,
+		Targets:                 p.Targets,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +128,15 @@ func TestIntegrationGuardClaimRejectsCurrentPermissionChanges(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "source_private":
-				event := IntegrationSourceEvent{SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: "private", Status: "private", AuthorizationValid: false}
+				event := IntegrationSourceEvent{
+					SourceID:           c.SourceID,
+					ArticleID:          d.ArticleID,
+					StateSeq:           2,
+					SourceVersion:      1,
+					Type:               "private",
+					Status:             "private",
+					AuthorizationValid: false,
+				}
 				raw, _ := json.Marshal(event)
 				if _, err := s.pool.Exec(context.Background(), "INSERT INTO integration_source_states(source_id,article_id,state_seq,record) VALUES($1,$2,$3,$4) ON CONFLICT(source_id,article_id) DO UPDATE SET state_seq=excluded.state_seq,record=excluded.record", c.SourceID, d.ArticleID, event.StateSeq, raw); err != nil {
 					t.Fatal(err)
@@ -285,7 +320,11 @@ func TestIntegrationGuardMaintainDoesNotForgetValidReplayState(t *testing.T) {
 	if err := s.pool.QueryRow(ctx, "SELECT id FROM integration_keys WHERE client_id=$1 LIMIT 1", c.ID).Scan(&key); err != nil {
 		t.Fatal(err)
 	}
-	for name, expiry := range map[string]time.Time{"valid": now.Add(time.Minute), "grace": now.Add(-500 * time.Millisecond), "expired": now.Add(-2 * time.Second)} {
+	for name, expiry := range map[string]time.Time{
+		"valid":   now.Add(time.Minute),
+		"grace":   now.Add(-500 * time.Millisecond),
+		"expired": now.Add(-2 * time.Second),
+	} {
 		if _, err := s.pool.Exec(ctx, "INSERT INTO integration_nonces(client_id,key_id,nonce_hash,expires_at) VALUES($1,$2,$3,$4)", c.ID, key, name, expiry); err != nil {
 			t.Fatal(err)
 		}
@@ -381,11 +420,27 @@ func TestIntegrationGuardMaintainPreservesPendingApprovalBounds(t *testing.T) {
 	}
 	clock := st.now()
 	st.now = func() time.Time { return clock }
-	invitation, err := service.Invite(ctx, IntegrationInvitationInput{SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: clock.Add(time.Minute), ClientExpiresAt: clock.Add(24 * time.Hour), RateLimitPerMinute: 60}, "admin")
+	invitation, err := service.Invite(ctx, IntegrationInvitationInput{
+		SourceID:           "cms",
+		Environment:        "test",
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		ExpiresAt:          clock.Add(time.Minute),
+		ClientExpiresAt:    clock.Add(24 * time.Hour),
+		RateLimitPerMinute: 60,
+	}, "admin")
 	if err != nil {
 		t.Fatal(err)
 	}
-	registration, err := service.Register(ctx, invitation.Token, IntegrationRegistrationInput{Name: "待审批来源", SourceID: "cms", Environment: "test", Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}})
+	registration, err := service.Register(ctx, invitation.Token, IntegrationRegistrationInput{
+		Name:        "待审批来源",
+		SourceID:    "cms",
+		Environment: "test",
+		Scopes:      []string{"targets:read"},
+		Accounts:    []string{"csdn-main"},
+		Operations:  []string{"save_draft"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +448,13 @@ func TestIntegrationGuardMaintainPreservesPendingApprovalBounds(t *testing.T) {
 	if err = st.Maintain(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = service.Approve(ctx, registration.ID, IntegrationGrantInput{Scopes: []string{"targets:read"}, Accounts: []string{"csdn-main"}, Operations: []string{"save_draft"}, ExpiresAt: clock.Add(12 * time.Hour), RateLimitPerMinute: 60}, "admin"); err != nil {
+	if _, err = service.Approve(ctx, registration.ID, IntegrationGrantInput{
+		Scopes:             []string{"targets:read"},
+		Accounts:           []string{"csdn-main"},
+		Operations:         []string{"save_draft"},
+		ExpiresAt:          clock.Add(12 * time.Hour),
+		RateLimitPerMinute: 60,
+	}, "admin"); err != nil {
 		t.Fatalf("maintenance discarded accepted registration approval bounds: %v", err)
 	}
 }
@@ -404,7 +465,18 @@ func guardSecondPreparation(t *testing.T, h *handler, s *Store, c IntegrationCli
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, _, err := h.prepareIntegration(context.Background(), c, IntegrationPrepareInput{RequestID: request, SourceID: c.SourceID, ArticleID: d.ArticleID, SourceVersion: base.SourceVersion, StateSeq: seq, AuthorizationID: authorization, AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: d.ContentFingerprint, Snapshot: base.Snapshot, Targets: d.Targets})
+	p, _, err := h.prepareIntegration(context.Background(), c, IntegrationPrepareInput{
+		RequestID:              request,
+		SourceID:               c.SourceID,
+		ArticleID:              d.ArticleID,
+		SourceVersion:          base.SourceVersion,
+		StateSeq:               seq,
+		AuthorizationID:        authorization,
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     d.ContentFingerprint,
+		Snapshot:               base.Snapshot,
+		Targets:                d.Targets,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,7 +496,18 @@ func TestIntegrationAuthorizationRevocationOnlyAffectsItsGrant(t *testing.T) {
 			if revokeSubmitted {
 				authorization = "guard-authorization"
 			}
-			event := IntegrationSourceEvent{EventID: "revoke-specific-grant", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: "authorization_revoked", Status: "published", AuthorizationID: authorization, AuthorizationValid: false, ContentFingerprint: d.ContentFingerprint}
+			event := IntegrationSourceEvent{
+				EventID:            "revoke-specific-grant",
+				SourceID:           c.SourceID,
+				ArticleID:          d.ArticleID,
+				StateSeq:           2,
+				SourceVersion:      1,
+				Type:               "authorization_revoked",
+				Status:             "published",
+				AuthorizationID:    authorization,
+				AuthorizationValid: false,
+				ContentFingerprint: d.ContentFingerprint,
+			}
 			applied, err := h.applyIntegrationEvent(context.Background(), c, event)
 			if err != nil || !applied {
 				t.Fatalf("revoke %v applied=%v", err, applied)
@@ -464,7 +547,17 @@ func TestIntegrationAuthorizationRevocationOnlyAffectsItsGrant(t *testing.T) {
 func TestIntegrationAuthorizationRevocationRequiresBoundGrantIdentity(t *testing.T) {
 	h, s, c, d := guardFixture(t)
 	for _, authorization := range []string{"", "bad authorization"} {
-		event := IntegrationSourceEvent{EventID: "missing-grant", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: "authorization_revoked", Status: "published", AuthorizationID: authorization, AuthorizationValid: false}
+		event := IntegrationSourceEvent{
+			EventID:            "missing-grant",
+			SourceID:           c.SourceID,
+			ArticleID:          d.ArticleID,
+			StateSeq:           2,
+			SourceVersion:      1,
+			Type:               "authorization_revoked",
+			Status:             "published",
+			AuthorizationID:    authorization,
+			AuthorizationValid: false,
+		}
 		if _, err := h.applyIntegrationEvent(context.Background(), c, event); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("unbound revocation accepted: %v", err)
 		}
@@ -479,13 +572,34 @@ func TestIntegrationAuthorizationDelayedRevocationSurvivesNewerArticleWatermark(
 	h, s, c, d := guardFixture(t)
 	pB := guardSecondPreparation(t, h, s, c, d, "grant-B", "prepare-late-grant-B", 1)
 	claim := guardClaim(t, s)
-	if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{EventID: "newer-article", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 10, SourceVersion: 1, Type: "published", Status: "published", AuthorizationValid: true, ContentFingerprint: d.ContentFingerprint}); err != nil {
+	if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{
+		EventID:            "newer-article",
+		SourceID:           c.SourceID,
+		ArticleID:          d.ArticleID,
+		StateSeq:           10,
+		SourceVersion:      1,
+		Type:               "published",
+		Status:             "published",
+		AuthorizationValid: true,
+		ContentFingerprint: d.ContentFingerprint,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Progress(context.Background(), d.JobIDs[0], ProgressInput{LeaseToken: claim.LeaseToken, Stage: "opening_editor", ExternalStarted: true}); err != nil {
 		t.Fatal(err)
 	}
-	applied, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{EventID: "late-revoke-B", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 7, SourceVersion: 1, Type: "authorization_revoked", Status: "published", AuthorizationID: "grant-B", AuthorizationValid: false, ContentFingerprint: d.ContentFingerprint})
+	applied, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{
+		EventID:            "late-revoke-B",
+		SourceID:           c.SourceID,
+		ArticleID:          d.ArticleID,
+		StateSeq:           7,
+		SourceVersion:      1,
+		Type:               "authorization_revoked",
+		Status:             "published",
+		AuthorizationID:    "grant-B",
+		AuthorizationValid: false,
+		ContentFingerprint: d.ContentFingerprint,
+	})
 	if err != nil || !applied {
 		t.Fatalf("delayed grant revocation was discarded: %v applied=%v", err, applied)
 	}
@@ -521,7 +635,18 @@ func TestIntegrationAuthorizationRevocationCannotBeClearedByPublishing(t *testin
 	h, s, c, d := guardFixture(t)
 	guardSecondPreparation(t, h, s, c, d, "grant-B", "prepare-before-revoke-B", 1)
 	ctx := context.Background()
-	revoke := IntegrationSourceEvent{EventID: "revoke-B-once", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: "authorization_revoked", Status: "published", AuthorizationID: "grant-B", AuthorizationValid: false, ContentFingerprint: d.ContentFingerprint}
+	revoke := IntegrationSourceEvent{
+		EventID:            "revoke-B-once",
+		SourceID:           c.SourceID,
+		ArticleID:          d.ArticleID,
+		StateSeq:           2,
+		SourceVersion:      1,
+		Type:               "authorization_revoked",
+		Status:             "published",
+		AuthorizationID:    "grant-B",
+		AuthorizationValid: false,
+		ContentFingerprint: d.ContentFingerprint,
+	}
 	if _, err := h.applyIntegrationEvent(ctx, c, revoke); err != nil {
 		t.Fatal(err)
 	}
@@ -530,14 +655,35 @@ func TestIntegrationAuthorizationRevocationCannotBeClearedByPublishing(t *testin
 	if _, err := h.applyIntegrationEvent(ctx, c, conflict); !errors.Is(err, ErrConflict) {
 		t.Fatalf("event identity reused for another authorization: %v", err)
 	}
-	if _, err := h.applyIntegrationEvent(ctx, c, IntegrationSourceEvent{EventID: "published-after-revoke", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 3, SourceVersion: 1, Type: "published", Status: "published", AuthorizationValid: true, ContentFingerprint: d.ContentFingerprint}); err != nil {
+	if _, err := h.applyIntegrationEvent(ctx, c, IntegrationSourceEvent{
+		EventID:            "published-after-revoke",
+		SourceID:           c.SourceID,
+		ArticleID:          d.ArticleID,
+		StateSeq:           3,
+		SourceVersion:      1,
+		Type:               "published",
+		Status:             "published",
+		AuthorizationValid: true,
+		ContentFingerprint: d.ContentFingerprint,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	base, err := integrationReadPreparation(ctx, s.pool, d.PreparationID, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := IntegrationPrepareInput{RequestID: "prepare-reused-revoked-grant", SourceID: c.SourceID, ArticleID: d.ArticleID, SourceVersion: 1, StateSeq: 3, AuthorizationID: "grant-B", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: d.ContentFingerprint, Snapshot: base.Snapshot, Targets: d.Targets}
+	input := IntegrationPrepareInput{
+		RequestID:              "prepare-reused-revoked-grant",
+		SourceID:               c.SourceID,
+		ArticleID:              d.ArticleID,
+		SourceVersion:          1,
+		StateSeq:               3,
+		AuthorizationID:        "grant-B",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     d.ContentFingerprint,
+		Snapshot:               base.Snapshot,
+		Targets:                d.Targets,
+	}
 	if _, _, err = h.prepareIntegration(ctx, c, input); !errors.Is(err, ErrIntegrationExpired) {
 		t.Fatalf("published event revived explicit revoked authorization: %v", err)
 	}
@@ -562,7 +708,18 @@ func TestIntegrationAuthorizationRevocationCannotBeClearedByPublishing(t *testin
 func TestIntegrationAuthorizationRevocationGuardRejectsRestoredQueuedTask(t *testing.T) {
 	h, s, c, d := guardFixture(t)
 	ctx := context.Background()
-	if _, err := h.applyIntegrationEvent(ctx, c, IntegrationSourceEvent{EventID: "revoke-restored-grant", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: "authorization_revoked", Status: "published", AuthorizationID: "guard-authorization", AuthorizationValid: false, ContentFingerprint: d.ContentFingerprint}); err != nil {
+	if _, err := h.applyIntegrationEvent(ctx, c, IntegrationSourceEvent{
+		EventID:            "revoke-restored-grant",
+		SourceID:           c.SourceID,
+		ArticleID:          d.ArticleID,
+		StateSeq:           2,
+		SourceVersion:      1,
+		Type:               "authorization_revoked",
+		Status:             "published",
+		AuthorizationID:    "guard-authorization",
+		AuthorizationValid: false,
+		ContentFingerprint: d.ContentFingerprint,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	guardMutateRecord(t, s, d.JobIDs[0], func(r *record) {
@@ -584,7 +741,17 @@ func TestIntegrationAuthorizationRevocationGuardRejectsRestoredQueuedTask(t *tes
 
 func TestIntegrationAuthorizationRevocationRejectsCrossSourceEvent(t *testing.T) {
 	h, _, c, d := guardFixture(t)
-	if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{EventID: "foreign-source-revoke", SourceID: "other-source", ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: "authorization_revoked", Status: "published", AuthorizationID: "guard-authorization", AuthorizationValid: false}); !errors.Is(err, ErrInvalid) {
+	if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{
+		EventID:            "foreign-source-revoke",
+		SourceID:           "other-source",
+		ArticleID:          d.ArticleID,
+		StateSeq:           2,
+		SourceVersion:      1,
+		Type:               "authorization_revoked",
+		Status:             "published",
+		AuthorizationID:    "guard-authorization",
+		AuthorizationValid: false,
+	}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("cross-source authorization revoke accepted: %v", err)
 	}
 }
@@ -593,7 +760,16 @@ func TestIntegrationRevocationPurgesUnexecutedAcceptedBodies(t *testing.T) {
 	for _, kind := range []string{"private", "deleted", "unpublished", "authorization_revoked"} {
 		t.Run(kind, func(t *testing.T) {
 			h, s, c, d := guardFixture(t)
-			event := IntegrationSourceEvent{EventID: "purge-accepted-body", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: kind, Status: kind, AuthorizationValid: false}
+			event := IntegrationSourceEvent{
+				EventID:            "purge-accepted-body",
+				SourceID:           c.SourceID,
+				ArticleID:          d.ArticleID,
+				StateSeq:           2,
+				SourceVersion:      1,
+				Type:               kind,
+				Status:             kind,
+				AuthorizationValid: false,
+			}
 			if kind == "unpublished" {
 				event.Status = "draft"
 			}
@@ -645,7 +821,16 @@ func TestIntegrationRevocationPreservesOnlyLeasedOrUncertainJobBodies(t *testing
 					r.AutoReconcileStarted = true
 				})
 			}
-			if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{EventID: "revoke-retained-job", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 1, Type: "private", Status: "private", AuthorizationValid: false}); err != nil {
+			if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{
+				EventID:            "revoke-retained-job",
+				SourceID:           c.SourceID,
+				ArticleID:          d.ArticleID,
+				StateSeq:           2,
+				SourceVersion:      1,
+				Type:               "private",
+				Status:             "private",
+				AuthorizationValid: false,
+			}); err != nil {
 				t.Fatal(err)
 			}
 			p, _ := integrationReadPreparation(context.Background(), s.pool, d.PreparationID, false)
@@ -687,7 +872,17 @@ func TestIntegrationNonRevocationPausesKeepAcceptedBodies(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			h, s, c, d := guardFixture(t)
 			if mode == "content_changed" {
-				if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{EventID: "content-change-keeps-review-copy", SourceID: c.SourceID, ArticleID: d.ArticleID, StateSeq: 2, SourceVersion: 2, Type: "updated", Status: "published", AuthorizationValid: true, ContentFingerprint: strings.Repeat("b", 64)}); err != nil {
+				if _, err := h.applyIntegrationEvent(context.Background(), c, IntegrationSourceEvent{
+					EventID:            "content-change-keeps-review-copy",
+					SourceID:           c.SourceID,
+					ArticleID:          d.ArticleID,
+					StateSeq:           2,
+					SourceVersion:      2,
+					Type:               "updated",
+					Status:             "published",
+					AuthorizationValid: true,
+					ContentFingerprint: strings.Repeat("b", 64),
+				}); err != nil {
 					t.Fatal(err)
 				}
 			} else {

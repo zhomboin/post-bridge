@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func integrationReadPreparation(ctx context.Context, q interface {
@@ -163,9 +164,37 @@ func (h *handler) prepareIntegration(ctx context.Context, client IntegrationClie
 		if in.AuthorizationExpiresAt.Before(expiry) {
 			expiry = in.AuthorizationExpiresAt
 		}
-		out = IntegrationPreparation{ID: randomToken(), ClientID: client.ID, SourceID: client.SourceID, RequestID: in.RequestID, ArticleID: in.ArticleID, SourceVersion: in.SourceVersion, StateSeq: in.StateSeq, AuthorizationID: in.AuthorizationID, AuthorizationExpiresAt: in.AuthorizationExpiresAt, ContentFingerprint: fp, Snapshot: in.Snapshot, Targets: in.Targets, Revision: 1, DraftRevisionIDs: []string{}, Confirmed: false, Status: "prepared", GrantVersion: client.GrantVersion, ExpiresAt: expiry, CreatedAt: now}
+		out = IntegrationPreparation{
+			ID:                     randomToken(),
+			ClientID:               client.ID,
+			SourceID:               client.SourceID,
+			RequestID:              in.RequestID,
+			ArticleID:              in.ArticleID,
+			SourceVersion:          in.SourceVersion,
+			StateSeq:               in.StateSeq,
+			AuthorizationID:        in.AuthorizationID,
+			AuthorizationExpiresAt: in.AuthorizationExpiresAt,
+			ContentFingerprint:     fp,
+			Snapshot:               in.Snapshot,
+			Targets:                in.Targets,
+			Revision:               1,
+			DraftRevisionIDs:       []string{},
+			Confirmed:              false,
+			Status:                 "prepared",
+			GrantVersion:           client.GrantVersion,
+			ExpiresAt:              expiry,
+			CreatedAt:              now,
+		}
 		for _, target := range in.Targets {
-			draft := IntegrationDraft{ID: randomToken(), Platform: target.Platform, AccountID: target.AccountID, Operation: target.Operation, Title: in.Snapshot.Title, Markdown: in.Snapshot.Body, Revision: 1}
+			draft := IntegrationDraft{
+				ID:        randomToken(),
+				Platform:  target.Platform,
+				AccountID: target.AccountID,
+				Operation: target.Operation,
+				Title:     in.Snapshot.Title,
+				Markdown:  in.Snapshot.Body,
+				Revision:  1,
+			}
 			options, optionsErr := h.store.csdnDraftPublishOptions(ctx, tx, target.AccountID, in.Snapshot)
 			if optionsErr != nil {
 				return optionsErr
@@ -378,13 +407,34 @@ func (h *handler) commitIntegrationDistribution(ctx context.Context, client Inte
 		if err := integrationCheckExistingCopies(ctx, tx, client.SourceID, in.ArticleID, now); err != nil {
 			return err
 		}
-		out = IntegrationDistribution{ID: randomToken(), ClientID: client.ID, SourceID: client.SourceID, ArticleID: in.ArticleID, RequestID: in.RequestID, PreparationID: p.ID, SourceVersion: p.SourceVersion, StateSeq: p.StateSeq, ContentFingerprint: in.ContentFingerprint, ConfirmationFingerprint: in.ConfirmationFingerprint, GrantVersion: current.GrantVersion, Targets: p.Targets, JobIDs: []string{}, CreatedAt: now}
+		out = IntegrationDistribution{
+			ID:                      randomToken(),
+			ClientID:                client.ID,
+			SourceID:                client.SourceID,
+			ArticleID:               in.ArticleID,
+			RequestID:               in.RequestID,
+			PreparationID:           p.ID,
+			SourceVersion:           p.SourceVersion,
+			StateSeq:                p.StateSeq,
+			ContentFingerprint:      in.ContentFingerprint,
+			ConfirmationFingerprint: in.ConfirmationFingerprint,
+			GrantVersion:            current.GrantVersion,
+			Targets:                 p.Targets,
+			JobIDs:                  []string{},
+			CreatedAt:               now,
+		}
 		var accountUsername string
 		if e = tx.QueryRow(ctx, "SELECT username FROM account WHERE id='csdn-main'").Scan(&accountUsername); e != nil {
 			return e
 		}
 		for i, draft := range p.Drafts {
-			job := newRecord(CreateInput{RequestID: fmt.Sprintf("integration:%s:%d", out.ID, i), Platform: draft.Platform, Kind: draft.Operation, Title: draft.Title, Markdown: draft.Markdown}, now)
+			job := newRecord(CreateInput{
+				RequestID: fmt.Sprintf("integration:%s:%d", out.ID, i),
+				Platform:  draft.Platform,
+				Kind:      draft.Operation,
+				Title:     draft.Title,
+				Markdown:  draft.Markdown,
+			}, now)
 			sourceImages, imageErr := approvedImageMarkdown(p.Snapshot.Title, p.Snapshot.Body, nil)
 			if imageErr != nil {
 				return imageErr
@@ -713,7 +763,16 @@ func integrationAdvanceSnapshotState(ctx context.Context, tx pgx.Tx, p Integrati
 	if !integrationAcceptState(latest, p.StateSeq, p.SourceVersion, p.ContentFingerprint) {
 		return ErrIntegrationSourceChanged
 	}
-	next := IntegrationSourceEvent{SourceID: p.SourceID, ArticleID: p.ArticleID, StateSeq: p.StateSeq, SourceVersion: p.SourceVersion, Type: "published", Status: "published", AuthorizationValid: true, ContentFingerprint: p.ContentFingerprint}
+	next := IntegrationSourceEvent{
+		SourceID:           p.SourceID,
+		ArticleID:          p.ArticleID,
+		StateSeq:           p.StateSeq,
+		SourceVersion:      p.SourceVersion,
+		Type:               "published",
+		Status:             "published",
+		AuthorizationValid: true,
+		ContentFingerprint: p.ContentFingerprint,
+	}
 	if latest.StateSeq == next.StateSeq {
 		return nil
 	}

@@ -58,10 +58,26 @@ func integrationHTTPFixture(t *testing.T) (*handler, IntegrationClient, func(str
 }
 func TestIntegrationSignedHTTPDraftLifecycle(t *testing.T) {
 	h, _, call := integrationHTTPFixture(t)
-	snapshot := IntegrationSnapshot{Title: "来源系统发出的文章", Body: "# 内容\n\n正文", BodyFormat: "markdown", Tags: []string{}}
+	snapshot := IntegrationSnapshot{
+		Title:      "来源系统发出的文章",
+		Body:       "# 内容\n\n正文",
+		BodyFormat: "markdown",
+		Tags:       []string{},
+	}
 	fp, _ := IntegrationContentFingerprint(snapshot)
 
-	prepare := IntegrationPrepareInput{RequestID: "http-prepare", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "preview-grant", AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	prepare := IntegrationPrepareInput{
+		RequestID:              "http-prepare",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "preview-grant",
+		AuthorizationExpiresAt: h.store.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	rr := call("POST", "/api/integrations/v1/preparations", prepare, false)
 	if rr.Code != 201 {
 		t.Fatalf("prepare %d %s", rr.Code, rr.Body.String())
@@ -81,7 +97,18 @@ func TestIntegrationSignedHTTPDraftLifecycle(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &prep); err != nil {
 		t.Fatal(err)
 	}
-	submit := IntegrationSubmitInput{RequestID: "http-distribution", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: prep.ID, ConfirmationFingerprint: prep.ConfirmationFingerprint, DraftRevisionIDs: prep.DraftRevisionIDs, Targets: prep.Targets}
+	submit := IntegrationSubmitInput{
+		RequestID:               "http-distribution",
+		SourceID:                "cms",
+		ArticleID:               "article-1",
+		SourceVersion:           1,
+		StateSeq:                1,
+		ContentFingerprint:      fp,
+		PreparationID:           prep.ID,
+		ConfirmationFingerprint: prep.ConfirmationFingerprint,
+		DraftRevisionIDs:        prep.DraftRevisionIDs,
+		Targets:                 prep.Targets,
+	}
 	rr = call("POST", "/api/integrations/v1/distributions", submit, false)
 	if rr.Code != 202 {
 		t.Fatalf("submit %d %s", rr.Code, rr.Body.String())
@@ -114,7 +141,16 @@ func TestIntegrationSignedHTTPDraftLifecycle(t *testing.T) {
 	if rr.Code != 410 && rr.Code != 422 && rr.Code != 409 {
 		t.Fatalf("unsupported publication %d", rr.Code)
 	}
-	event := IntegrationSourceEvent{EventID: "http-private", SourceID: "cms", ArticleID: "article-1", StateSeq: 3, SourceVersion: 3, Type: "private", Status: "private", AuthorizationValid: false}
+	event := IntegrationSourceEvent{
+		EventID:            "http-private",
+		SourceID:           "cms",
+		ArticleID:          "article-1",
+		StateSeq:           3,
+		SourceVersion:      3,
+		Type:               "private",
+		Status:             "private",
+		AuthorizationValid: false,
+	}
 	rr = call("POST", "/api/integrations/v1/source-events", event, false)
 	if rr.Code != 200 {
 		t.Fatalf("event %d %s", rr.Code, rr.Body.String())
@@ -129,7 +165,18 @@ func TestIntegrationSignedHTTPSourceIsolationAndFrozenRevision(t *testing.T) {
 	snapshot := IntegrationSnapshot{Title: "来源系统发出的文章", Body: "原文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
 
-	prepare := IntegrationPrepareInput{RequestID: "edit-prepare", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant", AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	prepare := IntegrationPrepareInput{
+		RequestID:              "edit-prepare",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "grant",
+		AuthorizationExpiresAt: h.store.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	rr := call("POST", "/api/integrations/v1/preparations", prepare, false)
 	if rr.Code != 201 {
 		t.Fatal(rr.Body.String())
@@ -165,7 +212,18 @@ func TestIntegrationSignedHTTPSourceIsolationAndFrozenRevision(t *testing.T) {
 	client.Operations = []string{}
 	raw, _ := json.Marshal(client)
 	_, _ = h.store.pool.Exec(context.Background(), "UPDATE integration_clients SET metadata=$2 WHERE id=$1", client.ID, raw)
-	submit := IntegrationSubmitInput{RequestID: "old-grant", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: prep.ID, ConfirmationFingerprint: prep.ConfirmationFingerprint, DraftRevisionIDs: prep.DraftRevisionIDs, Targets: prep.Targets}
+	submit := IntegrationSubmitInput{
+		RequestID:               "old-grant",
+		SourceID:                "cms",
+		ArticleID:               "article-1",
+		SourceVersion:           1,
+		StateSeq:                1,
+		ContentFingerprint:      fp,
+		PreparationID:           prep.ID,
+		ConfirmationFingerprint: prep.ConfirmationFingerprint,
+		DraftRevisionIDs:        prep.DraftRevisionIDs,
+		Targets:                 prep.Targets,
+	}
 	rr = call("POST", "/api/integrations/v1/distributions", submit, false)
 	if rr.Code != 403 && rr.Code != 409 {
 		t.Fatalf("revoked operation accepted %d %s", rr.Code, rr.Body.String())
@@ -179,7 +237,18 @@ func TestIntegrationDistributionFiltersBeforePagination(t *testing.T) {
 		article := fmt.Sprintf("list-%d", i)
 		snapshot := IntegrationSnapshot{Title: "分页筛选测试文章", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 		fp, _ := IntegrationContentFingerprint(snapshot)
-		input := IntegrationPrepareInput{RequestID: article, SourceID: "cms", ArticleID: article, SourceVersion: 1, StateSeq: 1, AuthorizationID: article, AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+		input := IntegrationPrepareInput{
+			RequestID:              article,
+			SourceID:               "cms",
+			ArticleID:              article,
+			SourceVersion:          1,
+			StateSeq:               1,
+			AuthorizationID:        article,
+			AuthorizationExpiresAt: h.store.now().Add(time.Hour),
+			ContentFingerprint:     fp,
+			Snapshot:               snapshot,
+			Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+		}
 		p, _, err := h.prepareIntegration(ctx, client, input)
 		if err != nil {
 			t.Fatal(err)
@@ -189,7 +258,18 @@ func TestIntegrationDistributionFiltersBeforePagination(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		d, _, err := h.commitIntegrationDistribution(ctx, client, IntegrationSubmitInput{RequestID: article, SourceID: "cms", ArticleID: article, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets})
+		d, _, err := h.commitIntegrationDistribution(ctx, client, IntegrationSubmitInput{
+			RequestID:               article,
+			SourceID:                "cms",
+			ArticleID:               article,
+			SourceVersion:           1,
+			StateSeq:                1,
+			ContentFingerprint:      fp,
+			PreparationID:           p.ID,
+			DraftRevisionIDs:        p.DraftRevisionIDs,
+			ConfirmationFingerprint: p.ConfirmationFingerprint,
+			Targets:                 p.Targets,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -220,7 +300,18 @@ func TestIntegrationAdminClientFailureDoesNotInvalidateSession(t *testing.T) {
 	ctx := context.Background()
 	snapshot := IntegrationSnapshot{Title: "后台会话边界测试", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	input := IntegrationPrepareInput{RequestID: "admin-state", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant", AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	input := IntegrationPrepareInput{
+		RequestID:              "admin-state",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "grant",
+		AuthorizationExpiresAt: h.store.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	prep, _, err := h.prepareIntegration(ctx, client, input)
 	if err != nil {
 		t.Fatal(err)
@@ -242,7 +333,18 @@ func TestIntegrationCancelledUnwrittenCopyCanUseNewAuthorization(t *testing.T) {
 	ctx := context.Background()
 	snapshot := IntegrationSnapshot{Title: "重新授权来源测试", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	input := IntegrationPrepareInput{RequestID: "new-after-cancel", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant-1", AuthorizationExpiresAt: h.store.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	input := IntegrationPrepareInput{
+		RequestID:              "new-after-cancel",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "grant-1",
+		AuthorizationExpiresAt: h.store.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	p, _, err := h.prepareIntegration(ctx, client, input)
 	if err != nil {
 		t.Fatal(err)
@@ -252,12 +354,31 @@ func TestIntegrationCancelledUnwrittenCopyCanUseNewAuthorization(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	submit := IntegrationSubmitInput{RequestID: "old-cancelled", SourceID: "cms", ArticleID: input.ArticleID, SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: p.ID, DraftRevisionIDs: p.DraftRevisionIDs, ConfirmationFingerprint: p.ConfirmationFingerprint, Targets: p.Targets}
+	submit := IntegrationSubmitInput{
+		RequestID:               "old-cancelled",
+		SourceID:                "cms",
+		ArticleID:               input.ArticleID,
+		SourceVersion:           1,
+		StateSeq:                1,
+		ContentFingerprint:      fp,
+		PreparationID:           p.ID,
+		DraftRevisionIDs:        p.DraftRevisionIDs,
+		ConfirmationFingerprint: p.ConfirmationFingerprint,
+		Targets:                 p.Targets,
+	}
 	first, _, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = h.applyIntegrationEvent(ctx, client, IntegrationSourceEvent{EventID: "source-private", SourceID: "cms", ArticleID: input.ArticleID, StateSeq: 3, SourceVersion: 3, Type: "private", Status: "private"})
+	_, err = h.applyIntegrationEvent(ctx, client, IntegrationSourceEvent{
+		EventID:       "source-private",
+		SourceID:      "cms",
+		ArticleID:     input.ArticleID,
+		StateSeq:      3,
+		SourceVersion: 3,
+		Type:          "private",
+		Status:        "private",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +416,13 @@ func TestIntegrationCancelledUnwrittenCopyCanUseNewAuthorization(t *testing.T) {
 
 func TestIntegrationDisabledAdminRoutesExplainConfiguration(t *testing.T) {
 	s := testStore(t)
-	h, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "http://localhost"})
+	h, err := NewHandler(context.Background(), Config{
+		Store:         s,
+		AdminUsername: "admin",
+		AdminPassword: "private-test-password",
+		WorkerToken:   "private-test-worker-token-32-characters",
+		Origin:        "http://localhost",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

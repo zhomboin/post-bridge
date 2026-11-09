@@ -13,7 +13,12 @@ import (
 )
 
 func TestIntegrationSnapshotFingerprintAndCapability(t *testing.T) {
-	snapshot := IntegrationSnapshot{Title: "外部来源文章标题", Body: "# 标题\n\n正文", BodyFormat: "markdown", Tags: []string{}}
+	snapshot := IntegrationSnapshot{
+		Title:      "外部来源文章标题",
+		Body:       "# 标题\n\n正文",
+		BodyFormat: "markdown",
+		Tags:       []string{},
+	}
 	got, err := IntegrationContentFingerprint(snapshot)
 	if err != nil || len(got) != 64 {
 		t.Fatalf("fingerprint: %q %v", got, err)
@@ -53,7 +58,16 @@ func TestIntegrationSnapshotFingerprintAndCapability(t *testing.T) {
 func integrationTestHandler(t *testing.T) (*handler, *Store) {
 	t.Helper()
 	s := testStore(t)
-	h, err := NewHandler(context.Background(), Config{Store: s, AdminUsername: "admin", AdminPassword: "private-test-password", WorkerToken: "private-test-worker-token-32-characters", Origin: "https://bridge.example.test", IntegrationMasterKey: strings.Repeat("12", 32), IntegrationEnvironment: "test", IntegrationServiceID: "bridge"})
+	h, err := NewHandler(context.Background(), Config{
+		Store:                  s,
+		AdminUsername:          "admin",
+		AdminPassword:          "private-test-password",
+		WorkerToken:            "private-test-worker-token-32-characters",
+		Origin:                 "https://bridge.example.test",
+		IntegrationMasterKey:   strings.Repeat("12", 32),
+		IntegrationEnvironment: "test",
+		IntegrationServiceID:   "bridge",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,9 +97,25 @@ func TestIntegrationPreparationConfirmationAndAtomicDistribution(t *testing.T) {
 	h, s := integrationTestHandler(t)
 	client := integrationSeedClient(t, h)
 	ctx := context.Background()
-	snapshot := IntegrationSnapshot{Title: "外部来源文章标题", Body: "# 标题\n\n正文", BodyFormat: "markdown", Tags: []string{}}
+	snapshot := IntegrationSnapshot{
+		Title:      "外部来源文章标题",
+		Body:       "# 标题\n\n正文",
+		BodyFormat: "markdown",
+		Tags:       []string{},
+	}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	input := IntegrationPrepareInput{RequestID: "prepare-1", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant-1", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	input := IntegrationPrepareInput{
+		RequestID:              "prepare-1",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "grant-1",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	draft, created, err := h.prepareIntegration(ctx, client, input)
 	if err != nil || !created {
 		t.Fatalf("prepare %v", err)
@@ -108,7 +138,18 @@ func TestIntegrationPreparationConfirmationAndAtomicDistribution(t *testing.T) {
 	}
 	// 提交只使用已确认的不可变内容与本地授权。
 
-	submit := IntegrationSubmitInput{RequestID: "dispatch-1", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, ContentFingerprint: fp, PreparationID: draft.ID, DraftRevisionIDs: confirmed.DraftRevisionIDs, ConfirmationFingerprint: confirmed.ConfirmationFingerprint, Targets: input.Targets}
+	submit := IntegrationSubmitInput{
+		RequestID:               "dispatch-1",
+		SourceID:                "cms",
+		ArticleID:               "article-1",
+		SourceVersion:           1,
+		StateSeq:                1,
+		ContentFingerprint:      fp,
+		PreparationID:           draft.ID,
+		DraftRevisionIDs:        confirmed.DraftRevisionIDs,
+		ConfirmationFingerprint: confirmed.ConfirmationFingerprint,
+		Targets:                 input.Targets,
+	}
 	distribution, created, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil || !created || len(distribution.JobIDs) != 1 {
 		t.Fatalf("submit %+v %v", distribution, err)
@@ -140,7 +181,18 @@ func TestIntegrationConcurrentPrepareAndLifecycleOrdering(t *testing.T) {
 	ctx := context.Background()
 	snapshot := IntegrationSnapshot{Title: "外部来源文章标题", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snapshot)
-	input := IntegrationPrepareInput{RequestID: "parallel", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant-1", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snapshot, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	input := IntegrationPrepareInput{
+		RequestID:              "parallel",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "grant-1",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snapshot,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	var wg sync.WaitGroup
 	ids := make(chan string, 8)
 	for range 8 {
@@ -164,7 +216,16 @@ func TestIntegrationConcurrentPrepareAndLifecycleOrdering(t *testing.T) {
 		}
 		first = id
 	}
-	event := IntegrationSourceEvent{EventID: "private-2", SourceID: "cms", ArticleID: "article-1", StateSeq: 2, SourceVersion: 2, Type: "private", Status: "private", AuthorizationValid: false}
+	event := IntegrationSourceEvent{
+		EventID:            "private-2",
+		SourceID:           "cms",
+		ArticleID:          "article-1",
+		StateSeq:           2,
+		SourceVersion:      2,
+		Type:               "private",
+		Status:             "private",
+		AuthorizationValid: false,
+	}
 	applied, err := h.applyIntegrationEvent(ctx, client, event)
 	if err != nil || !applied {
 		t.Fatalf("private event %v", err)
@@ -213,7 +274,18 @@ func TestIntegrationSourceRebindingBlocksInflightRequests(t *testing.T) {
 	ctx := context.Background()
 	snap := IntegrationSnapshot{Title: "来源隔离测试文章", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snap)
-	in := IntegrationPrepareInput{RequestID: "rebind", SourceID: "cms", ArticleID: "article-1", SourceVersion: 1, StateSeq: 1, AuthorizationID: "grant", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snap, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	in := IntegrationPrepareInput{
+		RequestID:              "rebind",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          1,
+		StateSeq:               1,
+		AuthorizationID:        "grant",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snap,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	prep, _, err := h.prepareIntegration(ctx, client, in)
 	if err != nil {
 		t.Fatal(err)
@@ -231,7 +303,15 @@ func TestIntegrationSourceRebindingBlocksInflightRequests(t *testing.T) {
 	if _, err = h.confirmIntegrationPreparation(ctx, prep.ID, prep.Revision); err == nil {
 		t.Fatal("old source preparation confirmed after rebinding")
 	}
-	event := IntegrationSourceEvent{EventID: "inflight-event", SourceID: "cms", ArticleID: "article-1", StateSeq: 3, SourceVersion: 3, Type: "private", Status: "private"}
+	event := IntegrationSourceEvent{
+		EventID:       "inflight-event",
+		SourceID:      "cms",
+		ArticleID:     "article-1",
+		StateSeq:      3,
+		SourceVersion: 3,
+		Type:          "private",
+		Status:        "private",
+	}
 	if _, err = h.applyIntegrationEvent(ctx, client, event); err == nil {
 		t.Fatal("old in-flight source event accepted after rebinding")
 	}
@@ -242,7 +322,18 @@ func TestIntegrationVerifiedStateRejectsOlderNotification(t *testing.T) {
 	ctx := context.Background()
 	snap := IntegrationSnapshot{Title: "来源水位测试文章", Body: "正文", BodyFormat: "markdown", Tags: []string{}}
 	fp, _ := IntegrationContentFingerprint(snap)
-	in := IntegrationPrepareInput{RequestID: "watermark", SourceID: "cms", ArticleID: "article-1", SourceVersion: 10, StateSeq: 10, AuthorizationID: "grant", AuthorizationExpiresAt: s.now().Add(time.Hour), ContentFingerprint: fp, Snapshot: snap, Targets: []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}}}
+	in := IntegrationPrepareInput{
+		RequestID:              "watermark",
+		SourceID:               "cms",
+		ArticleID:              "article-1",
+		SourceVersion:          10,
+		StateSeq:               10,
+		AuthorizationID:        "grant",
+		AuthorizationExpiresAt: s.now().Add(time.Hour),
+		ContentFingerprint:     fp,
+		Snapshot:               snap,
+		Targets:                []IntegrationTarget{{Platform: "csdn", AccountID: "csdn-main", Operation: "save_draft"}},
+	}
 	prep, _, err := h.prepareIntegration(ctx, client, in)
 	if err != nil {
 		t.Fatal(err)
@@ -252,12 +343,31 @@ func TestIntegrationVerifiedStateRejectsOlderNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	submit := IntegrationSubmitInput{RequestID: "watermark-submit", SourceID: "cms", ArticleID: in.ArticleID, SourceVersion: 10, StateSeq: 10, ContentFingerprint: fp, PreparationID: prep.ID, DraftRevisionIDs: prep.DraftRevisionIDs, ConfirmationFingerprint: prep.ConfirmationFingerprint, Targets: in.Targets}
+	submit := IntegrationSubmitInput{
+		RequestID:               "watermark-submit",
+		SourceID:                "cms",
+		ArticleID:               in.ArticleID,
+		SourceVersion:           10,
+		StateSeq:                10,
+		ContentFingerprint:      fp,
+		PreparationID:           prep.ID,
+		DraftRevisionIDs:        prep.DraftRevisionIDs,
+		ConfirmationFingerprint: prep.ConfirmationFingerprint,
+		Targets:                 in.Targets,
+	}
 	d, _, err := h.commitIntegrationDistribution(ctx, client, submit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	event := IntegrationSourceEvent{EventID: "late-private", SourceID: "cms", ArticleID: in.ArticleID, SourceVersion: 7, StateSeq: 7, Type: "private", Status: "private"}
+	event := IntegrationSourceEvent{
+		EventID:       "late-private",
+		SourceID:      "cms",
+		ArticleID:     in.ArticleID,
+		SourceVersion: 7,
+		StateSeq:      7,
+		Type:          "private",
+		Status:        "private",
+	}
 	applied, err := h.applyIntegrationEvent(ctx, client, event)
 	if err != nil || applied {
 		t.Fatalf("older notification applied: %t %v", applied, err)

@@ -25,7 +25,7 @@ Linux 工作区的 `npm run build`、`npm run typecheck`、`npm test` 分别构�
 
 ## 编码与测试规范
 
-Go 使用 gofmt；TypeScript 两空格缩进，组件 PascalCase，函数和变量 camelCase。当前检查工具为 TypeScript、go vet，未配置 ESLint。平台适配、调度和页面保持独立；执行器不直接连接数据库，不读取 CMS 数据库。
+Go 使用 gofmt；TypeScript 两空格缩进，组件 PascalCase，函数和变量 camelCase。前端、执行器与配置使用固定 Prettier，Python 使用 Black 25.1.0；统一执行 npm run format，提交前执行 npm run format:check。TypeScript 与 go vet 检查代码，CI 补充 npm audit 和 govulncheck；未配置 ESLint。平台适配、调度和页面保持独立；执行器不直接连接数据库，不读取 CMS 数据库。
 
 Go 使用 *_test.go，TypeScript 使用 *.test.ts 或 *.test.tsx。测试采用 Go testing、Vitest、Testing Library 和 Playwright，覆盖正常、边界和异常路径，尤其是幂等、账号互斥、失租、未知结果、取消及重启恢复。修改时同步相关用例；本地只跑受影响范围，GitHub CI 执行全量测试，不访问真实平台账号。
 
