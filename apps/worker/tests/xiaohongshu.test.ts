@@ -6,7 +6,7 @@ import { XiaohongshuAdapter } from '../src/xiaohongshu.js';
 import type { Job } from '../src/types.js';
 
 const user = { username: 'synthetic-red', user_id: 'aaaaaaaaaaaaaaaaaaaaaaaa' };
-const note = { id: 'bbbbbbbbbbbbbbbbbbbbbbbb', title: '合成笔记', views: 0, likes: 2 };
+const note = { id: 'bbbbbbbbbbbbbbbbbbbbbbbb', display_title: '合成笔记', view_count: 0, likes: 2 };
 const payload = (notes: unknown[], page = -1) => ({
   success: true,
   code: 0,
@@ -37,7 +37,7 @@ describe('小红书只读数据边界', () => {
     });
     expect(notesPayload(payload([]))).toEqual({ items: [], next: -1 });
     expect(() => notesPayload(payload([], 0))).toThrow();
-    expect(() => notesPayload(payload([{ ...note, views: -1 }]))).toThrow();
+    expect(() => notesPayload(payload([{ ...note, view_count: -1 }]))).toThrow();
     expect(() => notesPayload(payload([{ ...note, id: 'unsafe' }]))).toThrow();
   });
   it('跨页重复、倒退、未结束或异常结构不能作为完整快照', () => {
@@ -107,6 +107,42 @@ describe('小红书真实浏览器合成页面', () => {
       const url = new URL(r.url());
       if (r.method() !== 'GET') writes++;
       if (/publish|upload|draft/.test(url.pathname)) editor++;
+      if (url.pathname === '/new/home')
+        return route.fulfill({
+          contentType: 'text/html',
+          body: `<script>fetch('/api/galaxy/user/info');fetch('/api/galaxy/creator/home/personal_info');fetch('/api/galaxy/v2/creator/datacenter/account/base');</script>`,
+        });
+      if (url.pathname === '/api/galaxy/creator/home/personal_info')
+        return route.fulfill({
+          json: {
+            success: true,
+            code: 0,
+            data: {
+              red_num: user.username,
+              name: '合成作者',
+              avatar: 'https://img.xiaohongshu.com/avatar/synthetic.png',
+              personal_desc: '合成简介',
+              fans_count: 0,
+              follow_count: 2,
+              faved_count: 0,
+            },
+          },
+        });
+      if (url.pathname === '/api/galaxy/v2/creator/datacenter/account/base')
+        return route.fulfill({
+          json: {
+            success: true,
+            code: 0,
+            data: {
+              seven: {
+                begin_time: 1793462400000,
+                end_time: 1793980800000,
+                view_count: 0,
+                net_rise_fans_count: -1,
+              },
+            },
+          },
+        });
       if (url.pathname === '/new/note-manager')
         return route.fulfill({
           contentType: 'text/html; charset=utf-8',

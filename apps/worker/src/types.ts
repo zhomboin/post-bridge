@@ -93,7 +93,13 @@ export interface Job {
   account_id?: string;
   account_native_id?: string;
   kind:
-    'sync_notes' | 'save_draft' | 'publish' | 'check_account' | 'sync_articles' | 'read_article';
+    | 'sync_notes'
+    | 'read_note'
+    | 'save_draft'
+    | 'publish'
+    | 'check_account'
+    | 'sync_articles'
+    | 'read_article';
   title: string;
   markdown: string;
   image_urls?: string[];
@@ -137,6 +143,7 @@ export interface JobResult {
   error_message?: string;
   retryable?: boolean;
   notes?: NotesSnapshot;
+  note?: NoteBody;
   account_identity?: AccountIdentity;
   articles?: ArticleSnapshot;
   article?: ArticleBody;
@@ -168,7 +175,51 @@ export interface Note {
   likes: number | null;
   comments: number | null;
   favorites: number | null;
+  shares?: number | null;
+  type?: 'image' | 'video' | 'unknown';
+  cover_urls?: string[];
+  note_url?: string;
+}
+export interface NoteProfile {
+  nickname: string;
+  avatar_url: string;
+  description: string;
+  following: number | null;
+  followers: number | null;
+  liked_and_collected: number | null;
+}
+export interface NoteStats {
+  begin_at: string;
+  end_at: string;
+  published: number | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  favorites: number | null;
+  shares: number | null;
+  exposures: number | null;
+  net_followers: number | null;
+}
+export interface NoteTrend {
+  date: string;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  favorites: number | null;
+  exposures: number | null;
+  followers: number | null;
+}
+export interface NoteBody {
+  id: string;
+  user_id: string;
+  title: string;
+  text: string;
+  images: string[];
+  tags: string[];
 }
 export interface NotesSnapshot extends AccountIdentity {
   items: Note[];
+  profile?: NoteProfile;
+  stats?: NoteStats;
+  trend?: NoteTrend[];
 }

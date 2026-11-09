@@ -1,4 +1,5 @@
 import type { AccountIdentity, Note } from './types.js';
+import { xhsImageURL, xhsMetric, xhsText } from './xiaohongshu-insights.js';
 
 const id = /^[a-f0-9]{24}$/;
 function object(value: unknown): Record<string, unknown> {
@@ -38,33 +39,46 @@ export function notesPayload(value: unknown): { items: Note[]; next: number } {
     Number(data.page) > 2000
   )
     throw Error('adapter_mismatch');
-  const items = data.notes.map((raw) => {
+  const items = data.notes.map((raw): Note => {
     const note = object(raw);
-    if (
-      typeof note.id !== 'string' ||
-      !id.test(note.id) ||
-      typeof note.title !== 'string' ||
-      note.title.length > 2000 ||
-      /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(note.title)
-    )
+    if (typeof note.id !== 'string' || !id.test(note.id) || typeof note.display_title !== 'string')
       throw Error('adapter_mismatch');
     const time = note.time;
-    if (
-      time !== undefined &&
-      time !== null &&
-      (typeof time !== 'number' || !Number.isSafeInteger(time) || time < 0 || time > 8640000000000)
-    )
+    let posted = '';
+    if (time !== undefined && time !== null && time !== '') {
+      if (
+        typeof time === 'number' &&
+        Number.isSafeInteger(time) &&
+        time >= 0 &&
+        time <= 8640000000000000
+      )
+        posted = new Date(time).toISOString();
+      else if (typeof time === 'string' && /^\d{4}-\d\d-\d\d \d\d:\d\d(?::\d\d)?$/.test(time))
+        posted = new Date(time.replace(' ', 'T') + '+08:00').toISOString();
+      else throw Error('adapter_mismatch');
+    }
+    const images = note.images_list ?? [];
+    if (!Array.isArray(images) || images.length > 50) throw Error('adapter_mismatch');
+    const status = note.tab_status;
+    if (status != null && (typeof status !== 'number' || !Number.isInteger(status)))
       throw Error('adapter_mismatch');
     return {
       id: note.id,
-      title: note.title.trim() || '无标题笔记',
-      status: 'unknown' as const,
-      platform_status: '',
-      posted_at: typeof time === 'number' ? new Date(time * 1000).toISOString() : '',
-      views: metric(note.views),
+      title: xhsText(note.display_title, 2000).trim() || '无标题笔记',
+      status:
+        ({ 1: 'published', 2: 'reviewing', 3: 'rejected' } as Record<number, Note['status']>)[
+          Number(status)
+        ] || 'unknown',
+      platform_status: status == null ? '' : String(status),
+      posted_at: posted,
+      views: metric(note.view_count),
       likes: metric(note.likes),
-      comments: metric(note.comments),
-      favorites: metric(note.collects),
+      comments: metric(note.comments_count),
+      favorites: metric(note.collected_count),
+      shares: xhsMetric(note.shared_count),
+      type: note.type === 'normal' ? 'image' : note.type === 'video' ? 'video' : 'unknown',
+      cover_urls: images.map((raw) => xhsImageURL(object(raw).url)).filter(Boolean),
+      note_url: status === 1 ? 'https://www.xiaohongshu.com/explore/' + note.id : '',
     };
   });
   if (!items.length && data.page !== -1) throw Error('adapter_mismatch');

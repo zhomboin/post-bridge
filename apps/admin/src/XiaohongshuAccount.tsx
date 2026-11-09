@@ -1,4 +1,9 @@
 import RemoteLogin from './RemoteLogin';
+import AccountAvatar from './AccountAvatar';
+import XiaohongshuStats from './XiaohongshuStats';
+import { platformMediaURL, notePublicURL } from './platform-media';
+import { noteHref, noteLabels as labels, noteNumber, type NotePage } from './xiaohongshu-types';
+import './Xiaohongshu.css';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Empty,
@@ -15,29 +20,8 @@ import {
   useWorkspace,
   type Account,
   type Job,
-  type PageData,
 } from './runtime';
-
-type Note = {
-  id: string;
-  title: string;
-  status: string;
-  posted_at: string;
-  views: number | null;
-  likes: number | null;
-  comments: number | null;
-  favorites: number | null;
-};
-export type NotePage = PageData<Note> & {
-  snapshot: { synced_at: string } | null;
-  sync_job: Job | null;
-};
-const labels: Record<string, string> = {
-  published: '已发布',
-  reviewing: '审核中',
-  rejected: '未通过',
-  unknown: '状态待确认',
-};
+export type { NotePage } from './xiaohongshu-types';
 const active = (job?: Job | null) =>
   !!job && ['queued', 'running', 'waiting_user'].includes(job.status);
 
@@ -45,6 +29,7 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
   const { api, route, navigate } = useWorkspace();
   const params = new URLSearchParams(route.split('?')[1]);
   const settings = params.get('tab') === 'settings';
+  const stats = params.get('tab') === 'stats';
   const base = '/api/accounts/' + encodeURIComponent(id);
   const account = useResource<{ account: Account }>(base);
   const query = new URLSearchParams({
@@ -68,6 +53,7 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
   }, [notes.data?.sync_job, submitted]);
   const job = submitted || notes.data?.sync_job;
   const a = account.data?.account;
+  const profile = notes.data?.snapshot?.profile;
   function go(values: Record<string, string>) {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(values)) {
@@ -103,9 +89,10 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
       <section className="surface platform-account-header" aria-label="账号身份">
         <div className="account-summary">
           <div className="account-identity">
+            <AccountAvatar platform="xiaohongshu" url={profile?.avatar_url} />
             <div>
               <span className="account-platform">小红书</span>
-              <h2>{a?.display_name || '小红书账号'}</h2>
+              <h2>{profile?.nickname || a?.display_name || '小红书账号'}</h2>
               <p>
                 <span className="account-id-label">账号 ID</span>
                 {a?.username || '—'}
@@ -114,13 +101,36 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
           </div>
           <Status value={a?.status || 'unchecked'} />
         </div>
+        {profile?.description && <p className="xhs-description">{profile.description}</p>}
+        {profile && (
+          <dl className="xhs-profile-facts">
+            {(
+              [
+                ['following', '关注'],
+                ['followers', '粉丝'],
+                ['liked_and_collected', '获赞与收藏'],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key}>
+                <dt>{label}</dt>
+                <dd>{noteNumber(profile[key])}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         <p className="article-sync-time">最近同步 {time(notes.data?.snapshot?.synced_at)}</p>
       </section>
       {settings && <RemoteLogin platformLabel="小红书" onVerified={account.refresh} />}
       <ResourceError error={account.error} stale={!!a} />
       <nav className="account-tabs" aria-label="账号视图">
-        <button aria-current={!settings ? 'page' : undefined} onClick={() => go({ tab: '' })}>
+        <button
+          aria-current={!settings && !stats ? 'page' : undefined}
+          onClick={() => go({ tab: '' })}
+        >
           笔记
+        </button>
+        <button aria-current={stats ? 'page' : undefined} onClick={() => go({ tab: 'stats' })}>
+          数据统计
         </button>
         <button
           aria-current={settings ? 'page' : undefined}
@@ -129,7 +139,9 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
           账号设置
         </button>
       </nav>
-      {settings ? (
+      {stats ? (
+        <XiaohongshuStats snapshot={notes.data?.snapshot} />
+      ) : settings ? (
         <section className="surface">
           <div className="surface-header">
             <h2>账号设置</h2>
@@ -219,22 +231,55 @@ export default function XiaohongshuAccount({ id, picker }: { id: string; picker:
                     <th>点赞</th>
                     <th>评论</th>
                     <th>收藏</th>
+                    <th>分享</th>
                   </tr>
                 </thead>
                 <tbody>
                   {notes.data.items.map((note) => (
                     <tr key={note.id}>
                       <td className="title-cell">
-                        <strong>{note.title}</strong>
+                        <div className="xhs-note-title">
+                          {platformMediaURL(note.cover_urls?.[0], 'xiaohongshu') && (
+                            <img
+                              className="xhs-note-cover"
+                              src={platformMediaURL(note.cover_urls?.[0], 'xiaohongshu')}
+                              alt="笔记封面"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onError={(event) => {
+                                event.currentTarget.hidden = true;
+                              }}
+                            />
+                          )}
+                          <div>
+                            <RouteLink href={noteHref(id, note.id, route)}>{note.title}</RouteLink>
+                            <div className="xhs-note-meta">
+                              {note.type === 'image'
+                                ? '图文'
+                                : note.type === 'video'
+                                  ? '视频'
+                                  : '类型待确认'}
+                            </div>
+                            {notePublicURL(note.note_url, note.id) && (
+                              <a
+                                href={notePublicURL(note.note_url, note.id)}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                              >
+                                平台查看
+                              </a>
+                            )}
+                          </div>
+                        </div>
                         <div className="mono">{note.id}</div>
                       </td>
                       <td>{labels[note.status] || labels.unknown}</td>
                       <td>{note.posted_at ? time(note.posted_at) : '—'}</td>
-                      {(['views', 'likes', 'comments', 'favorites'] as const).map((key) => (
-                        <td key={key}>
-                          {note[key] == null ? '—' : note[key].toLocaleString('zh-CN')}
-                        </td>
-                      ))}
+                      {(['views', 'likes', 'comments', 'favorites', 'shares'] as const).map(
+                        (key) => (
+                          <td key={key}>{noteNumber(note[key])}</td>
+                        ),
+                      )}
                     </tr>
                   ))}
                 </tbody>

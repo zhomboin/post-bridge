@@ -10,8 +10,11 @@ const series = [
   ['promotion_clicks', '推广点击'],
   ['outlink_clicks', '外链点击'],
 ] as const;
-type TrendRow = ArticleSnapshot['trend'][number];
-type Metric = (typeof series)[number][0];
+type TrendRow = ArticleSnapshot['trend'][number] & {
+  likes?: number | null;
+  exposures?: number | null;
+};
+type Metric = (typeof series)[number][0] | 'likes' | 'exposures';
 const numberText = (value: number | null | undefined) =>
   value != null && Number.isFinite(value) ? value.toLocaleString('zh-CN') : '暂无数据';
 const day = (date: string) => Date.parse(date + 'T00:00:00Z');
@@ -156,14 +159,20 @@ function TrendChart({
   );
 }
 
-export default function AccountTrend({ trend }: { trend: ArticleSnapshot['trend'] }) {
+export default function AccountTrend({
+  trend,
+  metrics = series,
+}: {
+  trend: TrendRow[];
+  metrics?: readonly (readonly [Metric, string])[];
+}) {
   const rows = [...trend].sort((a, b) => a.date.localeCompare(b.date));
   const [announcement, setAnnouncement] = useState('');
   return (
     <section className="account-trend" aria-label="近期趋势数据">
       <h2>近期趋势</h2>
       <div className="account-trend-grid">
-        {series.map(([metric, label]) => (
+        {metrics.map(([metric, label]) => (
           <TrendChart
             key={metric}
             rows={rows}

@@ -10,9 +10,20 @@
 
 检查范围和验证边界见[代码质量与安全](code-quality.md)。
 
-## 定位与范围
+## 小红书只读工作台审阅
 
-后台供本站用户检查自己账号的文章分发、处理异常和查看日志，独立于 CMS 登录与部署；管理员另有用户管理权限。界面以中文为主，服务日常发布管理，不引入账号共享、收费或内容生成能力；账号统计仅展示平台返回的数据。本文确定完整页面与验收要求。当前提供独立用户登录、总览、CSDN 草稿任务与详情、对象处理记录、账号检查、弹窗远程验证、CSDN 文章只读列表及统计正文、小红书笔记只读列表；系统设置由 API 只读提供。页面实现见 [apps/admin/src](../apps/admin/src)，接口见[API 契约](api.md)。PostBridge 侧来源应用管理、平台稿确认和分发聚合已实现；真实调用方连接、三平台发布和完整系统配置编辑继续待实施。
+| 调整前 | 调整后 | 原因 |
+| --- | --- | --- |
+| 仅显示配置名称和小红书号 | [账号头部](../apps/admin/src/XiaohongshuAccount.tsx)显示官方头像、昵称、简介和账号指标 | 识别当前账号，保持缺失值和累计指标含义 |
+| 笔记列表只有文本与基础计数 | [笔记列表](../apps/admin/src/XiaohongshuAccount.tsx)增加封面、类型、官方查看和独立详情入口 | 对齐内容工作台的读取体验，不提供写操作 |
+| 没有统计页签 | [固定七日统计和趋势](../apps/admin/src/XiaohongshuStats.tsx)复用键盘可读趋势组件 | 七日数据与账号累计值分开，净增允许负值 |
+| 没有笔记正文入口 | [独立详情](../apps/admin/src/NoteDetail.tsx)按文本展示正文及受限图片，保留返回筛选和失败缓存 | 不进入编辑器，不执行正文 HTML，不丢失账号上下文 |
+
+桌面与 390/320、键盘切换、减少动态效果及详情返回使用合成数据验证。合成截图：[笔记桌面](assets/xiaohongshu-1440.png)、[笔记窄屏](assets/xiaohongshu-320.png)、[统计桌面](assets/xiaohongshu-stats-1440.png)、[统计窄屏](assets/xiaohongshu-stats-320.png)、[详情桌面](assets/xiaohongshu-detail-1440.png)、[详情窄屏](assets/xiaohongshu-detail-320.png)。真实账号资料与空列表结果见[验收记录](acceptance.md)。
+
+## 工作台范围
+
+后台供本站用户检查自己账号的文章分发、处理异常和查看日志，独立于 CMS 登录与部署；管理员另有用户管理权限。界面以中文为主，服务日常发布管理，不引入账号共享、收费或内容生成能力；账号统计仅展示平台返回的数据。本文确定完整页面与验收要求。当前提供独立用户登录、总览、CSDN 草稿任务与详情、对象处理记录、账号检查、弹窗远程验证、CSDN 文章只读列表及统计正文、小红书账号资料、统计趋势及笔记正文图片只读；系统设置由 API 只读提供。页面实现见 [apps/admin/src](../apps/admin/src)，接口见[API 契约](api.md)。PostBridge 侧来源应用管理、平台稿确认和分发聚合已实现；真实调用方连接、三平台发布和完整系统配置编辑继续待实施。
 
 所有前端页面、组件、交互及界面审阅必须共同遵循 [Frontend Design](../.agents/skills/frontend-design/SKILL.md) 与 [Emil Kowalski 设计工程技能](../.agents/skills/emil-design-eng/SKILL.md)。安装来源见[前端技能说明](frontend-skills.md)。
 

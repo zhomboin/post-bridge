@@ -143,7 +143,7 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Job, bool, error) {
 		ctx = scoped(ctx, sc)
 	}
 
-	if in.Kind == "sync_notes" || in.AccountID != "" && !validKey(in.AccountID) {
+	if in.Kind == "sync_notes" || in.Kind == "read_note" || in.AccountID != "" && !validKey(in.AccountID) {
 		return Job{}, false, ErrInvalid
 	}
 	if readKind(in.Kind) {

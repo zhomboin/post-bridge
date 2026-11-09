@@ -8,6 +8,8 @@
 
 管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.10，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg、远程桌面或模型密钥。
 
+小红书资料统计与正文图片只读不增加必填环境变量；API 启动时建立按账号保护的正文缓存表。仍须按本页步骤备份数据库、配置和全部账号会话后升级。升级后选择对应账号同步笔记，核对资料与统计；只有已有真实笔记才能验收正文读取，见[只读工作台](xiaohongshu-readonly.md)。
+
 | 操作 | 命令 | 行为 |
 | --- | --- | --- |
 | 首次配置 | sudo ./scripts/ubuntu-deploy.sh configure | 生成 root 所有、0600 的私有配置，已有文件不覆盖 |

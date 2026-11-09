@@ -137,7 +137,7 @@ func (s *Store) Processes(ctx context.Context, f ProcessFilter) ([]ProcessSummar
 			p.ObjectID = p.AccountID
 			p.ObjectName = p.AccountName
 		}
-		if p.Kind == "read_article" {
+		if p.Kind == "read_article" || p.Kind == "read_note" {
 			p.ObjectID = p.ArticleID
 		}
 		items = append(items, p)

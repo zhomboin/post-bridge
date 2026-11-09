@@ -45,6 +45,7 @@ const kindText = (job: Job) =>
       sync_notes: '笔记同步',
       sync_articles: '文章同步',
       read_article: '正文读取',
+      read_note: '笔记正文读取',
       check_account: '账号检查',
       publish: '正式发布',
       save_draft: '保存草稿',

@@ -13,7 +13,7 @@ func (s *Store) acceptArticleResult(ctx context.Context, tx pgx.Tx, r *record, i
 	if r.Platform == "xiaohongshu" {
 		return s.acceptNotesResult(ctx, tx, r, in, now)
 	}
-	if in.Notes != nil || in.AccountIdentity != nil {
+	if in.Notes != nil || in.Note != nil || in.AccountIdentity != nil {
 		return ErrInvalid
 	}
 	if !readKind(r.Kind) {

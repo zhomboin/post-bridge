@@ -15,21 +15,28 @@ type AccountIdentity struct {
 	UserID   string `json:"user_id"`
 }
 type Note struct {
-	ID             string `json:"id"`
-	Title          string `json:"title"`
-	Status         string `json:"status"`
-	PlatformStatus string `json:"platform_status"`
-	PostedAt       string `json:"posted_at"`
-	Views          *int64 `json:"views"`
-	Likes          *int64 `json:"likes"`
-	Comments       *int64 `json:"comments"`
-	Favorites      *int64 `json:"favorites"`
+	ID             string   `json:"id"`
+	Title          string   `json:"title"`
+	Status         string   `json:"status"`
+	PlatformStatus string   `json:"platform_status"`
+	PostedAt       string   `json:"posted_at"`
+	Views          *int64   `json:"views"`
+	Likes          *int64   `json:"likes"`
+	Comments       *int64   `json:"comments"`
+	Favorites      *int64   `json:"favorites"`
+	Shares         *int64   `json:"shares"`
+	Type           string   `json:"type,omitempty"`
+	CoverURLs      []string `json:"cover_urls,omitempty"`
+	NoteURL        string   `json:"note_url,omitempty"`
 }
 type NotesSnapshot struct {
-	Username string     `json:"username"`
-	UserID   string     `json:"user_id"`
-	Items    []Note     `json:"items"`
-	SyncedAt *time.Time `json:"synced_at,omitempty"`
+	Username string       `json:"username"`
+	UserID   string       `json:"user_id"`
+	Items    []Note       `json:"items"`
+	SyncedAt *time.Time   `json:"synced_at,omitempty"`
+	Profile  *NoteProfile `json:"profile,omitempty"`
+	Stats    *NoteStats   `json:"stats,omitempty"`
+	Trend    []NoteTrend  `json:"trend,omitempty"`
 }
 type NotePage struct {
 	Items    []Note         `json:"items"`
@@ -46,7 +53,7 @@ func validateNotes(snapshot *NotesSnapshot, username, userID string) error {
 	}
 	seen := map[string]bool{}
 	for _, n := range snapshot.Items {
-		if !xhsUserID.MatchString(n.ID) || seen[n.ID] || strings.TrimSpace(n.Title) == "" || !boundedText(n.Title, 2000) || !boundedText(n.PlatformStatus, 100) || !nullableMetrics(n.Views, n.Likes, n.Comments, n.Favorites) {
+		if !xhsUserID.MatchString(n.ID) || seen[n.ID] || strings.TrimSpace(n.Title) == "" || !boundedText(n.Title, 2000) || !boundedText(n.PlatformStatus, 100) || !nullableMetrics(n.Views, n.Likes, n.Comments, n.Favorites, n.Shares) || !validNoteMedia(n) {
 			return ErrInvalid
 		}
 		if n.Status != "published" && n.Status != "reviewing" && n.Status != "rejected" && n.Status != "unknown" {
@@ -59,6 +66,9 @@ func validateNotes(snapshot *NotesSnapshot, username, userID string) error {
 		}
 		seen[n.ID] = true
 	}
+	if validateNoteInsights(snapshot) != nil {
+		return ErrInvalid
+	}
 	data, err := json.Marshal(snapshot)
 	if err != nil || len(data) > 6<<20 {
 		return ErrInvalid
@@ -67,13 +77,16 @@ func validateNotes(snapshot *NotesSnapshot, username, userID string) error {
 }
 
 func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID string) (Job, bool, error) {
+	return s.createNoteJob(ctx, accountID, kind, requestID, "")
+}
+func (s *Store) createNoteJob(ctx context.Context, accountID, kind, requestID, noteID string) (Job, bool, error) {
 
 	if accountID == "csdn-main" && kind == "check_account" {
 		return s.Create(ctx, CreateInput{RequestID: requestID, Kind: kind, Platform: "csdn"})
 	}
 	var out Job
 	created := false
-	if !validKey(accountID) || !validKey(requestID) || (kind != "check_account" && kind != "sync_notes") {
+	if !validKey(accountID) || !validKey(requestID) || (kind != "check_account" && kind != "sync_notes" && kind != "read_note") || (kind == "read_note" && !xhsUserID.MatchString(noteID)) || (kind != "read_note" && noteID != "") {
 		return out, false, ErrInvalid
 	}
 	if err := s.executableAccount(ctx, accountID); err != nil {
@@ -98,7 +111,8 @@ func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID
 		if platform != "xiaohongshu" {
 			return ErrInvalid
 		}
-		input := CreateInput{RequestID: requestID, Kind: kind, Platform: platform, AccountID: accountID}
+		var note *Note
+		input := CreateInput{RequestID: requestID, Kind: kind, Platform: platform, AccountID: accountID, ArticleID: noteID}
 		fp := fingerprint(input)
 		var hash string
 		var data []byte
@@ -117,8 +131,8 @@ func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		if kind == "sync_notes" {
-			err = tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=$1 AND record->>'kind'=$2 AND record->>'account_username'=$3 AND record->>'status' IN ('queued','running','waiting_user') ORDER BY created_at DESC,id DESC LIMIT 1", accountID, kind, username).Scan(&data)
+		if kind == "sync_notes" || kind == "read_note" {
+			err = tx.QueryRow(ctx, "SELECT record FROM jobs WHERE record->>'account_id'=$1 AND record->>'kind'=$2 AND record->>'account_username'=$3 AND COALESCE(record->>'article_id','')=$4 AND record->>'status' IN ('queued','running','waiting_user') ORDER BY created_at DESC,id DESC LIMIT 1", accountID, kind, username, noteID).Scan(&data)
 			if err == nil {
 				var r record
 				if json.Unmarshal(data, &r) != nil {
@@ -137,11 +151,24 @@ func (s *Store) CreateAccountJob(ctx context.Context, accountID, kind, requestID
 				return err
 			}
 		}
+		if kind == "read_note" {
+			var e error
+			note, e = currentNote(ctx, tx, accountID, noteID, username, native)
+			if e != nil {
+				return e
+			}
+			if note.Status != "published" {
+				return ErrConflict
+			}
+		}
 		r := newRecord(input, now)
 		r.Platform = platform
 		r.AccountID = accountID
 		r.AccountUsername = username
 		r.AccountNativeID = native
+		if note != nil {
+			r.Title = note.Title
+		}
 		data, err = json.Marshal(r)
 		if err != nil {
 			return err
@@ -163,11 +190,11 @@ func (s *Store) acceptNotesResult(ctx context.Context, tx pgx.Tx, r *record, in 
 	if in.Articles != nil || in.Article != nil || in.RemoteID != "" || in.PublishAccepted || in.Status == "reconciling" || r.ExternalStarted || r.RunMode != "execute" {
 		return ErrInvalid
 	}
-	if r.Kind != "check_account" && r.Kind != "sync_notes" {
+	if r.Kind != "check_account" && r.Kind != "sync_notes" && r.Kind != "read_note" {
 		return ErrInvalid
 	}
 	if in.Status != "succeeded" {
-		if in.Notes != nil || in.AccountIdentity != nil {
+		if in.Notes != nil || in.AccountIdentity != nil || in.Note != nil {
 			return ErrInvalid
 		}
 		return nil
@@ -180,6 +207,12 @@ func (s *Store) acceptNotesResult(ctx context.Context, tx pgx.Tx, r *record, in 
 		return ErrConflict
 	}
 	if in.AccountIdentity == nil || in.AccountIdentity.Username != username || in.AccountIdentity.UserID != native {
+		return ErrInvalid
+	}
+	if r.Kind == "read_note" {
+		return s.acceptNoteBody(ctx, tx, r, in, username, native, now)
+	}
+	if in.Note != nil {
 		return ErrInvalid
 	}
 	if r.Kind == "check_account" {
