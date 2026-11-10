@@ -236,15 +236,13 @@ describe('管理员会话与任务闭环', () => {
     fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '2026-11-01T09:00' } });
     fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '2026-11-02T09:00' } });
     fireEvent.click(screen.getByRole('button', { name: '查询' }));
-    await waitFor(() =>
-      expect(appFixture.calls.filter((c) => c.url.startsWith('/api/logs?')).length).toBeGreaterThan(
-        1,
-      ),
-    );
-    const filtered = appFixture.calls.filter((c) => c.url.startsWith('/api/logs?')).at(-1)!;
-    expect(new URL(filtered.url, 'http://localhost').searchParams.get('from')).toBe(
-      new Date('2026-11-01T09:00').toISOString(),
-    );
+    await waitFor(() => {
+      const filtered = appFixture.calls.filter((c) => c.url.startsWith('/api/logs?')).at(-1);
+      expect(filtered).toBeDefined();
+      const params = new URL(filtered!.url, 'http://localhost').searchParams;
+      expect(params.get('from')).toBe(new Date('2026-11-01T09:00').toISOString());
+      expect(params.get('to')).toBe(new Date('2026-11-02T09:00').toISOString());
+    });
     const before = appFixture.calls.length;
     fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '2026-12-31T09:00' } });
     fireEvent.click(screen.getByRole('button', { name: '查询' }));
