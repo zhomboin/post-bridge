@@ -10,6 +10,9 @@ import (
 func (h *handler) executeFormatting(ctx context.Context, c formattingClaim) (FormattingOutput, FormattingUsage, error) {
 	out := FormattingOutput{Tags: []string{}, Topics: []string{}, Cards: []FormattingCard{}, Omissions: []string{}, Issues: []FormattingIssue{}, Assets: []FormattingAsset{}}
 	var usage FormattingUsage
+	if c.Job.Operation == "render" {
+		usage = FormattingUsage{Input: c.Job.InputTokens, Output: c.Job.OutputTokens}
+	}
 	session, err := h.formattingCheckpoint(ctx, c, "analyzing")
 	if err != nil {
 		return out, usage, err
@@ -28,7 +31,6 @@ func (h *handler) executeFormatting(ctx context.Context, c formattingClaim) (For
 			return out, usage, ErrFormattingContent
 		}
 		out = *formattingOutputCopy(c.Job.Result)
-		usage = FormattingUsage{Input: c.Job.InputTokens, Output: c.Job.OutputTokens}
 		if err = validateXiaohongshu(out, analyzed.Blocks); err != nil {
 			return out, usage, err
 		}

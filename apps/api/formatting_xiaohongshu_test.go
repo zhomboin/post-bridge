@@ -3,6 +3,8 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -64,6 +66,20 @@ func TestFormattingXiaohongshuRenderEditConfirm(t *testing.T) {
 	}
 	if w := call("POST", "/api/formatting-jobs/"+job.ID+"/csdn-draft", map[string]int64{"revision": 2}, true); w.Code != 409 {
 		t.Fatal("XHS could create platform write", w.Code)
+	}
+	unavailable := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"code":"renderer_unavailable"}`))
+	}))
+	t.Cleanup(unavailable.Close)
+	h.formattingConfig.FormatterURL = unavailable.URL
+	edited = *formattingOutputCopy(next.Result)
+	edited.Assets = []FormattingAsset{}
+	decodeFormatting[FormattingJob](t, call("PUT", "/api/formatting-jobs/"+job.ID, map[string]any{"revision": next.Revision, "request_id": "render-unavailable", "template": "technical", "output": edited}, true), 202)
+	runFormattingClaim(t, h)
+	failed := decodeFormatting[FormattingJob](t, call("GET", "/api/formatting-jobs/"+job.ID, nil, true), 200)
+	if failed.Status != "failed" || failed.ErrorCode != "renderer_unavailable" || failed.InputTokens != 100 || failed.OutputTokens != 50 {
+		t.Fatal("render failure lost original model usage", failed.Status, failed.InputTokens, failed.OutputTokens)
 	}
 }
 func TestFormattingXiaohongshuOmittedCodeIsExplicit(t *testing.T) {
