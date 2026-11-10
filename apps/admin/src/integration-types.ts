@@ -1,4 +1,6 @@
 export type IntegrationClient = {
+  ai_processing_allowed?: boolean;
+  formatting_platforms?: string[];
   id: string;
   name: string;
   source_id: string;
@@ -49,6 +51,8 @@ export type PlatformDraft = {
   publish_options?: CSDNPublishOptions;
 };
 export type Preparation = {
+  formatting?: { allow_ai_processing: boolean; platforms: string[]; auto_generate?: boolean };
+  targets?: { platform: string; account_id: string; operation: string }[];
   id: string;
   request_id: string;
   source_id: string;

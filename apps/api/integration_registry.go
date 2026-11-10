@@ -47,12 +47,14 @@ type IntegrationRegistration struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 type IntegrationGrantInput struct {
-	SourceID           string    `json:"source_id,omitempty"`
-	Scopes             []string  `json:"scopes"`
-	Accounts           []string  `json:"accounts"`
-	Operations         []string  `json:"operations"`
-	ExpiresAt          time.Time `json:"expires_at"`
-	RateLimitPerMinute int       `json:"rate_limit_per_minute"`
+	AIProcessingAllowed bool      `json:"ai_processing_allowed,omitempty"`
+	FormattingPlatforms []string  `json:"formatting_platforms,omitempty"`
+	SourceID            string    `json:"source_id,omitempty"`
+	Scopes              []string  `json:"scopes"`
+	Accounts            []string  `json:"accounts"`
+	Operations          []string  `json:"operations"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	RateLimitPerMinute  int       `json:"rate_limit_per_minute"`
 }
 type IntegrationIssued struct {
 	ClientID string `json:"client_id"`
@@ -192,6 +194,9 @@ func (s *IntegrationService) issue(ctx context.Context, tx pgx.Tx, c Integration
 	}, e
 }
 func integrationApplyGrant(c *IntegrationClient, in IntegrationGrantInput, now time.Time) error {
+	if in.AIProcessingAllowed && !formattingPlatformsValid(in.FormattingPlatforms) || !in.AIProcessingAllowed && len(in.FormattingPlatforms) > 0 {
+		return ErrInvalid
+	}
 	if !integrationPermissions(in.Scopes, in.Accounts, in.Operations) || !in.ExpiresAt.After(now) || in.ExpiresAt.After(now.Add(366*24*time.Hour)) || in.RateLimitPerMinute < 1 || in.RateLimitPerMinute > 600 {
 		return ErrInvalid
 	}
@@ -201,6 +206,8 @@ func integrationApplyGrant(c *IntegrationClient, in IntegrationGrantInput, now t
 		}
 		c.SourceID = in.SourceID
 	}
+	c.AIProcessingAllowed = in.AIProcessingAllowed
+	c.FormattingPlatforms = in.FormattingPlatforms
 	c.Scopes = in.Scopes
 	c.Accounts = in.Accounts
 	c.Operations = in.Operations

@@ -221,6 +221,9 @@ class UbuntuDeploymentTests(unittest.TestCase):
                 for index, path in enumerate(paths):
                     path.write_text("old-private-content-" + str(index))
                     path.chmod(0o600 if path.parent != units else 0o644)
+                (install / "installation.json").write_text(
+                    json.dumps({"owner": "post-bridge-ubuntu", "units": deploy.UNITS})
+                )
                 before = {
                     path: (path.read_bytes(), path.stat().st_mode & 0o777)
                     for path in paths
@@ -257,6 +260,7 @@ class UbuntuDeploymentTests(unittest.TestCase):
                     patch.object(deploy, "INSTALL", install),
                     patch.object(deploy, "CONFIG", config),
                     patch.object(deploy, "SYSTEMD", units, create=True),
+                    patch.object(deploy, "STATE", root / "state"),
                     patch.object(
                         deploy,
                         "service_state",

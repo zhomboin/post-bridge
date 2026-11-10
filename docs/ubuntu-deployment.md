@@ -10,16 +10,16 @@
 
 命令逐条执行，失败后先排查，不继续后续步骤。“〈…〉”全部替换为目标环境值；真实账号、地址、目录、连接和密钥只保存在目标机器的私有配置中。安装、停止、启动、升级及 Nginx 重载会修改系统或影响服务，应由管理员确认目标、备份及操作时机后执行。
 
-管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.10，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg、远程桌面或模型密钥。
+管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.10，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg 或远程桌面；基础功能无需模型密钥，可选 DeepSeek 格式化单独配置。
 
 小红书资料统计与正文图片只读不增加必填环境变量；API 启动时建立按账号保护的正文缓存表。仍须按本页步骤备份数据库、配置和全部账号会话后升级。升级后选择对应账号同步笔记，核对资料与统计；只有已有真实笔记才能验收正文读取，见[只读工作台](xiaohongshu-readonly.md)。
 
 | 操作 | 命令 | 行为 |
 | --- | --- | --- |
 | 首次配置 | sudo ./scripts/ubuntu-deploy.sh configure | 生成 root 所有、0600 的私有配置，已有文件不覆盖 |
-| 首次安装 | sudo ./scripts/ubuntu-deploy.sh install | 构建独立代码快照并启用、启动两个 systemd 单元 |
+| 首次安装 | sudo ./scripts/ubuntu-deploy.sh install | 构建独立代码快照并启动 API、worker，启用 AI 时增加 formatter 单元 |
 | 检查 | sudo ./scripts/ubuntu-deploy.sh check | 检查部署标记、API、执行器及登录控制接口 |
-| 停止 | sudo ./scripts/ubuntu-deploy.sh stop | 先停执行器，再停 API；保留数据库、配置与账号会话 |
+| 停止 | sudo ./scripts/ubuntu-deploy.sh stop | 停止登记的可选排版、执行器和 API；保留数据库、配置与账号会话 |
 | 再次启动 | sudo systemctl start post-bridge-api.service post-bridge-worker.service | 启动已有部署，不重建代码 |
 | 升级 | sudo ./scripts/ubuntu-deploy.sh upgrade | 从当前源码构建并切换部署，复用凭据与账号会话 |
 
@@ -414,6 +414,48 @@ sudoedit /etc/post-bridge/install.json
 已有 accounts.json 时跳过模板复制，在原文件的 accounts 中追加；两份文件的 id、platform、username、user_id、owner_username 保持一致，owner_username 必须是已存在的本站用户。API 文件的 worker_token_file 指向 API 私有令牌副本，worker 文件指向 worker 私有令牌；profile_dir 指向对应的 worker 会话目录。将已核对、已关闭浏览器的专属会话保存到该目录，并核对 worker 所有、目录 0700 和文件受限权限。
 
 install.json 中 API_PLATFORM_ACCOUNTS_FILE 和 WORKER_PLATFORM_ACCOUNTS_FILE 分别填写上述文件位置。按第六节备份并执行 upgrade，再运行 check，登录对应用户检查账号及只读同步。不要仅启动旧部署以为新配置已生效；不要把包含真实身份与目录的文件提交到 Git。
+
+## DeepSeek 格式化
+
+可选服务不改变基础草稿与来源流程。以下命令在目标服务器 Bash 执行；启用会发送获授权的原稿到 DeepSeek。先按本页备份数据库与私有配置，再选择维护窗口。
+
+1. 准备 root 私有模型配置目录。从终端隐藏输入已有 DeepSeek 密钥，脚本生成私有配置；密钥不进入命令参数或仓库：
+
+```bash
+sudo install -d -m 700 /etc/post-bridge/model
+read -r -s -p 'DeepSeek 密钥：' PB_DEEPSEEK_KEY
+printf '\n'
+printf '%s' "$PB_DEEPSEEK_KEY" | sudo python3 scripts/formatting_config.py --provider-dir /etc/post-bridge/model --key-stdin
+unset PB_DEEPSEEK_KEY
+sudoedit /etc/post-bridge/install.json
+```
+
+2. 在已有私有部署 JSON 中增加下表字段，不更改数据库和账号配置。模型可在 deepseek-config.json 的 model 字段调整；默认 deepseek-flash。参数及范围见 [AI 格式化](ai-formatting.md)。
+
+| 字段 | 值 |
+| --- | --- |
+| AI_FORMATTING_ENABLED | 布尔值 true |
+| AI_PROVIDER_CONFIG_FILE | /etc/post-bridge/model/deepseek-config.json |
+
+3. 已部署环境执行 upgrade；首次部署则在完成前述数据库、凭据与 HTTPS 准备后执行 install。安装器安装中文和等宽字体、构建排版服务，隔离 API、worker 和 formatter 用户，只向 API 提供模型密钥：
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh upgrade
+sudo ./scripts/ubuntu-deploy.sh check
+sudo systemctl status post-bridge-api.service post-bridge-worker.service post-bridge-formatter.service --no-pager
+```
+
+4. 登录后台，用合成原稿验证生成、取消、CSDN 采用和小红书下载。check 仅证明服务就绪，不会验证余额、真实模型输出、平台写入或生产验收。排障检查三个精确单元的日志，不记录原文、模型响应或凭据。
+
+5. 停止和再次启动已经启用的部署：
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh stop
+sudo systemctl start post-bridge-formatter.service post-bridge-api.service post-bridge-worker.service
+sudo ./scripts/ubuntu-deploy.sh check
+```
+
+6. 升级继续使用本页备份与 upgrade。可选服务启动或健康检查失败时，安装器恢复切换前的配置、代码及运行状态；数据库不回退。关闭功能时在私有 install.json 将开关改为 false 后执行 upgrade，安装器只停用本项目登记的 formatter 单元。备份数据库、/etc/post-bridge 和 /var/lib/post-bridge/api 私有配置，不把密钥提交到 Git；恢复后重新核对权限和授权。
 
 ## 小红书只读账号
 

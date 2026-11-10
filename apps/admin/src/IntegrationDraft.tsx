@@ -10,6 +10,7 @@ import {
   useCSDNPublishPreset,
 } from './CSDNPublishSettings';
 import type { PlatformDraft, Preparation } from './integration-types';
+import FormattingPanel from './FormattingPanel';
 
 function Preview({
   body,
@@ -304,6 +305,22 @@ export default function IntegrationDraft({ id }: { id: string }) {
                     </fieldset>
                   ))}
                 </div>
+                <FormattingPanel
+                  source={{
+                    preparation_id: data.id,
+                    base_revision: data.revision,
+                    account_id: data.targets?.[0]?.account_id || data.drafts[0]?.account_id,
+                  }}
+                  disabled={!editable || dirty || action.pending}
+                  authorized={!!data.formatting?.allow_ai_processing}
+                  platforms={data.formatting?.platforms || ['csdn']}
+                  onAdopt={(_, preparation) => {
+                    if (preparation) {
+                      setData(preparation);
+                      setDrafts(preparation.drafts);
+                    }
+                  }}
+                />
                 {action.error && (
                   <div className="notice error section-gap" role="alert">
                     {action.error}

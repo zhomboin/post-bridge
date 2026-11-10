@@ -49,7 +49,7 @@ jobs:
       - name: 准备数据库行权限与账号隔离工具
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap apparmor-utils
+          sudo apt-get install -y bubblewrap apparmor-utils fonts-noto-cjk fonts-dejavu-core
           sudo --preserve-env=GITHUB_ACTIONS,GITHUB_ENV env PATH=/usr/bin:/bin python3 scripts/account_sandbox.py --ci
           python3 scripts/ci_database.py
       - name: 代码格式检查
@@ -63,9 +63,10 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: 安装匹配的 Chromium
         run: npx --no-install playwright install --with-deps chromium
+      - name: 构建独立排版服务
+        run: npm run build --workspace @post-bridge/formatter
       - name: Go 并发与真实数据库验证
-        working-directory: apps/api
-        run: go test -race ./...
+        run: python3 scripts/formatting_test.py go -C apps/api test -race ./...
       - name: Go 静态检查
         working-directory: apps/api
         run: go vet ./...

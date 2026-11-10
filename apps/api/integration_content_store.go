@@ -125,6 +125,9 @@ func (h *handler) prepareIntegration(ctx context.Context, client IntegrationClie
 			return ErrIntegrationPermission
 		}
 		client = fresh
+		if in.Formatting != nil && !formattingAuthorizationValid(client, in.Formatting) {
+			return ErrIntegrationPermission
+		}
 		if err := integrationAuthorizationAllowed(ctx, tx, client.SourceID, in.ArticleID, in.AuthorizationID); err != nil {
 			return err
 		}
@@ -165,6 +168,7 @@ func (h *handler) prepareIntegration(ctx context.Context, client IntegrationClie
 			expiry = in.AuthorizationExpiresAt
 		}
 		out = IntegrationPreparation{
+			Formatting:             in.Formatting,
 			ID:                     randomToken(),
 			ClientID:               client.ID,
 			SourceID:               client.SourceID,
@@ -209,6 +213,11 @@ func (h *handler) prepareIntegration(ctx context.Context, client IntegrationClie
 		}
 		if _, e = tx.Exec(ctx, "INSERT INTO integration_preparations(id,client_id,source_id,article_id,request_id,fingerprint,record,expires_at,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", out.ID, client.ID, client.SourceID, in.ArticleID, in.RequestID, digest, raw, expiry, now); e != nil {
 			return e
+		}
+		if out.Formatting != nil && out.Formatting.AutoGenerate {
+			if _, e = tx.Exec(ctx, "INSERT INTO formatting_automatic(preparation_id,owner_user_id) VALUES($1,$2)", out.ID, client.OwnerUserID); e != nil {
+				return e
+			}
 		}
 		created = true
 		return integrationAudit(ctx, tx, client.ID, "preparation_created", "integration", now)

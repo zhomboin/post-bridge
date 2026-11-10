@@ -22,19 +22,21 @@ import (
 var integrationSchemaSQL string
 
 type IntegrationClient struct {
-	OwnerUserID        string    `json:"owner_user_id,omitempty"`
-	ID                 string    `json:"id"`
-	Name               string    `json:"name"`
-	SourceID           string    `json:"source_id"`
-	Environment        string    `json:"environment"`
-	ServiceID          string    `json:"service_id"`
-	Status             string    `json:"status"`
-	Scopes             []string  `json:"scopes"`
-	Accounts           []string  `json:"accounts"`
-	Operations         []string  `json:"operations"`
-	GrantVersion       int64     `json:"grant_version"`
-	ExpiresAt          time.Time `json:"expires_at"`
-	RateLimitPerMinute int       `json:"rate_limit_per_minute"`
+	OwnerUserID         string    `json:"owner_user_id,omitempty"`
+	AIProcessingAllowed bool      `json:"ai_processing_allowed,omitempty"`
+	FormattingPlatforms []string  `json:"formatting_platforms,omitempty"`
+	ID                  string    `json:"id"`
+	Name                string    `json:"name"`
+	SourceID            string    `json:"source_id"`
+	Environment         string    `json:"environment"`
+	ServiceID           string    `json:"service_id"`
+	Status              string    `json:"status"`
+	Scopes              []string  `json:"scopes"`
+	Accounts            []string  `json:"accounts"`
+	Operations          []string  `json:"operations"`
+	GrantVersion        int64     `json:"grant_version"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	RateLimitPerMinute  int       `json:"rate_limit_per_minute"`
 }
 type IntegrationPrincipal struct {
 	IntegrationClient

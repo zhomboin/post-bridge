@@ -1,0 +1,29 @@
+[Unit]
+Description=Post Bridge Content Formatter
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=post-bridge-formatter
+Group=post-bridge-formatter
+WorkingDirectory=@INSTALL@/current
+UnsetEnvironment=DISPLAY WAYLAND_DISPLAY
+EnvironmentFile=@CONFIG@/formatter.env
+ExecStart=@INSTALL@/tools/node-v22.22.1-linux-@ARCH@/bin/node @INSTALL@/current/apps/formatter/dist/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=@STATE@/formatter
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

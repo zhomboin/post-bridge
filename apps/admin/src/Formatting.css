@@ -1,0 +1,131 @@
+.formatting-panel {
+  border-top: 1px solid var(--border, #d8dee8);
+  margin-top: 24px;
+  padding-top: 8px;
+  min-width: 0;
+}
+.formatting-panel .surface-header {
+  padding-inline: 0;
+}
+.formatting-result {
+  min-width: 0;
+}
+.formatting-status {
+  color: #526176;
+  margin-block: 12px;
+  font-size: 14px;
+}
+.formatting-summary {
+  line-height: 1.7;
+  white-space: pre-wrap;
+  margin-block: 12px;
+}
+.formatting-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 12px;
+}
+.formatting-tags span {
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 13px;
+}
+.formatting-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.formatting-original {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.8;
+}
+.formatting-list > a {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid #d8dee8;
+  color: inherit;
+  text-decoration: none;
+}
+.formatting-list > a:last-child {
+  border-bottom: 0;
+}
+.formatting-list > a:hover {
+  background: #f6f8fa;
+}
+.formatting-list > a span:last-child {
+  color: #526176;
+  font-size: 13px;
+}
+.formatting-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-block: 20px;
+}
+.formatting-card-grid figure {
+  margin: 0;
+  min-width: 0;
+}
+.formatting-card-grid img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+}
+.formatting-card-grid figcaption {
+  margin-top: 8px;
+  font-size: 14px;
+}
+.formatting-note-body {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  margin-block: 16px;
+}
+.formatting-card-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 0;
+}
+.formatting-card-editor textarea {
+  min-height: 160px;
+}
+.formatting-panel select {
+  max-width: 180px;
+}
+.formatting-note-editor {
+  min-height: 180px;
+}
+.formatting-result .markdown-preview {
+  max-height: 640px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .formatting-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .formatting-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .formatting-list > a {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .formatting-panel .surface-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
