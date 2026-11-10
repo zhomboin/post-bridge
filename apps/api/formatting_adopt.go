@@ -10,6 +10,10 @@ import (
 )
 
 func (h *handler) adoptFormatting(ctx context.Context, id string, revision int64) (FormattingJob, *IntegrationPreparation, error) {
+	return h.adoptFormattingScope(ctx, id, revision, false)
+}
+
+func (h *handler) adoptFormattingScope(ctx context.Context, id string, revision int64, localOnly bool) (FormattingJob, *IntegrationPreparation, error) {
 	var out FormattingJob
 	var prep *IntegrationPreparation
 	err := h.store.locked(ctx, func(tx pgx.Tx, now time.Time) error {
@@ -24,6 +28,9 @@ func (h *handler) adoptFormatting(ctx context.Context, id string, revision int64
 		s, err := h.readFormattingSession(ctx, tx, out.SessionID, true)
 		if err != nil {
 			return err
+		}
+		if localOnly && s.PreparationID != "" {
+			return ErrIntegrationPermission
 		}
 		if out.Status == "adopted" {
 			if s.PreparationID != "" {
@@ -90,7 +97,7 @@ func (h *handler) adoptFormatting(ctx context.Context, id string, revision int64
 	return out, prep, err
 }
 func (h *handler) createFormattedCSDNDraft(ctx context.Context, id string, revision int64) (Job, bool, error) {
-	job, _, err := h.adoptFormatting(ctx, id, revision)
+	job, _, err := h.adoptFormattingScope(ctx, id, revision, true)
 	if err != nil {
 		return Job{}, false, err
 	}

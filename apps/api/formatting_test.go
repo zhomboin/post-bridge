@@ -161,6 +161,15 @@ func TestFormattingSourceAdoptionAndAuthorization(t *testing.T) {
 	s := decodeFormatting[FormattingSession](t, call("POST", "/api/formatting-sessions", formattingSessionInput{RequestID: "source-session", PreparationID: p.ID, BaseRevision: p.Revision, Platforms: []string{"csdn"}, AllowAIProcessing: true}, true), 201)
 	job := decodeFormatting[FormattingJob](t, call("POST", "/api/formatting-sessions/"+s.ID+"/jobs", formattingJobInput{RequestID: "source-job", Platform: "csdn"}, true), 202)
 	runFormattingClaim(t, h)
+	decodeFormatting[IntegrationPreparation](t, call("POST", "/api/integration-preparations/"+p.ID+"/confirm", map[string]int64{"revision": p.Revision}, true), 200)
+	if w := call("POST", "/api/formatting-jobs/"+job.ID+"/csdn-draft", map[string]int64{"revision": 1}, true); w.Code != 403 {
+		t.Fatal("source reached local draft endpoint", w.Code)
+	}
+	unchanged := decodeFormatting[IntegrationPreparation](t, call("GET", "/api/integration-preparations/"+p.ID, nil, true), 200)
+	candidate := decodeFormatting[FormattingJob](t, call("GET", "/api/formatting-jobs/"+job.ID, nil, true), 200)
+	if unchanged.Revision != p.Revision || !unchanged.Confirmed || candidate.Status != "succeeded" {
+		t.Fatal("rejected local operation changed source revision or adoption")
+	}
 	adopted := decodeFormatting[struct {
 		Job         FormattingJob          `json:"job"`
 		Preparation IntegrationPreparation `json:"preparation"`

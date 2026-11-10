@@ -40,6 +40,23 @@ describe('CSDN 内容保护', () => {
       '段落',
     );
   });
+  it('保留列表项和列表内段落的英文边界', () => {
+    for (const source of ['- foo\n- bar', '- foo\n\n  bar']) {
+      const blocks = analyze(source);
+      expect(
+        validateCSDN(
+          blocks,
+          blocks.map(({ id, markdown }) => ({ id, markdown })),
+        ),
+      ).toBe(source);
+      expect(() => validateCSDN(blocks, [{ id: blocks[0].id, markdown: '- foobar' }])).toThrow(
+        'content_changed',
+      );
+      expect(validateCSDN(blocks, [{ id: blocks[0].id, markdown: '- **foo**\n- bar' }])).toContain(
+        '**foo**',
+      );
+    }
+  });
   it('拒绝 HTML；完整保护表格、图片和公式', () => {
     expect(() => analyze('<script>bad()</script>')).toThrow();
     for (const body of [

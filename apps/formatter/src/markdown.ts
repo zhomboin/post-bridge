@@ -17,7 +17,8 @@ function textOf(node: Node): string {
   if (node.type === 'html') throw Error('unsupported_content');
   if (node.type === 'break') return ' ';
   if (node.type === 'image') return '';
-  return node.value ?? (node.children ?? []).map(textOf).join('');
+  const separator = ['list', 'listItem'].includes(node.type) ? '\n' : '';
+  return node.value ?? (node.children ?? []).map(textOf).join(separator);
 }
 function locksOf(node: Node): string[] {
   const locks: string[] = [];
