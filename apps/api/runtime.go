@@ -17,6 +17,7 @@ import (
 )
 
 type RuntimeConfig struct {
+	Formatting                                                                                                                 FormattingConfig
 	PlatformAccounts                                                                                                           []PlatformAccountConfig
 	DatabaseURL, Address, Origin, Username, Password, WorkerToken, CSDNUsername, CSDNDisplayName, AdminDistDir, RemoteLoginURL string
 	IntegrationMasterKey, IntegrationEnvironment, IntegrationServiceID                                                         string
@@ -97,6 +98,9 @@ func LoadRuntimeConfig() (RuntimeConfig, error) {
 			return c, fmt.Errorf("外部平台认证配置无效")
 		}
 	}
+	if c.Formatting, err = loadFormattingConfig(); err != nil {
+		return c, err
+	}
 	return c, nil
 }
 func Run(ctx context.Context, c RuntimeConfig) error {
@@ -118,6 +122,7 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 		return fmt.Errorf("数据库初始化失败")
 	}
 	h, err := NewHandler(startup, Config{
+		Formatting:             c.Formatting,
 		PlatformAccounts:       c.PlatformAccounts,
 		Store:                  store,
 		AdminUsername:          c.Username,
@@ -135,6 +140,20 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 		return fmt.Errorf("管理接口初始化失败")
 	}
 	remoteHandler := h.(*handler)
+	formattingCtx, stopFormatting := context.WithCancel(ctx)
+	formattingDone := make(chan struct{})
+	if c.Formatting.Enabled {
+		go func() {
+			defer close(formattingDone)
+			remoteHandler.runFormattingScheduler(formattingCtx)
+		}()
+	} else {
+		close(formattingDone)
+	}
+	defer func() {
+		stopFormatting()
+		<-formattingDone
+	}()
 	defer func() {
 		remoteHandler.closeRemoteLogin(context.Background(), "")
 		if remoteHandler.remoteLoginProxy != nil {

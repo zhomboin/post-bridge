@@ -280,7 +280,16 @@ it('应用授权只提交固定接入字段，无需反向服务配置', async (
   await waitFor(() => expect(calls.some((call) => call.init?.method === 'PUT')).toBe(true));
   const body = JSON.parse(calls.find((call) => call.init?.method === 'PUT')!.init!.body as string);
   expect(Object.keys(body).sort()).toEqual(
-    ['accounts', 'expires_at', 'operations', 'rate_limit_per_minute', 'scopes', 'source_id'].sort(),
+    [
+      'accounts',
+      'ai_processing_allowed',
+      'formatting_platforms',
+      'expires_at',
+      'operations',
+      'rate_limit_per_minute',
+      'scopes',
+      'source_id',
+    ].sort(),
   );
   expect(body.operations).toEqual(['save_draft']);
   expect(localStorage.length).toBe(0);

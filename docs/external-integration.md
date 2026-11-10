@@ -217,6 +217,16 @@ PostBridge 根据本地已保存的数据决定执行：应用仍启用且未到
 
 联调时只使用独立本地私有配置与合成材料；实际地址、账号、凭据和运行目录不进入仓库。联调应分别验证调用方可靠发送、无反向服务的完整提交、人工确认、任务取消、真实平台草稿及生产部署；当前真实跨系统验收仍待完成。
 
+## 可选 AI 格式化授权
+
+应用授权中的 ai_processing_allowed 明确允许将原稿发送至 DeepSeek，formatting_platforms 限定 csdn、xiaohongshu。默认关闭；管理员在应用设置中授予。允许格式化小红书不等于允许向小红书分发，targets 仍仅接受已经开放的 CSDN 草稿操作。
+
+单篇准备请求可增加 formatting：allow_ai_processing 为 true，platforms 是本篇允许的平台，auto_generate 可选择自动排队。应用与单篇两层都通过才处理；缺少声明时完全沿用原有准备与签名流程，不发送模型。完整字段见 [机器契约](../contracts/cms.openapi.yaml)。
+
+auto_generate 只生成候选内容，不直接替换人工稿或创建分发。管理员采用 CSDN 结果后形成新的平台稿修订，原始快照和 content_fingerprint 保留；调用方重新读取准备稿，核对新的 draft_revision_ids 和 confirmation_fingerprint，再按既有协议分发。原稿签名和内容指纹算法不变。授权撤销、来源变化、账号停用或稿件到期会阻止继续处理和采用。
+
+小红书结果只在管理后台核对和下载素材，不进入来源 targets。真实调用方须自行增加授权声明和修订刷新联调；PostBridge 合成验证不代替调用方验收。
+
 ## CSDN 正文图片
 
 目标返回 `images: true` 时，获批来源可在正文中提交普通 Markdown 内联图片。地址使用经批准的专用公开图片域名及 HTTPS 路径，不能包含凭据、查询参数、片段或显式端口。每份稿件最多 20 处图片引用和 10 个不同地址。调用方先逐张确认图片仍为长期公开资源。目标能力由 API 的 `CSDN_IMAGE_HOSTS` 控制，值为逗号分隔的专用公开图片域名。空配置只接受文字稿。

@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-提供多用户独立登录、同平台多账号的 CSDN 与小红书账号工作台，以及 CSDN 草稿后台：登录、总览、草稿创建与预览、队列、任务详情、账号检查、账号文章只读列表与正文及对象处理记录，以及小红书资料统计、笔记正文图片只读、来源应用、平台稿确认与分发工作台。Go API 管理 PostgreSQL，独立 Node.js/Playwright 执行器操作官方编辑器。关闭网页后任务仍继续；运行时无需 AI Agent、模型服务或模型密钥。
+提供多用户独立登录、同平台多账号的 CSDN 与小红书账号工作台，以及 CSDN 草稿后台：登录、总览、草稿创建与预览、队列、任务详情、账号检查、账号文章只读列表与正文及对象处理记录，以及小红书资料统计、笔记正文图片只读、来源应用、平台稿确认与分发工作台。Go API 管理 PostgreSQL，独立 Node.js/Playwright 执行器操作官方编辑器。关闭网页后任务仍继续；平台执行无需 AI Agent；可选 DeepSeek 内容格式化使用独立配置，见[格式化说明](ai-formatting.md)。
 
 后台直接建稿支持文字 Markdown。启用图源白名单后，外部来源稿还可通过 CSDN 转存受控正文图片。标题为 5—100 字，正文不超过 200000 字。支持围栏代码、表格和公式，拒绝 MDX 和可执行 HTML。管理员可对已核对的 CSDN 来源草稿确认正式发布。验证状态见[总体进度](progress.md)。
 
@@ -12,7 +12,7 @@
 
 本页所有命令都在 **WSL Ubuntu 的 Bash 终端**执行；服务器部署使用[Ubuntu 部署说明](ubuntu-deployment.md)。命令逐条执行，某条失败后先处理错误，再执行下一条。安装系统依赖会修改 WSL 系统；初始化和启动会开启项目进程；停止会中断项目服务，执行前确认没有需要保留的进行中操作。
 
-命令中的“〈…〉”需要替换为本机值。真实账号、连接信息和运行目录只填写在本机输入或仓库外私有配置中，不写入 Git。Shell 入口复用 [runtime.py](../scripts/runtime.py)，仍需要 Python 3；不需要 PowerShell 或模型密钥。
+命令中的“〈…〉”需要替换为本机值。真实账号、连接信息和运行目录只填写在本机输入或仓库外私有配置中，不写入 Git。Shell 入口复用 [runtime.py](../scripts/runtime.py)，仍需要 Python 3；基础功能不需要 PowerShell 或模型密钥；AI 格式化按本页独立步骤启用。
 
 | 入口 | 用途 |
 | --- | --- |
@@ -347,6 +347,50 @@ unset TEST_DATABASE_URL
 ```
 
 test.sh 使用私有配置中的数据库连接，不能指向生产环境；它不包含 E2E 和 Python 启动／部署安全用例。结束开发后执行停止命令，再确认全部项目进程已停止。
+
+## DeepSeek 格式化
+
+先完成本页初始化，使用仓库外专属状态目录。以下步骤在 WSL Bash 执行，不使用生产数据库。启用会将明确授权的原稿发送到 DeepSeek；默认模型 deepseek-flash，生成与卡片操作见 [AI 格式化](ai-formatting.md)。
+
+1. 停止该状态目录的服务，安装本地中文与等宽字体：
+
+```bash
+./scripts/stop.sh --state "$PB_STATE"
+sudo apt-get install -y fonts-noto-cjk fonts-dejavu-core
+```
+
+2. WSL 已有 DEEPSEEK_API 时，直接生成 0600 模型配置和密钥文件，再启用可选服务。脚本不显示密钥，已有不同凭据拒绝覆盖：
+
+```bash
+python3 scripts/formatting_config.py --state "$PB_STATE"
+./scripts/dev.sh --state "$PB_STATE"
+./scripts/status.sh --state "$PB_STATE"
+```
+
+若密钥仅在 Windows 当前用户环境变量中，改为在 **Windows PowerShell** 运行以下配置命令，路径用自己的私有状态目录替换。随后回到 WSL 执行 dev.sh 与 status.sh：
+
+```powershell
+$taskDeepSeekCredential = [Environment]::GetEnvironmentVariable('DEEPSEEK_API', 'User')
+$taskDeepSeekCredential | wsl.exe -d Ubuntu -- python3 '〈WSL源码目录〉/scripts/formatting_config.py' --state '〈仓库外私有状态目录〉' --key-stdin
+$taskDeepSeekCredential = $null
+```
+
+3. 登录后台，在“格式化稿”提交合成稿件，核对 CSDN 结果或小红书正文与卡片。保存 CSDN 草稿仍须明确确认；小红书只下载素材。状态检查应包含 formatter。排查时只检查状态目录中的服务日志，不输出私有模型文件。
+
+4. 升级前按本页备份数据库、runtime.json、deepseek-config.json、deepseek-key 和渲染 token。停止后更新源码，再按 dev.sh 构建启动。关闭功能时，先停止服务，在私有 runtime.json 将 AI_FORMATTING_ENABLED 改为 false，再启动。现有数据库保留稿件，停止命令会回收本次服务及 Chromium。
+
+5. 只运行格式化影响范围的合成测试，先构建排版服务，使用专属测试数据库。此入口不调用真实模型，也不使用平台账号：
+
+```bash
+npm run build --workspace @post-bridge/formatter
+npm test --workspace @post-bridge/formatter
+python3 scripts/formatting_test.py go -C apps/api test -race ./... -run 'TestFormatting|TestDeepSeek'
+npm test --workspace @post-bridge/admin -- tests/Formatting.test.tsx tests/Integrations.test.tsx
+npm run build --workspace @post-bridge/admin
+npm run test:e2e -- formatting.spec.ts
+./scripts/stop.sh --state "$PB_STATE"
+./scripts/status.sh --state "$PB_STATE"
+```
 
 ## 可选账号存储配置
 

@@ -21,6 +21,8 @@ import PlatformAccount from './PlatformAccount';
 import Users from './Users';
 import Integrations from './Integrations';
 import IntegrationDraft from './IntegrationDraft';
+import { FormattingList, FormattingDetail } from './FormattingPages';
+import FormattingNew from './FormattingNew';
 import { Jobs, JobDetail, NewJob } from './Jobs';
 import Logs from './Logs';
 import { ArticleDetail } from './Articles';
@@ -65,6 +67,7 @@ const navigation = [
   { href: '/', label: '总览', icon: LayoutDashboard },
   { href: '/account', label: '平台账号', icon: BookOpenText },
   { href: '/jobs', label: '平台任务', icon: ListFilter },
+  { href: '/formatting', label: '格式化稿', icon: FileText },
   { href: '/logs', label: '处理记录', icon: LogsIcon },
   { href: '/integrations', label: '内容来源', icon: BookOpenText },
 ];
@@ -336,6 +339,15 @@ export default function App() {
     );
   } else if (pathname === '/jobs') content = <Jobs />;
   else if (pathname === '/jobs/new') content = <NewJob />;
+  else if (pathname === '/formatting') content = <FormattingList />;
+  else if (pathname === '/formatting/new') content = <FormattingNew />;
+  else if (/^\/formatting\/[^/]+$/.test(pathname))
+    content = (
+      <FormattingDetail
+        key={pathname}
+        id={decodeURIComponent(pathname.slice('/formatting/'.length))}
+      />
+    );
   else if (/^\/jobs\/[^/]+$/.test(pathname))
     content = <JobDetail key={pathname} id={decodeURIComponent(pathname.slice('/jobs/'.length))} />;
   else if (pathname === '/logs') content = <Logs />;

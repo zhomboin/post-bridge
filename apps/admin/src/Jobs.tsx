@@ -2,6 +2,7 @@ import { contentOperations, platformLabel } from './content-operations';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, Plus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import FormattingPanel from './FormattingPanel';
 import ProcessTimeline from './ProcessTimeline';
 import ContentComparison from './ContentComparison';
 import ManualJobResolution, { manualResolutionConflictHint } from './ManualJobResolution';
@@ -348,6 +349,17 @@ export function NewJob() {
                 </button>
               </div>
             </form>
+            <FormattingPanel
+              source={{
+                account_id: accountID,
+                snapshot: { title, body: markdown, body_format: 'markdown', summary: '', tags: [] },
+              }}
+              disabled={action.pending || !accountID || !title.trim() || !markdown.trim()}
+              onAdopt={(output) => {
+                setTitle(output.title);
+                setMarkdown(output.markdown);
+              }}
+            />
           </div>
         </section>
       </div>

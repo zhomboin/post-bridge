@@ -1,0 +1,87 @@
+{
+  "FormattingSnapshot": {
+    "title": "string",
+    "body": "string",
+    "body_format": "string",
+    "summary": "string",
+    "tags": "string[]"
+  },
+  "FormattingBlock": {
+    "id": "string",
+    "kind": "string",
+    "markdown": "string",
+    "protected": "boolean",
+    "text": "string",
+    "locks": "string[]"
+  },
+  "FormattingIssue": {
+    "code": "string",
+    "field": "string",
+    "message": "string",
+    "blocking": "boolean"
+  },
+  "FormattingCard": {
+    "title": "string",
+    "paragraphs": "string[]",
+    "code_refs": "string[]",
+    "source_block_ids": "string[]"
+  },
+  "FormattingAsset": {
+    "id": "string",
+    "sha256": "string",
+    "width": "integer",
+    "height": "integer",
+    "url": "string"
+  },
+  "FormattingOutput": {
+    "title": "string",
+    "summary": "string",
+    "markdown": "string",
+    "tags": "string[]",
+    "body": "string",
+    "topics": "string[]",
+    "cover_title": "string",
+    "cover_subtitle": "string",
+    "cards": "FormattingCard[]",
+    "omissions": "string[]",
+    "issues": "FormattingIssue[]",
+    "assets": "FormattingAsset[]"
+  },
+  "FormattingSession": {
+    "id": "string",
+    "preparation_id": "string",
+    "account_id": "string",
+    "content_fingerprint": "string",
+    "base_revision": "integer",
+    "revision": "integer",
+    "snapshot": "FormattingSnapshot",
+    "platforms": "string[]",
+    "expires_at": "string"
+  },
+  "FormattingJob": {
+    "id": "string",
+    "title": "string",
+    "session_id": "string",
+    "platform": "string",
+    "operation": "string",
+    "edit_request_id": "string",
+    "edit_fingerprint": "string",
+    "status": "string",
+    "stage": "string",
+    "revision": "integer",
+    "base_revision": "integer",
+    "request_id": "string",
+    "result": "FormattingOutput?",
+    "error_code": "string",
+    "created_at": "string",
+    "updated_at": "string",
+    "prompt_version": "string",
+    "rules_version": "string",
+    "template": "string",
+    "model": "string",
+    "input_tokens": "integer",
+    "output_tokens": "integer",
+    "confirmed": "boolean",
+    "confirmation_fingerprint": "string"
+  }
+}

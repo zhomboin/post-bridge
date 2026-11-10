@@ -55,7 +55,7 @@ test('小红书账号隔离、只读快照、键盘及窄屏', async ({ page, st
     title: '合成笔记 ' + n,
     status: 'published',
     platform_status: '',
-    posted_at: '',
+    posted_at: new Date(Date.UTC(2026, 10, 8, 0, 0, -n)).toISOString(),
     views: null,
     likes: 0,
     comments: null,
@@ -125,7 +125,16 @@ test('小红书账号隔离、只读快照、键盘及窄屏', async ({ page, st
       fullPage: true,
     });
   }
+  const nextPage = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === '/api/accounts/xhs-main/contents' && url.searchParams.get('page') === '2'
+    );
+  });
   await page.getByRole('button', { name: '下一页', exact: true }).click();
+  const secondPage = await (await nextPage).json();
+  expect(secondPage.page).toBe(2);
+  expect(secondPage.items.map((item: { title: string }) => item.title)).toEqual(['合成笔记 20']);
   await expect(page.getByText('合成笔记 20', { exact: true })).toBeVisible();
   await page.getByLabel('搜索笔记').fill('合成笔记 1');
   await page.getByRole('button', { name: '筛选', exact: true }).click();

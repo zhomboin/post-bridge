@@ -9,11 +9,12 @@
   "packageManager": "npm@10.9.4",
   "workspaces": [
     "apps/admin",
-    "apps/worker"
+    "apps/worker",
+    "apps/formatter"
   ],
   "scripts": {
-    "contracts:generate": "node scripts/content-contract.mjs",
-    "contracts:check": "node scripts/content-contract.mjs --check",
+    "contracts:generate": "node scripts/content-contract.mjs && node scripts/formatting-contract.mjs",
+    "contracts:check": "node scripts/content-contract.mjs --check && node scripts/formatting-contract.mjs --check",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

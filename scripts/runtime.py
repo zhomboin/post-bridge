@@ -16,6 +16,11 @@ import time
 import urllib.parse
 import urllib.request
 
+try:
+    import formatting_runtime
+except ModuleNotFoundError:
+    from scripts import formatting_runtime
+
 REPO = Path(__file__).resolve().parents[1]
 TOOLS = Path.home() / ".local/share/post-bridge/tools"
 GO_VERSION = "1.26.10"
@@ -73,7 +78,7 @@ def process_record(state, name):
 def status(state):
     return {
         name: owned(process_record(state, name))
-        for name in ("api", "worker", "database")
+        for name in ("api", "worker", "formatter", "database")
     }
 
 
@@ -135,7 +140,7 @@ def base_env():
 
 
 def child_env(config, worker=False):
-    env = base_env()
+    env = dict(base_env())
     keys = (
         "API_BASE_URL",
         "PLATFORM_ACCOUNTS_FILE",
@@ -168,6 +173,13 @@ def child_env(config, worker=False):
         )
     )
     env.update({k: str(config[k]) for k in keys if k in config})
+    if not worker and formatting_runtime.enabled(config):
+        env.update(
+            {k: str(config[k]) for k in formatting_runtime.API_KEYS if k in config}
+        )
+        for key in ("DEEPSEEK_API", "DEEPSEEK_API_KEY"):
+            if os.environ.get(key):
+                env[key] = os.environ[key]
     return env
 
 
@@ -467,7 +479,7 @@ def spawn(state, name, args, env):
 
 
 def start(state, skip_build=False):
-    config = setup(state)
+    config = formatting_runtime.prepare(state, setup(state), private_write)
     previous = status(state)
     if owned(process_record(state, "login")):
         raise RuntimeError("请先完成登录助手，再启动执行器")
@@ -476,6 +488,17 @@ def start(state, skip_build=False):
         started_database = database_start(state, config)
         if not skip_build:
             build(state)
+        if formatting_runtime.enabled(config):
+            spawn(
+                state,
+                "formatter",
+                [
+                    tool("node", "node-v22.22.1-linux-x64/bin/node"),
+                    str(REPO / "apps/formatter/dist/main.js"),
+                ],
+                formatting_runtime.formatter_env(config, base_env),
+            )
+            formatting_runtime.health(config)
         spawn(state, "api", [str(state / "bin/post-bridge-api")], child_env(config))
         until = time.monotonic() + 30
         while True:
@@ -514,7 +537,7 @@ def start(state, skip_build=False):
             )
         )
     except Exception:
-        for name in ("worker", "api", "database"):
+        for name in ("worker", "api", "formatter", "database"):
             if (name == "database" and started_database) or (
                 name != "database" and not previous[name]
             ):
@@ -534,7 +557,7 @@ def main():
     if args.action == "status":
         print(json.dumps(status(state)))
     elif args.action == "stop":
-        for name in ("login", "worker", "api", "database"):
+        for name in ("login", "worker", "api", "formatter", "database"):
             stop_process(state, name)
         print(json.dumps(status(state)))
     elif args.action == "setup":

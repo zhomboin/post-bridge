@@ -23,7 +23,8 @@ class RuntimeSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as base:
             path = Path(base) / "not-created"
             self.assertEqual(
-                runtime.status(path), {"api": False, "worker": False, "database": False}
+                runtime.status(path),
+                {"api": False, "worker": False, "formatter": False, "database": False},
             )
             self.assertFalse(path.exists())
 
@@ -259,7 +260,7 @@ class RuntimeSafetyTests(unittest.TestCase):
                 runtime.main()
                 self.assertEqual(
                     [call.args[1] for call in stop.call_args_list],
-                    ["login", "worker", "api", "database"],
+                    ["login", "worker", "api", "formatter", "database"],
                 )
 
 

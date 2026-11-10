@@ -22,6 +22,8 @@ const localDate = (value?: string) =>
         .slice(0, 16)
     : '';
 type Grant = {
+  ai_processing_allowed?: boolean;
+  formatting_platforms?: string[];
   source_id: string;
   environment: string;
   scopes: string[];
@@ -56,6 +58,12 @@ export function GrantForm({
     expires_at: localDate(value?.expires_at),
     client_expires_at: '',
     rate_limit_per_minute: value?.rate_limit_per_minute || 60,
+    ...(!invitation
+      ? {
+          ai_processing_allowed: value?.ai_processing_allowed || false,
+          formatting_platforms: value?.formatting_platforms || [],
+        }
+      : {}),
   });
   const [error, setError] = useState('');
   function field(
@@ -167,6 +175,45 @@ export function GrantForm({
               </label>
             ))}
         </fieldset>
+        {!invitation && (
+          <fieldset className="integration-scopes">
+            <legend>AI 内容处理</legend>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={!!form.ai_processing_allowed}
+                onChange={(e) =>
+                  setForm((current) => ({
+                    ...current,
+                    ai_processing_allowed: e.target.checked,
+                    formatting_platforms: e.target.checked ? ['csdn'] : [],
+                  }))
+                }
+              />
+              允许发送原稿至 DeepSeek
+            </label>
+            {form.ai_processing_allowed &&
+              ['csdn', 'xiaohongshu'].map((platform) => (
+                <label key={platform} className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={form.formatting_platforms?.includes(platform) || false}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        formatting_platforms: e.target.checked
+                          ? [...(current.formatting_platforms || []), platform]
+                          : (current.formatting_platforms || []).filter(
+                              (item) => item !== platform,
+                            ),
+                      }))
+                    }
+                  />
+                  {platform === 'csdn' ? 'CSDN 格式化' : '小红书图文生成'}
+                </label>
+              ))}
+          </fieldset>
+        )}
         <label>
           允许操作
           <input value="保存 CSDN 草稿" disabled />

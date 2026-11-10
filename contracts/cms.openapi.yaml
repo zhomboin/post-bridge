@@ -2449,9 +2449,8 @@
           },
           "account_id": {
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
-            "description": "从当前应用获准目标中选择账号标识",
-            "type": "string",
-            "description": "当前执行器固定目标的系统标识。应从targets读取，不代表真实平台用户名。"
+            "description": "当前执行器固定目标的系统标识。应从targets读取，不代表真实平台用户名。",
+            "type": "string"
           },
           "operation": {
             "const": "save_draft",
@@ -2792,6 +2791,19 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 600
+          },
+          "ai_processing_allowed": {
+            "type": "boolean",
+            "default": false
+          },
+          "formatting_platforms": {
+            "type": "array",
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": ["csdn", "xiaohongshu"]
+            }
           }
         },
         "required": ["scopes", "accounts", "operations", "expires_at", "rate_limit_per_minute"],
@@ -2862,6 +2874,19 @@
             "type": "integer",
             "format": "int64",
             "minimum": 1
+          },
+          "ai_processing_allowed": {
+            "type": "boolean",
+            "default": false
+          },
+          "formatting_platforms": {
+            "type": "array",
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": ["csdn", "xiaohongshu"]
+            }
           }
         },
         "required": [
@@ -3298,6 +3323,9 @@
             },
             "minItems": 1,
             "maxItems": 1
+          },
+          "formatting": {
+            "$ref": "#/components/schemas/FormattingAuthorization"
           }
         },
         "required": [
@@ -3416,6 +3444,9 @@
             "type": "string",
             "format": "uri",
             "description": "受管理员会话保护的预览页。签名身份不能代替管理员确认。"
+          },
+          "formatting": {
+            "$ref": "#/components/schemas/FormattingAuthorization"
           }
         },
         "required": [
@@ -4023,6 +4054,32 @@
         },
         "required": ["items", "total", "page", "page_size"],
         "additionalProperties": false
+      },
+      "FormattingAuthorization": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "allow_ai_processing": {
+            "type": "boolean",
+            "const": true
+          },
+          "platforms": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": ["csdn", "xiaohongshu"]
+            }
+          },
+          "auto_generate": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": ["allow_ai_processing", "platforms"],
+        "description": "与应用 AI 处理授权取交集；不增加平台写入权限，缺省不外发原稿。"
       }
     },
     "responses": {

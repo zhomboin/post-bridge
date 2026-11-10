@@ -2,7 +2,7 @@
 
 ## 本轮交付边界
 
-实现多用户独立登录、CSDN 草稿与受控发布、账号文章快照与正文、持久队列、任务详情和日志，以及 CSDN 与小红书账号切换、小红书登录检查及笔记只读快照。每个用户可绑定同平台多个独占账号；小红书内容写入不开放。PostBridge 侧来源接入已实现，真实调用方连接及生产验收仍待。正式运行只需 Go、PostgreSQL 和 Node.js/Playwright，不启动 Agent 或调用大模型。
+实现多用户独立登录、CSDN 草稿与受控发布、账号文章快照与正文、持久队列、任务详情和日志，以及 CSDN 与小红书账号切换、小红书登录检查及笔记只读快照。每个用户可绑定同平台多个独占账号；小红书内容写入不开放。PostBridge 侧来源接入已实现，真实调用方连接及生产验收仍待。基础运行使用 Go、PostgreSQL 和 Node.js/Playwright；可选 DeepSeek 格式化使用独立队列和 formatter 服务，平台执行不启动 Agent。
 
 API 管理数据库，执行器通过受限内部接口领取和上报，不直接访问数据库。管理界面只操作管理接口。本文为三单元共享契约，字段变化需同时更新实现与用例。
 
@@ -215,6 +215,30 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 | POST /api/jobs/{id}/publish | 使用草稿任务标识和确认令牌提交发布任务，返回 202。同一稿件确认重复提交时返回已有任务。 |
 
 发布操作复用原 CSDN 草稿标识。执行器提交前再次核对目标账号、文章和冻结设置。只有读回已发布状态才显示发布成功。平台已受理与结果未知分别记录，均按原任务只读核对。发布至少需要一个标签。转载或翻译需要单篇填写 HTTPS 原文链接并确认授权。自动选封面、定时发布、多平台发布与 GitCode 备份不属于此操作。
+
+## AI 格式化接口
+
+全部属于登录用户管理接口，写入要求既有同源和 CSRF 校验，签名来源应用不能调用。任务及图片按用户隔离；新建与编辑要求可选功能已启用。
+
+| 接口 | 请求与结果 |
+| --- | --- |
+| GET /api/formatting-capabilities | 返回 enabled、目标平台、模板和原稿上限 |
+| POST /api/formatting-sessions | request_id、platforms、allow_ai_processing；本地提供 snapshot 和 CSDN account_id，来源提供 preparation_id、base_revision，服务端读取原稿 |
+| GET /api/formatting-sessions/{id} | 获取授权仍有效的原稿快照 |
+| GET /api/formatting-sessions/{id}/jobs | 当前会话任务摘要 |
+| POST /api/formatting-sessions/{id}/jobs | request_id、platform、template；返回 202，新请求排队，相同请求返回 200，内容不同返回 409 |
+| GET /api/formatting-jobs | page、page_size 分页；可按 preparation_id、platform 筛选，只返回摘要，不返回正文 |
+| GET /api/formatting-jobs/{id} | 状态、阶段、用量、版本及完整结果 |
+| POST /api/formatting-jobs/{id}/cancel | 取消活动任务，不重复请求未知模型结果 |
+| POST /api/formatting-jobs/{id}/adopt | revision；CSDN 明确采用，来源稿新建修订并清除旧确认 |
+| POST /api/formatting-jobs/{id}/csdn-draft | revision；仅本地 CSDN，冻结结果创建幂等 save_draft 任务 |
+| PUT /api/formatting-jobs/{id} | revision、request_id、template、output；只编辑小红书并排队重绘，不调用模型 |
+| POST /api/formatting-jobs/{id}/confirm | revision；确认当前小红书文字、图片摘要和顺序，不创建平台任务 |
+| GET /api/formatting-assets/{id} | 私有 PNG；download=1 下载，授权失效或到期拒绝 |
+
+字段类型由 [格式化契约](../contracts/formatting-model.json)生成。状态为 queued、running、succeeded、needs_review、failed、cancelled、adopted；needs_review 表示容量等阻塞问题，需要调整。修订不匹配返回 409，用量或队列限制返回 429，未启用返回 503，内容校验失败返回 422。响应不包含模型密钥、原始异常或平台会话。详情与采用会重新核对来源授权；列表只有摘要。
+
+原稿、图片、额度和服务配置见 [AI 格式化](ai-formatting.md)。XHS 上传和发布没有对应接口。
 
 ## 账号执行调度
 

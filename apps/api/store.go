@@ -26,6 +26,9 @@ var integrationContentSchemaSQL string
 //go:embed content_schema.sql
 var contentSchemaSQL string
 
+//go:embed formatting_schema.sql
+var formattingSchemaSQL string
+
 type Store struct {
 	pool         *tenantPool
 	now          func() time.Time
@@ -86,6 +89,9 @@ func NewStore(ctx context.Context, pool *pgxpool.Pool, username, display string)
 		return nil, err
 	}
 	if _, err = tx.Exec(ctx, contentSchemaSQL); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, formattingSchemaSQL); err != nil {
 		return nil, err
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO account(id,username,display_name) VALUES('csdn-main',$1,$2) ON CONFLICT(id) DO NOTHING", username, display); err != nil {

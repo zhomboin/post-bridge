@@ -22,6 +22,7 @@ import (
 )
 
 type Config struct {
+	Formatting             FormattingConfig
 	Store                  *Store
 	AdminUsername          string
 	AdminPassword          string
@@ -35,6 +36,8 @@ type Config struct {
 	IntegrationServiceID   string
 }
 type handler struct {
+	formattingConfig FormattingConfig
+	formattingRuns   formattingRuns
 	store            *Store
 	username         string
 	hash             []byte
@@ -86,15 +89,16 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 		return nil, err
 	}
 	h := &handler{
-		store:       cfg.Store,
-		username:    cfg.AdminUsername,
-		hash:        hash,
-		workerToken: cfg.WorkerToken,
-		origin:      strings.TrimSuffix(cfg.Origin, "/"),
-		secure:      origin.Scheme == "https",
-		dist:        cfg.AdminDistDir,
-		mux:         http.NewServeMux(),
-		attempts:    map[string]loginWindow{},
+		formattingConfig: cfg.Formatting,
+		store:            cfg.Store,
+		username:         cfg.AdminUsername,
+		hash:             hash,
+		workerToken:      cfg.WorkerToken,
+		origin:           strings.TrimSuffix(cfg.Origin, "/"),
+		secure:           origin.Scheme == "https",
+		dist:             cfg.AdminDistDir,
+		mux:              http.NewServeMux(),
+		attempts:         map[string]loginWindow{},
 	}
 	h.remoteLoginProxy = remote
 	if err = h.initializeUsers(ctx, cfg.AdminUsername); err != nil {
@@ -134,6 +138,7 @@ func NewHandler(ctx context.Context, cfg Config) (http.Handler, error) {
 		h.disabledIntegrationRoutes()
 	}
 	h.integrationRoutes()
+	h.formattingRoutes()
 	return h, nil
 }
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

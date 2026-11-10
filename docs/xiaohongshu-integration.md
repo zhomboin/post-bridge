@@ -2,9 +2,9 @@
 
 ## 目标与当前状态
 
-完整目标为单个小红书账号的图文笔记立即发布，沿用 Go API、PostgreSQL 队列和 Node.js/Playwright 固定执行器。管理员确认独立平台稿后，由服务器上传素材、填写并提交，记录笔记标识、平台状态和核对时间。运行不依赖 AI Agent 或模型密钥。
+完整目标为单个小红书账号的图文笔记立即发布，沿用 Go API、PostgreSQL 队列和 Node.js/Playwright 固定执行器。管理员确认独立平台稿后，由服务器上传素材、填写并提交，记录笔记标识、平台状态和核对时间。平台执行不依赖 AI Agent 或模型密钥；正文与卡片可通过独立的可选 DeepSeek 格式化生成。
 
-方案依据[需求](requirements.md)、[总体计划](implementation-plan.md)与[平台能力](platform-capabilities.md)。具体步骤见[小红书实施计划](plans/xiaohongshu-integration.md)。已实现多平台账号、登录检查、账号资料、七日统计趋势及笔记正文图片只读工作台；图文稿、素材与写入尚未实现。登录与重启、当前账号的空列表及状态筛选、图文上传前页面已验证。非空笔记、实际素材上传、填稿、远端草稿和发布仍待，不为验证擅自创建内容。
+方案依据[需求](requirements.md)、[总体计划](implementation-plan.md)与[平台能力](platform-capabilities.md)。具体步骤见[小红书实施计划](plans/xiaohongshu-integration.md)。已实现多平台账号、登录检查、账号资料、七日统计趋势及笔记正文图片只读工作台；已提供独立 AI 正文、话题、封面和卡片生成、编辑、确认与下载，见 [AI 格式化](ai-formatting.md)；远端素材上传与写入尚未实现。登录与重启、当前账号的空列表及状态筛选、图文上传前页面已验证。非空笔记、实际素材上传、填稿、远端草稿和发布仍待，不为验证擅自创建内容。
 
 ## 路线与参考实现
 

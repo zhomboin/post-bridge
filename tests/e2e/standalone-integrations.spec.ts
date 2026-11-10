@@ -111,6 +111,8 @@ test('固定授权表单只提交本地身份与权限，桌面和窄屏可完�
     expect(Object.keys(sent.postDataJSON()).sort()).toEqual(
       [
         'source_id',
+        'ai_processing_allowed',
+        'formatting_platforms',
         'scopes',
         'accounts',
         'operations',
@@ -119,9 +121,37 @@ test('固定授权表单只提交本地身份与权限，桌面和窄屏可完�
       ].sort(),
     );
     expect(sent.postDataJSON().operations).toEqual(['save_draft']);
+    expect(sent.postDataJSON().ai_processing_allowed).toBe(false);
+    expect(sent.postDataJSON().formatting_platforms).toEqual([]);
     expect(sent.headers()['x-csrf-token']).toBe('synthetic-csrf');
   }
   expect(errors).toEqual([]);
+});
+
+test('AI 授权须显式开启，关闭后清空格式化范围且不扩大写入权限', async ({ page, previewUrl }) => {
+  await page.setViewportSize({ width: 320, height: 1000 });
+  await page.goto(previewUrl + '/integrations?tab=clients');
+  await page.getByRole('button', { name: '演示内容中心', exact: true }).click();
+  const toggle = page.getByRole('checkbox', { name: '允许发送原稿至 DeepSeek', exact: true });
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await expect(page.getByRole('checkbox', { name: 'CSDN 格式化', exact: true })).toBeChecked();
+  await page.getByRole('checkbox', { name: '小红书图文生成', exact: true }).check();
+  let sent = page.waitForRequest((request) => request.method() === 'PUT');
+  await page.getByRole('button', { name: '保存应用配置', exact: true }).click();
+  const allowed = (await sent).postDataJSON();
+  expect(allowed.ai_processing_allowed).toBe(true);
+  expect(allowed.formatting_platforms).toEqual(['csdn', 'xiaohongshu']);
+  expect(allowed.operations).toEqual(['save_draft']);
+  expect(allowed.accounts).toEqual(['csdn-example']);
+  await expect(page.getByRole('button', { name: '保存应用配置', exact: true })).toBeEnabled();
+  await toggle.uncheck();
+  sent = page.waitForRequest((request) => request.method() === 'PUT');
+  await page.getByRole('button', { name: '保存应用配置', exact: true }).click();
+  const denied = (await sent).postDataJSON();
+  expect(denied.ai_processing_allowed).toBe(false);
+  expect(denied.formatting_platforms).toEqual([]);
+  expect(denied.operations).toEqual(['save_draft']);
 });
 
 test('审批不要求反向服务，邀请弹窗支持键盘关闭与焦点返回', async ({ page, previewUrl }) => {

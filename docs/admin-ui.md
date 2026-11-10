@@ -25,7 +25,7 @@
 
 ## 工作台范围
 
-后台供本站用户检查自己账号的文章分发、处理异常和查看日志，独立于 CMS 登录与部署；管理员另有用户管理权限。界面以中文为主，服务日常发布管理，不引入账号共享、收费或内容生成能力；账号统计仅展示平台返回的数据。本文确定完整页面与验收要求。当前提供独立用户登录、总览、CSDN 草稿任务与详情、对象处理记录、账号检查、弹窗远程验证、CSDN 文章只读列表及统计正文、小红书账号资料、统计趋势及笔记正文图片只读；系统设置由 API 只读提供。页面实现见 [apps/admin/src](../apps/admin/src)，接口见[API 契约](api.md)。PostBridge 侧来源应用管理、平台稿确认和分发聚合已实现；真实调用方连接、三平台发布和完整系统配置编辑继续待实施。
+后台供本站用户检查自己账号的文章分发、处理异常和查看日志，独立于 CMS 登录与部署；管理员另有用户管理权限。界面以中文为主，服务日常发布管理，不引入账号共享或收费；格式化稿提供已授权内容的 AI 整理与预览；账号统计仅展示平台返回的数据。本文确定完整页面与验收要求。当前提供独立用户登录、总览、CSDN 草稿任务与详情、对象处理记录、账号检查、弹窗远程验证、CSDN 文章只读列表及统计正文、小红书账号资料、统计趋势及笔记正文图片只读；系统设置由 API 只读提供。页面实现见 [apps/admin/src](../apps/admin/src)，接口见[API 契约](api.md)。PostBridge 侧来源应用管理、平台稿确认和分发聚合已实现；真实调用方连接、三平台发布和完整系统配置编辑继续待实施。
 
 所有前端页面、组件、交互及界面审阅必须共同遵循 [Frontend Design](../.agents/skills/frontend-design/SKILL.md) 与 [Emil Kowalski 设计工程技能](../.agents/skills/emil-design-eng/SKILL.md)。安装来源见[前端技能说明](frontend-skills.md)。
 
@@ -178,3 +178,22 @@
 | 停用账号的旧链接 | [显示未配置选项并可切回 CSDN](../apps/admin/src/PlatformAccount.tsx) | 避免选项与页面账号不一致 |
 
 合成账号端到端用例已检查 1440、390、320 视口、键盘选择、减少动态效果、搜索与分页。窄屏表格在内部横向滚动，页面不整体溢出；截图由[多平台用例](../tests/e2e/platform-accounts.spec.ts)生成并由 CI 保存，不包含真实账号。
+
+## AI 格式化检视
+
+沿用后台配色、字号和表单，新稿、原稿、候选稿及确认状态分开显示。小红书窄屏按单列展示图片，保留打开原图和逐张下载。页面只呈现稿件、必要状态、错误和确认操作。
+
+| 调整前 | 调整后 | 原因 |
+| --- | --- | --- |
+| 新建草稿只有人工填写 | [共享格式化入口](../apps/admin/src/FormattingPanel.tsx)生成候选稿，明确采用 | 保留原稿与人工选择 |
+| 来源稿的修改需要人工处理 | [来源稿页面](../apps/admin/src/IntegrationDraft.tsx)检查授权和未保存修改，采用后重新确认 | 避免旧修订和旧授权误用 |
+| 缺少独立生成记录 | [格式化稿列表与详情](../apps/admin/src/FormattingPages.tsx)展示标题、状态、原稿与候选稿，支持分页 | 关闭页面后可恢复 |
+| 小红书缺少内容准备 | [图文编辑](../apps/admin/src/XiaohongshuFormatting.tsx)提供正文、封面、排序、拆分、重排和修订确认 | 文案与图片分别核对 |
+| 素材无法检查 | [卡片预览](../apps/admin/src/Formatting.css)在窄屏单列，提供下载 | 便于阅读，避免页面溢出 |
+
+[浏览器用例](../tests/e2e/formatting.spec.ts)使用合成原稿及本项目渲染的图片，检查三种屏宽、键盘确认、Escape、减少动态效果与无隐式写入。合成截图：
+
+| 平台 | 桌面 | 390 | 320 |
+| --- | --- | --- | --- |
+| CSDN | [截图](assets/ai-formatting-csdn-1440.png) | [截图](assets/ai-formatting-csdn-390.png) | [截图](assets/ai-formatting-csdn-320.png) |
+| 小红书 | [截图](assets/ai-formatting-xiaohongshu-1440.png) | [截图](assets/ai-formatting-xiaohongshu-390.png) | [截图](assets/ai-formatting-xiaohongshu-320.png) |

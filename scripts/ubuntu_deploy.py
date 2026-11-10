@@ -19,6 +19,12 @@ import tempfile
 import time
 import urllib.parse
 import urllib.request
+from types import SimpleNamespace
+
+try:
+    import formatting_deploy
+except ModuleNotFoundError:
+    from scripts import formatting_deploy
 
 REPO = Path(__file__).resolve().parents[1]
 INSTALL = Path("/opt/post-bridge")
@@ -66,7 +72,12 @@ def validate_config(value):
         "CSDN_USERNAME",
         "CSDN_DISPLAY_NAME",
     ]
-    optional = {"INTEGRATION_ENVIRONMENT", "INTEGRATION_SERVICE_ID"}
+    optional = {
+        "INTEGRATION_ENVIRONMENT",
+        "INTEGRATION_SERVICE_ID",
+        "AI_FORMATTING_ENABLED",
+        "AI_PROVIDER_CONFIG_FILE",
+    }
     if (
         not isinstance(value, dict)
         or not set(keys) <= set(value)
@@ -82,6 +93,7 @@ def validate_config(value):
         raise ValueError(
             "请填写必要部署字段，只允许额外配置接入环境、服务标识和 CSDN 图片域名"
         )
+    formatting_deploy.enabled(value)
     account_keys = {"API_PLATFORM_ACCOUNTS_FILE", "WORKER_PLATFORM_ACCOUNTS_FILE"}
     if set(value) & account_keys:
         if not account_keys <= set(value):
@@ -101,8 +113,9 @@ def validate_config(value):
         and not re.fullmatch(r"[A-Za-z0-9.-]+(?:[ \t]*,[ \t]*[A-Za-z0-9.-]+)*", hosts)
     ):
         raise ValueError("CSDN 图片域名须使用逗号分隔的域名")
-    selected = set(value) & optional
-    if selected and selected != optional:
+    integration_keys = {"INTEGRATION_ENVIRONMENT", "INTEGRATION_SERVICE_ID"}
+    selected = set(value) & integration_keys
+    if selected and selected != integration_keys:
         raise ValueError("接入环境和服务标识必须同时配置")
     if any(
         not isinstance(value[k], str)
@@ -263,6 +276,7 @@ def environments(config):
     if config.get("API_PLATFORM_ACCOUNTS_FILE"):
         api["PLATFORM_ACCOUNTS_FILE"] = config["API_PLATFORM_ACCOUNTS_FILE"]
         worker["PLATFORM_ACCOUNTS_FILE"] = config["WORKER_PLATFORM_ACCOUNTS_FILE"]
+    api.update(formatting_deploy.api_environment(SimpleNamespace(**globals()), config))
     return api, worker
 
 
@@ -274,7 +288,7 @@ def environment_text(values):
 
 
 def render_unit(kind):
-    if kind not in ["api", "worker"]:
+    if kind not in ["api", "worker", "formatter"]:
         raise ValueError("未知系统服务")
     text = (REPO / "deploy/systemd" / ("post-bridge-" + kind + ".service")).read_text(
         encoding="utf-8"
@@ -552,19 +566,22 @@ def assert_managed():
     if (
         marker.is_symlink()
         or not marker.is_file()
-        or json.loads(marker.read_text())
-        != {"owner": "post-bridge-ubuntu", "units": UNITS}
+        or not formatting_deploy.valid_manifest(json.loads(marker.read_text()), UNITS)
     ):
         raise ValueError("未找到本部署的服务标记，未操作同名服务")
 
 
 def check():
     assert_managed()
-    for unit in UNITS:
+    for unit in formatting_deploy.manifest_units(SimpleNamespace(**globals())):
         if systemctl("is-active", unit) != "active":
             raise RuntimeError("系统服务未运行")
     health(timeout=2)
     login_control_health()
+    if formatting_deploy.UNIT in formatting_deploy.manifest_units(
+        SimpleNamespace(**globals())
+    ):
+        formatting_deploy.health(SimpleNamespace(**globals()))
     print("API、执行器与回环登录控制服务均已运行；平台账号状态请在后台检查。")
 
 
@@ -596,17 +613,16 @@ def install(config_path, upgrade=False):
     if upgrade and not (INSTALL / "current").is_symlink():
         raise ValueError("未找到已有安装，请使用 install")
     manifest = INSTALL / "installation.json"
-    unit_paths = [SYSTEMD / unit for unit in UNITS]
+    unit_paths = [SYSTEMD / unit for unit in [*UNITS, formatting_deploy.UNIT]]
     if any(path.is_symlink() for path in unit_paths):
         raise ValueError("服务单元不可是其他位置的符号链接，未覆盖")
     if (
         (INSTALL / "current").exists() or any(path.exists() for path in unit_paths)
     ) and not manifest.is_file():
         raise ValueError("发现未登记的已有服务或代码，未接管或停止")
-    if manifest.exists() and json.loads(manifest.read_text()) != {
-        "owner": "post-bridge-ubuntu",
-        "units": UNITS,
-    }:
+    if manifest.exists() and not formatting_deploy.valid_manifest(
+        json.loads(manifest.read_text()), UNITS
+    ):
         raise ValueError("部署标记与独立服务不匹配")
     if not upgrade and (INSTALL / "current").is_symlink():
         raise ValueError("已有部署需要使用 upgrade，不重复安装")
@@ -614,8 +630,16 @@ def install(config_path, upgrade=False):
     directory(INSTALL / "releases", 0o755)
     directory(CONFIG)
     directory(STATE, 0o711)
+    if (
+        (SYSTEMD / formatting_deploy.UNIT).exists()
+        and manifest.is_file()
+        and formatting_deploy.UNIT
+        not in formatting_deploy.manifest_units(SimpleNamespace(**globals()))
+    ):
+        raise ValueError("发现未登记的同名格式化服务，未接管")
     users = {kind: service_user(kind) for kind in ["api", "worker"]}
     ensure_secrets()
+    formatting_deploy.prepare(SimpleNamespace(**globals()), config, users["api"])
     previous_api = CONFIG / "api.env"
     previously_enabled = (
         previous_api.is_file()
@@ -658,6 +682,7 @@ def install(config_path, upgrade=False):
             "--no-install-recommends",
             "ca-certificates",
             "fonts-noto-cjk",
+            "fonts-dejavu-core",
             "bubblewrap",
             "apparmor-utils",
             "postgresql-client-16",
@@ -756,7 +781,9 @@ def restore_files(snapshot):
 
 
 def restore_deployment(snapshot, previous, states):
-    installed = [unit for unit in UNITS if (SYSTEMD / unit).is_file()]
+    installed = [
+        unit for unit in [*UNITS, formatting_deploy.UNIT] if (SYSTEMD / unit).is_file()
+    ]
     if installed:
         systemctl("stop", *reversed(installed))
         # 清除本次 enable 生成的链接，再恢复原先的持久或临时启用方式。
@@ -775,6 +802,9 @@ def restore_deployment(snapshot, previous, states):
             systemctl("enable", "--runtime", unit)
         else:
             systemctl("disable", unit)
+    if states.get(formatting_deploy.UNIT, {}).get("active"):
+        systemctl("start", formatting_deploy.UNIT)
+        formatting_deploy.health(SimpleNamespace(**globals()))
     if states.get(UNITS[0], {}).get("active"):
         systemctl("start", UNITS[0])
         health()
@@ -787,6 +817,16 @@ def restore_deployment(snapshot, previous, states):
 
 
 def activate_deployment(config, release):
+    units = [
+        *UNITS,
+        *([formatting_deploy.UNIT] if formatting_deploy.enabled(config) else []),
+    ]
+    old_units = (
+        formatting_deploy.manifest_units(SimpleNamespace(**globals()))
+        if (INSTALL / "installation.json").is_file()
+        else list(UNITS)
+    )
+    all_units = list(dict.fromkeys([*old_units, *units]))
     previous = (
         (INSTALL / "current").resolve() if (INSTALL / "current").is_symlink() else None
     )
@@ -796,24 +836,40 @@ def activate_deployment(config, release):
         INSTALL / "installation.json",
         *[
             CONFIG / name
-            for name in ["install.json", "api.env", "worker.env", "nginx.conf"]
+            for name in [
+                "install.json",
+                "api.env",
+                "worker.env",
+                "formatter.env",
+                "nginx.conf",
+            ]
         ],
-        *[SYSTEMD / unit for unit in UNITS],
+        *[SYSTEMD / unit for unit in all_units],
+        STATE / "api/deepseek-key",
+        STATE / "api/deepseek-config.json",
     ]
     # 含凭据的旧配置只保存在本进程私有内存中，不落入日志或公开备份。
     snapshot = snapshot_files(paths)
-    states = {unit: service_state(unit) for unit in UNITS} if previous else {}
+    states = {unit: service_state(unit) for unit in old_units} if previous else {}
     if states.get(UNITS[1], {}).get("active") and not states.get(UNITS[0], {}).get(
         "active"
     ):
         raise RuntimeError("服务依赖状态正在变化，未开始代码切换")
     try:
         if previous:
-            systemctl("stop", *reversed(UNITS))
+            systemctl("stop", *reversed(old_units))
         write_private(
             CONFIG / "install.json",
             json.dumps(config, ensure_ascii=False, indent=2) + "\n",
         )
+        formatting_deploy.copy_provider(SimpleNamespace(**globals()), config)
+        if formatting_deploy.enabled(config):
+            write_private(
+                CONFIG / "formatter.env",
+                environment_text(
+                    formatting_deploy.environment(SimpleNamespace(**globals()))
+                ),
+            )
         for kind, values in zip(["api", "worker"], environments(config)):
             write_private(CONFIG / (kind + ".env"), environment_text(values))
         nginx = CONFIG / "nginx.conf"
@@ -828,15 +884,29 @@ def activate_deployment(config, release):
             )
         write_private(
             INSTALL / "installation.json",
-            json.dumps({"owner": "post-bridge-ubuntu", "units": UNITS}),
+            json.dumps({"owner": "post-bridge-ubuntu", "units": units}),
         )
         activate_release(INSTALL, release)
-        for kind, unit in zip(["api", "worker"], UNITS):
+        for kind, unit in zip(
+            [
+                "api",
+                "worker",
+                *(["formatter"] if formatting_deploy.enabled(config) else []),
+            ],
+            units,
+        ):
             path = SYSTEMD / unit
             write_private(path, render_unit(kind))
             path.chmod(0o644)
+        for unit in old_units:
+            if unit not in units:
+                systemctl("disable", unit)
+                (SYSTEMD / unit).unlink(missing_ok=True)
         systemctl("daemon-reload")
-        systemctl("enable", *UNITS)
+        systemctl("enable", *units)
+        if formatting_deploy.enabled(config):
+            systemctl("start", formatting_deploy.UNIT)
+            formatting_deploy.health(SimpleNamespace(**globals()))
         systemctl("start", UNITS[0])
         health()
         systemctl("start", UNITS[1])
@@ -906,8 +976,11 @@ def dispatch(args):
         install(args.config, args.action == "upgrade")
     elif args.action == "stop":
         assert_managed()
-        systemctl("stop", *reversed(UNITS))
-        print("本项目 API 与执行器已停止，数据库、配置及浏览器状态均保留。")
+        systemctl(
+            "stop",
+            *reversed(formatting_deploy.manifest_units(SimpleNamespace(**globals()))),
+        )
+        print("本项目 API、可选格式化与执行器已停止，数据库、配置及浏览器状态均保留。")
     else:
         check()
 
