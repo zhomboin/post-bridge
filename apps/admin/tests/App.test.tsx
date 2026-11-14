@@ -349,7 +349,9 @@ describe('管理员会话与任务闭环', () => {
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(container.querySelector('script')).toBeNull();
     expect(container.querySelector('img')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '保存到CSDN草稿' }));
+    const submit = screen.getByRole<HTMLButtonElement>('button', { name: '保存到CSDN草稿' });
+    await waitFor(() => expect(submit.disabled).toBe(false));
+    fireEvent.click(submit);
     await screen.findByText(/本轮仅支持文字 Markdown/);
     expect(appFixture.calls.filter((c) => c.url === '/api/jobs')).toHaveLength(0);
   });
