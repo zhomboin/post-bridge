@@ -195,6 +195,7 @@
 | 公众号只提供保真排版入口 | [处理模式与单篇授权](../apps/admin/src/FormattingPanel.tsx)按已启用能力提供可选 AI 辅助；修改原稿后需重新勾选 | 明确原稿的处理范围 |
 | 原稿和候选稿需要人工逐段比对 | [正文差异](../apps/admin/src/FormattingDifferences.tsx)按需展开并标出变化，[建议](../apps/admin/src/WechatSuggestionsView.tsx)按原稿段落定位 | 在核对区找到正文变化及建议 |
 | 读取失败后需要离开页面 | [任务详情](../apps/admin/src/FormattingPages.tsx)可就地重试；[编辑器](../apps/admin/src/WechatFormatting.tsx)进入编辑时聚焦候选稿，取消后返回编辑按钮 | 支持键盘连续操作 |
+| 重新排版失败后仍可预览和复制上一版正文 | [公众号编辑器](../apps/admin/src/WechatFormatting.tsx)等待当前修订排版成功或完成待核对结果，失败时可继续编辑 | 避免把上一版内容当作当前修订 |
 
 [浏览器用例](../tests/e2e/formatting.spec.ts)使用合成原稿及本项目渲染的图片，检查三种屏宽、键盘确认、Escape、减少动态效果与无隐式写入。合成截图：
 

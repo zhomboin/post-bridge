@@ -11,6 +11,19 @@ type Node = {
   children?: Node[];
   position?: { start: { offset?: number }; end: { offset?: number } };
 };
+
+export function markdownReferenceDefinitions(tree: Node): Map<string, string> {
+  const definitions = new Map<string, string>();
+  const collect = (node: Node) => {
+    if (node.type === 'definition' && node.identifier && node.url !== undefined) {
+      // CommonMark 使用文档中首个定义；解析器已规范化引用标识。
+      if (!definitions.has(node.identifier)) definitions.set(node.identifier, node.url);
+    }
+    for (const child of node.children ?? []) collect(child);
+  };
+  collect(tree);
+  return definitions;
+}
 export type ContentBlock = import('./formatting-contract.js').FormattingBlock;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 function textOf(node: Node, allowHtml = false): string {

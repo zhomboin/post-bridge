@@ -18,7 +18,7 @@ type wechatUpload struct {
 }
 
 func remapWechatUploads(oldImages, newImages []WechatImage, uploads []WechatAttachment) ([]WechatAttachment, error) {
-	newIDs := map[string]bool{}
+	newByID := map[string]WechatImage{}
 	oldByID := map[string]WechatImage{}
 	oldCount, newCount := map[string]int{}, map[string]int{}
 	newBySource := map[string]WechatImage{}
@@ -27,16 +27,21 @@ func remapWechatUploads(oldImages, newImages []WechatImage, uploads []WechatAtta
 		oldCount[image.Source]++
 	}
 	for _, image := range newImages {
-		newIDs[image.ID] = true
+		newByID[image.ID] = image
 		newCount[image.Source]++
 		newBySource[image.Source] = image
 	}
 	result := append([]WechatAttachment(nil), uploads...)
 	assigned := map[string]bool{}
 	for i := range result {
-		if !newIDs[result[i].ImageID] {
-			old, exists := oldByID[result[i].ImageID]
-			if !exists || old.Source == "" || oldCount[old.Source] != 1 || newCount[old.Source] != 1 {
+		old, exists := oldByID[result[i].ImageID]
+		if !exists {
+			return nil, formattingError("wechat_image_changed")
+		}
+		current, exists := newByID[old.ID]
+		// 引用式图片可以保留原块标识，同时更改定义中的地址。
+		if !exists || current.Source != old.Source {
+			if old.Source == "" || oldCount[old.Source] != 1 || newCount[old.Source] != 1 {
 				return nil, formattingError("wechat_image_changed")
 			}
 			result[i].ImageID = newBySource[old.Source].ID

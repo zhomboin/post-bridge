@@ -1,7 +1,7 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
-import { analyzeWithProtectedHtml } from './markdown.js';
+import { analyzeWithProtectedHtml, markdownReferenceDefinitions } from './markdown.js';
 import {
   convertWechatHtml,
   escapeWechat as escape,
@@ -28,8 +28,6 @@ export type WechatBlock = { source_block_id: string; html: string };
 export type WechatImage = { id: string; source_block_id: string; source: string; alt: string };
 export type WechatConversion = { blocks: WechatBlock[]; issues: Issue[]; images: WechatImage[] };
 
-const identifier = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
-
 // 未批准的图片只显示占位符，不产生外部资源请求。
 export function convertWechat(markdown: string): WechatConversion {
   const source = analyzeWithProtectedHtml(markdown);
@@ -37,11 +35,7 @@ export function convertWechat(markdown: string): WechatConversion {
     extensions: [gfm()],
     mdastExtensions: [gfmFromMarkdown()],
   }) as Node;
-  const definitions = new Map<string, string>();
-  for (const node of tree.children ?? []) {
-    if (node.type === 'definition' && node.identifier && node.url)
-      definitions.set(identifier(node.identifier), node.url);
-  }
+  const definitions = markdownReferenceDefinitions(tree);
   const issues: Issue[] = [];
   const result: WechatBlock[] = [];
   const images: WechatImage[] = [];
@@ -55,7 +49,7 @@ export function convertWechat(markdown: string): WechatConversion {
       if (item.type === 'image') append({ source: item.url ?? '', alt: item.alt ?? '' });
       if (item.type === 'imageReference')
         append({
-          source: definitions.get(identifier(item.identifier ?? '')) ?? '',
+          source: definitions.get(item.identifier ?? '') ?? '',
           alt: item.alt ?? '',
         });
       if (item.type === 'html')
@@ -121,7 +115,7 @@ export function convertWechat(markdown: string): WechatConversion {
         case 'link':
           return link(item.url, children());
         case 'linkReference':
-          return link(definitions.get(identifier(item.identifier ?? '')), children());
+          return link(definitions.get(item.identifier ?? ''), children());
         case 'image':
         case 'imageReference':
           report('image_unavailable');

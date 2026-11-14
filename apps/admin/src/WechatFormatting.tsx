@@ -44,6 +44,8 @@ export default function WechatFormatting({
   }, [editing]);
   if (!result) return null;
   const running = ['queued', 'running'].includes(job.status);
+  const canPreview = ['succeeded', 'needs_review', 'adopted'].includes(job.status);
+  const canEdit = canPreview || (job.status === 'failed' && job.operation === 'wechat_edit');
   const { html, text } = safeWechatPreview(result.blocks, result.attachments ?? []);
   const document = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><base target="_blank"><style>body{font:16px/1.7 sans-serif;overflow-wrap:anywhere;margin:16px}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #bbb;padding:4px}img{max-width:100%;height:auto}</style></head><body>${html}</body></html>`;
   async function copy() {
@@ -136,15 +138,15 @@ export default function WechatFormatting({
             }}
           />
         </label>
-      ) : (
+      ) : canPreview ? (
         <iframe
           title="公众号本地稿预览"
           sandbox=""
           srcDoc={document}
           className="formatting-wechat-preview"
         />
-      )}
-      {!running &&
+      ) : null}
+      {canPreview &&
         !editing &&
         originalMarkdown !== undefined &&
         result.candidate_markdown != null && (
@@ -154,17 +156,18 @@ export default function WechatFormatting({
           />
         )}
       {!running && result.suggestions && <WechatSuggestionsView suggestions={result.suggestions} />}
-      {result.issues.map((issue, index) => (
-        <div
-          key={index}
-          className={'notice ' + (issue.blocking ? 'error' : '')}
-          role={issue.blocking ? 'alert' : undefined}
-        >
-          {issue.message}（原文第{' '}
-          {result.blocks.findIndex((block) => block.source_block_id === issue.field) + 1} 段）
-        </div>
-      ))}
-      {!!result.images?.length && (
+      {canPreview &&
+        result.issues.map((issue, index) => (
+          <div
+            key={index}
+            className={'notice ' + (issue.blocking ? 'error' : '')}
+            role={issue.blocking ? 'alert' : undefined}
+          >
+            {issue.message}（原文第{' '}
+            {result.blocks.findIndex((block) => block.source_block_id === issue.field) + 1} 段）
+          </div>
+        ))}
+      {(canPreview || editing) && !!result.images?.length && (
         <div className="section-gap">
           <strong>图片素材</strong>
           {result.images.map((image, index) => (
@@ -245,7 +248,7 @@ export default function WechatFormatting({
           <button
             ref={editButton}
             type="button"
-            disabled={running || (!result.candidate_markdown && !originalMarkdown)}
+            disabled={!canEdit || (!result.candidate_markdown && !originalMarkdown)}
             onClick={() => {
               action.setError('');
               setCopyError('');
@@ -255,7 +258,7 @@ export default function WechatFormatting({
             编辑候选稿
           </button>
         )}
-        <button type="button" disabled={running || editing} onClick={() => void copy()}>
+        <button type="button" disabled={!canPreview || editing} onClick={() => void copy()}>
           复制排版内容
         </button>
         {!editing && job.status === 'succeeded' && (

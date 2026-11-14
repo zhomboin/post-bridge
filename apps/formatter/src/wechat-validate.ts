@@ -2,7 +2,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
 import { parseFragment, type DefaultTreeAdapterTypes } from 'parse5';
-import { analyzeWithProtectedHtml } from './markdown.js';
+import { analyzeWithProtectedHtml, markdownReferenceDefinitions } from './markdown.js';
 import type { WechatBlock } from './wechat.js';
 import { safeWechatLink } from './wechat-html.js';
 import { inspectWechatHtml } from './wechat-validate-html.js';
@@ -18,7 +18,6 @@ type SourceNode = {
 type HtmlNode = DefaultTreeAdapterTypes.ChildNode;
 type Review = { block_id: string; code: string; blocking: boolean };
 const normalized = (value: string) => value.replace(/\s+/gu, '');
-const identifier = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
 
 // 独立提取原文和输出中的文字、代码及链接，不调用转换器重新生成结果。
 export function validateWechat(markdown: string, blocks: WechatBlock[]): Review[] {
@@ -29,10 +28,7 @@ export function validateWechat(markdown: string, blocks: WechatBlock[]): Review[
   }) as SourceNode;
   if (!Array.isArray(blocks) || blocks.length !== source.length || blocks.length > 2000)
     throw Error('content_changed');
-  const definitions = new Map<string, string>();
-  for (const node of tree.children ?? [])
-    if (node.type === 'definition' && node.identifier && node.url)
-      definitions.set(identifier(node.identifier), node.url);
+  const definitions = markdownReferenceDefinitions(tree);
   const issues: Review[] = [];
   source.forEach((block, index) => {
     const output = blocks[index];
@@ -52,7 +48,7 @@ export function validateWechat(markdown: string, blocks: WechatBlock[]): Review[
         item.type === 'link'
           ? item.url
           : item.type === 'linkReference'
-            ? definitions.get(identifier(item.identifier ?? ''))
+            ? definitions.get(item.identifier ?? '')
             : undefined;
       if (safeWechatLink(url)) links.push(url!);
       for (const child of item.children ?? []) collect(child);

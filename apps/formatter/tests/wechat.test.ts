@@ -47,6 +47,21 @@ describe('公众号本地转换', () => {
     expect(html.blocks[0].html).not.toContain('<script>');
     expect(html.issues[0].code).toBe('html_review');
   });
+  it('链接与图片引用使用文档中的首个定义，包括引用块内的定义', () => {
+    const markdown =
+      '[说明][REF] ![示例][ref]\n\n> [ref]: https://example.test/first\n\n[ref]: https://example.test/second';
+    const result = convertWechat(markdown);
+    expect(result.blocks[0].html).toContain('href="https://example.test/first"');
+    expect(result.images[0]?.source).toBe('https://example.test/first');
+    expect(validateWechat(markdown, result.blocks)).toEqual([]);
+    const modified = result.blocks.map((block) => ({
+      ...block,
+      html: block.html.replace('https://example.test/first', 'https://example.test/second'),
+    }));
+    expect(validateWechat(markdown, modified)).toContainEqual(
+      expect.objectContaining({ code: 'content_review', blocking: true }),
+    );
+  });
   it('转换安全 HTML 并保留不可转换的部分，同时继续处理其他段落', () => {
     const result = convertWechat(
       '<div><h2>标题</h2><p>正文 <strong>重点</strong></p><a href="https://example.test/">链接</a><img src="https://example.test/a.png" alt="示例"></div>\n\n普通 Markdown 段落。\n\n<div onclick="alert(1)">其他内容</div>',

@@ -215,6 +215,31 @@ it('编辑公众号候选时不能确认尚未保存的内容', async () => {
   fireEvent.click(screen.getByRole('button', { name: '取消编辑' }));
   expect(screen.getByRole('button', { name: '确认本地稿' })).toBeTruthy();
 });
+it('重新排版失败后隐藏旧预览并允许修订失败的候选稿', () => {
+  const wechat: FormattingJob = {
+    ...job,
+    platform: 'wechat',
+    revision: 2,
+    operation: 'wechat_edit',
+    status: 'failed',
+    error_code: 'wechat_image_changed',
+    result: {
+      ...output,
+      wechat: {
+        blocks: [{ source_block_id: 'b0', html: '<p>旧版预览</p>' }],
+        issues: [],
+        candidate_markdown: '待重排的正文',
+      },
+    },
+  };
+  workspace(<WechatFormatting job={wechat} onChange={vi.fn()} />, () => wechat);
+  expect(screen.queryByTitle('公众号本地稿预览')).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '复制排版内容' }).disabled).toBe(
+    true,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '编辑候选稿' }));
+  expect(screen.getByLabelText<HTMLTextAreaElement>('候选稿 Markdown').value).toBe('待重排的正文');
+});
 it('公众号原稿信息迟到时不覆盖正在编辑的候选稿', () => {
   const wechat: FormattingJob = {
     ...job,

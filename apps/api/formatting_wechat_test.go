@@ -52,6 +52,14 @@ func TestFormattingWechatImageRemap(t *testing.T) {
 	if err != nil || uploads[0].ImageID != "new" {
 		t.Fatal("唯一图片未重新映射", err)
 	}
+	changedDefinition := []WechatImage{{ID: "old", Source: "https://example.test/b"}}
+	if _, err = remapWechatUploads(old, changedDefinition, []WechatAttachment{{ImageID: "old"}}); formattingErrorCode(err) != "wechat_image_changed" {
+		t.Fatal("引用式图片沿用了已更改地址的素材", err)
+	}
+	uploads, err = remapWechatUploads(old, append(changedDefinition, next...), []WechatAttachment{{ImageID: "old"}})
+	if err != nil || uploads[0].ImageID != "new" {
+		t.Fatal("唯一旧图片还在时应按图片来源映射", err)
+	}
 	old = append(old, WechatImage{ID: "another", Source: "https://example.test/a"})
 	if _, err = remapWechatUploads(old, next, []WechatAttachment{{ImageID: "old"}}); err == nil {
 		t.Fatal("重复图片来源不应猜测映射")
