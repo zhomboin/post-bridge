@@ -55,11 +55,13 @@ func validateXiaohongshu(out FormattingOutput, blocks []FormattingBlock) error {
 			}
 			refs[id] = true
 		}
+		codeRefs := map[string]bool{}
 		for _, id := range card.CodeRefs {
 			block, exists := known[id]
-			if !exists || block.Kind != "code" || !refs[id] {
+			if !exists || block.Kind != "code" || !refs[id] || codeRefs[id] {
 				return ErrFormattingContent
 			}
+			codeRefs[id] = true
 		}
 		for _, paragraph := range card.Paragraphs {
 			if !validFormattingText(paragraph, 1500) || strings.TrimSpace(paragraph) == "" {
@@ -100,8 +102,14 @@ func xiaohongshuOmissions(out FormattingOutput, blocks []FormattingBlock) []stri
 	selected := map[string]bool{}
 	code := map[string]bool{}
 	omissions := []string{}
+	generated := map[string]bool{}
+	for _, block := range blocks {
+		for _, suffix := range []string{"：未纳入图片卡片，请核对原稿。", "：未展示完整代码，请核对原稿。", "：受保护内容未原样绘制，请核对原稿。", "：链接目标未在关联卡片中展示，请核对原稿。"} {
+			generated[block.ID+suffix] = true
+		}
+	}
 	for _, value := range out.Omissions {
-		if !strings.Contains(value, "：未纳入图片卡片，请核对原稿。") && !strings.Contains(value, "：未展示完整代码，请核对原稿。") && !strings.Contains(value, "：受保护内容未原样绘制，请核对原稿。") {
+		if !generated[value] {
 			omissions = append(omissions, value)
 		}
 	}
@@ -121,8 +129,41 @@ func xiaohongshuOmissions(out FormattingOutput, blocks []FormattingBlock) []stri
 		} else if block.Protected && block.Kind != "code" {
 			omissions = append(omissions, block.ID+"：受保护内容未原样绘制，请核对原稿。")
 		}
+		if selected[block.ID] && block.Kind != "code" && missingCardLink(block, out.Cards) {
+			omissions = append(omissions, block.ID+"：链接目标未在关联卡片中展示，请核对原稿。")
+		}
 	}
 	return omissions
+}
+
+func missingCardLink(block FormattingBlock, cards []FormattingCard) bool {
+	for _, lock := range block.Locks {
+		if strings.HasPrefix(lock, "reference:") {
+			return true
+		}
+		if !strings.HasPrefix(lock, "url:") {
+			continue
+		}
+		url := strings.TrimPrefix(lock, "url:")
+		if url == "" {
+			return true
+		}
+		found := false
+		for _, card := range cards {
+			if integrationHas(card.SourceBlockIds, block.ID) {
+				for _, text := range append([]string{card.Title}, card.Paragraphs...) {
+					if strings.TrimSpace(text) == url {
+						found = true
+						break
+					}
+				}
+			}
+		}
+		if !found {
+			return true
+		}
+	}
+	return false
 }
 func (h *handler) renderXiaohongshu(ctx context.Context, c formattingClaim, s FormattingSession, out FormattingOutput) (FormattingOutput, error) {
 	if _, err := h.formattingCheckpoint(ctx, c, "rendering"); err != nil {
@@ -145,10 +186,11 @@ func (h *handler) renderXiaohongshu(ctx context.Context, c formattingClaim, s Fo
 	out.Assets = []FormattingAsset{}
 	err = h.store.locked(ctx, func(tx pgx.Tx, now time.Time) error {
 		var lease, status string
-		if err := tx.QueryRow(ctx, "SELECT lease_token,record->>'status' FROM formatting_jobs WHERE id=$1 FOR UPDATE", c.Job.ID).Scan(&lease, &status); err != nil {
+		var until time.Time
+		if err := tx.QueryRow(ctx, "SELECT lease_token,record->>'status',lease_expires_at FROM formatting_jobs WHERE id=$1 FOR UPDATE", c.Job.ID).Scan(&lease, &status, &until); err != nil {
 			return err
 		}
-		if lease != c.Lease || status != "running" {
+		if lease != c.Lease || !until.After(now) || status != "running" {
 			return ErrConflict
 		}
 		if _, err := h.readFormattingSession(ctx, tx, s.ID, false); err != nil {

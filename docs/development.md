@@ -348,6 +348,33 @@ unset TEST_DATABASE_URL
 
 test.sh 使用私有配置中的数据库连接，不能指向生产环境；它不包含 E2E 和 Python 启动／部署安全用例。结束开发后执行停止命令，再确认全部项目进程已停止。
 
+## 公众号本地转换
+
+以下操作在 WSL Bash 执行，先按本页完成初始化并备份该状态目录。此功能使用本地格式化服务，不需要模型密钥。
+
+1. 停止当前状态目录的服务，编辑仓库外私有配置：
+
+```bash
+./scripts/stop.sh --state "$PB_STATE"
+nano "$PB_STATE/runtime.json"
+```
+
+2. 在已有 JSON 对象中添加布尔字段 `CONTENT_FORMATTING_ENABLED`，值为 `true`；其余配置保持现有值。保存后启动并检查：
+
+```bash
+./scripts/dev.sh --state "$PB_STATE"
+./scripts/status.sh --state "$PB_STATE"
+```
+
+3. 在后台“格式化稿”选择微信公众号，输入合成原稿并生成本地稿；核对预览和提示后可复制或确认。状态检查应包含 formatter。验证结束按需停止并检查：
+
+```bash
+./scripts/stop.sh --state "$PB_STATE"
+./scripts/status.sh --state "$PB_STATE"
+```
+
+关闭本地转换时，将该字段改为 `false` 并重新启动；若同时启用 AI 格式化，formatter 仍由 AI 功能使用。操作前按本页备份配置和数据库。
+
 ## DeepSeek 格式化
 
 先完成本页初始化，使用仓库外专属状态目录。以下步骤在 WSL Bash 执行，不使用生产数据库。启用会将明确授权的原稿发送到 DeepSeek；默认模型 deepseek-flash，生成与卡片操作见 [AI 格式化](ai-formatting.md)。
@@ -375,7 +402,7 @@ $taskDeepSeekCredential | wsl.exe -d Ubuntu -- python3 '〈WSL源码目录〉/sc
 $taskDeepSeekCredential = $null
 ```
 
-3. 登录后台，在“格式化稿”提交合成稿件，核对 CSDN 结果或小红书正文与卡片。保存 CSDN 草稿仍须明确确认；小红书只下载素材。状态检查应包含 formatter。排查时只检查状态目录中的服务日志，不输出私有模型文件。
+3. 登录后台，在“格式化稿”提交合成稿件，核对 CSDN 结果、小红书正文与卡片，或公众号的 AI 辅助建议及正文差异。公众号建议需勾选本篇授权；其保真排版仍可独立使用。保存 CSDN 草稿仍须明确确认；小红书只下载素材。状态检查应包含 formatter。排查时只检查状态目录中的服务日志，不输出私有模型文件。
 
 4. 升级前按本页备份数据库、runtime.json、deepseek-config.json、deepseek-key 和渲染 token。停止后更新源码，再按 dev.sh 构建启动。关闭功能时，先停止服务，在私有 runtime.json 将 AI_FORMATTING_ENABLED 改为 false，再启动。现有数据库保留稿件，停止命令会回收本次服务及 Chromium。
 
@@ -390,6 +417,14 @@ npm run build --workspace @post-bridge/admin
 npm run test:e2e -- formatting.spec.ts
 ./scripts/stop.sh --state "$PB_STATE"
 ./scripts/status.sh --state "$PB_STATE"
+```
+
+按[功能回归](#功能回归)输入并导出专属测试数据库连接，再执行以下命令，可以只复现公众号转换和独立校验请求中的 API 异常退出。用例自行构建、启动和强制退出专用 API，重启后模拟执行租约到期。结束时回收临时 API 和排版服务。
+
+```bash
+npm run build --workspace @post-bridge/formatter
+python3 scripts/formatting_test.py go -C apps/api test -race ./... -run '^TestFormattingWechatRecoveryAcrossProcesses$' -count=1
+unset TEST_DATABASE_URL
 ```
 
 ## 可选账号存储配置

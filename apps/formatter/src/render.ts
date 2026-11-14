@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { chromium, type Browser, type Page } from 'playwright';
 import { fromMarkdown } from 'mdast-util-from-markdown';
-import { analyze } from './markdown.js';
+import { analyzeWithProtectedHtml } from './markdown.js';
 import { cardDocument, cardAtoms, escapeHTML, type CardTemplate } from './card-template.js';
 import type { FormattingCard } from './formatting-contract.js';
 type Input = {
@@ -68,7 +68,7 @@ async function render(input: Input, signal: AbortSignal): Promise<Image[]> {
   )
     throw Error('unsupported_content');
   const codeBlocks = new Map(
-    analyze(input.markdown)
+    analyzeWithProtectedHtml(input.markdown)
       .filter((block) => block.kind === 'code')
       .map((block) => {
         const tree = fromMarkdown(block.markdown);

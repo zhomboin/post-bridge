@@ -17,7 +17,7 @@
 | 操作 | 命令 | 行为 |
 | --- | --- | --- |
 | 首次配置 | sudo ./scripts/ubuntu-deploy.sh configure | 生成 root 所有、0600 的私有配置，已有文件不覆盖 |
-| 首次安装 | sudo ./scripts/ubuntu-deploy.sh install | 构建独立代码快照并启动 API、worker，启用 AI 时增加 formatter 单元 |
+| 首次安装 | sudo ./scripts/ubuntu-deploy.sh install | 构建独立代码快照并启动 API、worker，启用格式化时增加 formatter 单元 |
 | 检查 | sudo ./scripts/ubuntu-deploy.sh check | 检查部署标记、API、执行器及登录控制接口 |
 | 停止 | sudo ./scripts/ubuntu-deploy.sh stop | 停止登记的可选排版、执行器和 API；保留数据库、配置与账号会话 |
 | 再次启动 | sudo systemctl start post-bridge-api.service post-bridge-worker.service | 启动已有部署，不重建代码 |
@@ -415,9 +415,39 @@ sudoedit /etc/post-bridge/install.json
 
 install.json 中 API_PLATFORM_ACCOUNTS_FILE 和 WORKER_PLATFORM_ACCOUNTS_FILE 分别填写上述文件位置。按第六节备份并执行 upgrade，再运行 check，登录对应用户检查账号及只读同步。不要仅启动旧部署以为新配置已生效；不要把包含真实身份与目录的文件提交到 Git。
 
+## 公众号本地转换
+
+以下命令在目标服务器 Bash 执行。先按本页备份数据库和私有配置，选择维护窗口；本地转换不需要模型密钥，也不会创建公众号远端草稿。
+
+1. 编辑私有部署配置，在现有 JSON 对象中增加布尔字段 `CONTENT_FORMATTING_ENABLED`，值为 `true`；不要改变账号和数据库配置。
+
+```bash
+sudoedit /etc/post-bridge/install.json
+```
+
+2. 已部署环境执行升级；首次安装按本页完整安装步骤执行 install。检查 API、worker 和 formatter 状态：
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh upgrade
+sudo ./scripts/ubuntu-deploy.sh check
+sudo systemctl status post-bridge-api.service post-bridge-worker.service post-bridge-formatter.service --no-pager
+```
+
+3. 在后台用合成原稿生成公众号本地稿，核对预览、问题和复制结果。检查不代表真实公众号或生产验收通过。
+
+4. 停止和重新启动已启用的服务：
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh stop
+sudo systemctl start post-bridge-formatter.service post-bridge-api.service post-bridge-worker.service
+sudo ./scripts/ubuntu-deploy.sh check
+```
+
+关闭时将 `CONTENT_FORMATTING_ENABLED` 设为 `false` 并按本页升级；同时启用 AI 格式化时排版服务继续运行。升级前后仍按本页备份、核对权限和健康状态。
+
 ## DeepSeek 格式化
 
-可选服务不改变基础草稿与来源流程。以下命令在目标服务器 Bash 执行；启用会发送获授权的原稿到 DeepSeek。先按本页备份数据库与私有配置，再选择维护窗口。
+以下命令在目标服务器 Bash 执行。启用后，CSDN、小红书和公众号 AI 辅助使用 DeepSeek；公众号 AI 建议需逐篇授权，保真排版可独立启用。先按本页备份数据库与私有配置，再选择维护窗口。
 
 1. 准备 root 私有模型配置目录。从终端隐藏输入已有 DeepSeek 密钥，脚本生成私有配置；密钥不进入命令参数或仓库：
 

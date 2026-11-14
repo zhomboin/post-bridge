@@ -6,6 +6,21 @@ import (
 )
 
 func (h *handler) formattingAssetRoutes() {
+	h.mux.HandleFunc("PUT /api/formatting-jobs/{id}/wechat", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
+		if !h.formattingEnabled(w) {
+			return
+		}
+		var in wechatEditInput
+		if !decodeLimit(w, r, &in, 6<<20) {
+			return
+		}
+		out, err := h.editWechat(r.Context(), r.PathValue("id"), in)
+		if err != nil {
+			formattingHTTPError(w, err)
+			return
+		}
+		writeJSON(w, 202, out)
+	}))
 	h.mux.HandleFunc("GET /api/formatting-assets/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		var body []byte
 		var hash, jobID string
@@ -45,7 +60,8 @@ func (h *handler) formattingAssetRoutes() {
 		_, _ = w.Write(body)
 	}))
 	h.mux.HandleFunc("PUT /api/formatting-jobs/{id}", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
-		if !h.formattingEnabled(w) {
+		if !h.formattingConfig.Enabled {
+			fail(w, 503, "formatting_disabled", "AI 格式化尚未启用。")
 			return
 		}
 		var in struct {

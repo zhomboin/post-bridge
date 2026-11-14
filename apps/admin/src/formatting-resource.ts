@@ -22,7 +22,9 @@ export const formattingLabels: Record<string, string> = {
   provider_unavailable: '模型服务暂不可用。',
   provider_invalid_response: '模型响应不符合要求。',
   renderer_unavailable: '排版服务暂不可用。',
+  formatting_quota: '格式化存储或用量达到上限。',
   content_invalid: '内容未通过保真校验，请重新生成或人工编辑。',
+  wechat_image_changed: '图片位置发生变化，请重新选择相关素材。',
   source_unavailable: '来源内容或授权已失效，请重新核对。',
   processing_interrupted: '处理已中断，请核对后重新生成。',
   processing_failed: '处理未完成，请稍后重试。',
@@ -33,7 +35,7 @@ export function useFormattingJob(id?: string) {
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
-    setJob(undefined);
+    setJob((current) => (current?.id === id ? current : undefined));
     setError('');
     if (!id) return;
     const controller = new AbortController();
@@ -45,10 +47,14 @@ export function useFormattingJob(id?: string) {
         });
         if (controller.signal.aborted) return;
         setJob(result);
+        setError('');
         if (['queued', 'running'].includes(result.status))
           timer = setTimeout(() => void load(), 1000);
       } catch (error) {
-        if (!controller.signal.aborted) setError(errorText(error));
+        if (!controller.signal.aborted) {
+          setJob(undefined);
+          setError(errorText(error));
+        }
       }
     };
     void load();
@@ -61,5 +67,10 @@ export function useFormattingJob(id?: string) {
     setJob(value);
     if (['queued', 'running'].includes(value.status)) setRefresh((current) => current + 1);
   };
-  return { job, setJob: updateJob, error, setError };
+  return {
+    job: job?.id === id ? job : undefined,
+    setJob: updateJob,
+    error,
+    reload: () => setRefresh((current) => current + 1),
+  };
 }

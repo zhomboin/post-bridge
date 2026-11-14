@@ -25,6 +25,8 @@ func (h *handler) editFormattingJob(ctx context.Context, id string, revision int
 	if !validKey(requestID) || !integrationHas([]string{"technical", "checklist"}, template) {
 		return job, ErrInvalid
 	}
+	// 客户端可携带原候选稿。修订绑定只从服务端的实际处理结果生成。
+	out.Binding = nil
 	err := h.store.locked(ctx, func(tx pgx.Tx, now time.Time) error {
 		var err error
 		if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,72341821))", scopeOf(ctx).UserID); err != nil {
@@ -49,7 +51,7 @@ func (h *handler) editFormattingJob(ctx context.Context, id string, revision int
 			return ErrConflict
 		}
 		// 受保护的来源引用由渲染前再次解析校验；此处先拒绝客户端注入素材或执行正文。
-		if len(out.Assets) > 0 || out.Markdown != "" || out.Summary != "" || len(out.Tags) > 0 {
+		if len(out.Assets) > 0 || out.Markdown != "" || out.Summary != "" || len(out.Tags) > 0 || out.Wechat != nil {
 			return ErrInvalid
 		}
 		if out.Title == "" || out.Body == "" || len(out.Cards) == 0 {
@@ -120,7 +122,7 @@ func (h *handler) confirmFormatting(ctx context.Context, id string, revision int
 		if _, err = h.readFormattingSession(ctx, tx, job.SessionID, false); err != nil {
 			return err
 		}
-		if job.Platform != "xiaohongshu" || job.Revision != revision || job.Result == nil || len(job.Result.Assets) < 2 || !integrationHas([]string{"succeeded", "adopted"}, job.Status) {
+		if !integrationHas([]string{"xiaohongshu", "wechat"}, job.Platform) || job.Revision != revision || job.Result == nil || job.Platform == "xiaohongshu" && len(job.Result.Assets) < 2 || job.Platform == "wechat" && job.Result.Wechat == nil || !integrationHas([]string{"succeeded", "adopted"}, job.Status) {
 			return ErrConflict
 		}
 		if job.Confirmed {

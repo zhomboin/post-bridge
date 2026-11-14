@@ -21,6 +21,9 @@ func formattingHTTPError(w http.ResponseWriter, err error) {
 			status = 429
 			message = "格式化任务或用量达到上限，请稍后重试。"
 		}
+		if e == "wechat_invalid_image" {
+			message = "请选择符合数量、格式和大小要求的 PNG 或 JPEG 图片。"
+		}
 		fail(w, status, e.Error(), message)
 		return
 	}
@@ -31,7 +34,7 @@ func formattingHTTPError(w http.ResponseWriter, err error) {
 	integrationContentError(w, err)
 }
 func (h *handler) formattingEnabled(w http.ResponseWriter) bool {
-	if !h.formattingConfig.Enabled {
+	if !h.formattingConfig.Enabled && !h.formattingConfig.LocalEnabled {
 		fail(w, 503, "formatting_disabled", "AI 格式化尚未启用。")
 		return false
 	}
@@ -66,14 +69,46 @@ func (h *handler) formattingRoutes() {
 		if err == nil {
 			err = rows.Err()
 		}
+		rows.Close()
 		if err != nil {
 			formattingHTTPError(w, err)
 			return
 		}
+		if len(items) > 0 {
+			err = h.store.locked(r.Context(), func(tx pgx.Tx, _ time.Time) error {
+				guards := map[string]error{}
+				for i := range items {
+					guardErr, checked := guards[items[i].SessionID]
+					if !checked {
+						_, guardErr = h.readFormattingSession(r.Context(), tx, items[i].SessionID, false)
+						guards[items[i].SessionID] = guardErr
+					}
+					if errors.Is(guardErr, ErrIntegrationPermission) || errors.Is(guardErr, ErrIntegrationExpired) || errors.Is(guardErr, ErrIntegrationSourceChanged) || errors.Is(guardErr, ErrNotFound) {
+						items[i].Title = "来源不可用"
+					} else if guardErr != nil {
+						return guardErr
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				formattingHTTPError(w, err)
+				return
+			}
+		}
 		writeJSON(w, 200, map[string]any{"items": items, "page": page, "page_size": size})
 	}))
 	h.mux.HandleFunc("GET /api/formatting-capabilities", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
-		writeJSON(w, 200, map[string]any{"enabled": h.formattingConfig.Enabled, "provider": "deepseek", "platforms": []string{"csdn", "xiaohongshu"}, "templates": []string{"technical", "checklist"}, "max_input_characters": h.formattingConfig.MaxInputCharacters})
+		modes := map[string][]string{}
+		if h.formattingConfig.LocalEnabled || h.formattingConfig.Enabled {
+			modes["wechat"] = []string{formattingFidelity}
+		}
+		if h.formattingConfig.Enabled {
+			modes["wechat"] = append(modes["wechat"], formattingAI)
+			modes["csdn"] = []string{formattingAI}
+			modes["xiaohongshu"] = []string{formattingAI}
+		}
+		writeJSON(w, 200, map[string]any{"enabled": h.formattingConfig.Enabled, "local_enabled": h.formattingConfig.Enabled || h.formattingConfig.LocalEnabled, "provider": "deepseek", "platforms": []string{"csdn", "xiaohongshu"}, "modes": modes, "templates": []string{"technical", "checklist"}, "max_input_characters": h.formattingConfig.MaxInputCharacters})
 	}))
 	h.mux.HandleFunc("POST /api/formatting-sessions", h.authenticated(func(w http.ResponseWriter, r *http.Request, _ session) {
 		if !h.formattingEnabled(w) {

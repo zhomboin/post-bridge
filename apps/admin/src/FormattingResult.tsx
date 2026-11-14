@@ -1,22 +1,27 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import XiaohongshuFormatting from './XiaohongshuFormatting';
 import ReactMarkdown from 'react-markdown';
+import FormattingDifferences from './FormattingDifferences';
 import { IntegrationModal } from './IntegrationDialog';
 import { RouteLink, useAction, useWorkspace, type Job } from './runtime';
 import { formattingLabels } from './formatting-resource';
 import type { FormattingJob, FormattingOutput } from './formatting-contract';
 import type { Preparation } from './integration-types';
 
+const WechatFormatting = lazy(() => import('./WechatFormatting'));
+
 export default function FormattingResult({
   job,
   onChange,
   onAdopt,
   sourcePreparation = false,
+  originalMarkdown,
 }: {
   job: FormattingJob;
   onChange: (job: FormattingJob) => void;
   onAdopt?: (output: FormattingOutput, preparation?: Preparation) => void;
   sourcePreparation?: boolean;
+  originalMarkdown?: string;
 }) {
   const { api, navigate } = useWorkspace();
   const action = useAction();
@@ -55,7 +60,9 @@ export default function FormattingResult({
   return (
     <div className="formatting-result">
       <div className="formatting-status" role="status">
-        {formattingLabels[job.status] || job.status}
+        {job.platform === 'wechat' && job.status === 'adopted'
+          ? '已确认'
+          : formattingLabels[job.status] || job.status}
         {job.status === 'running' ? ' · ' + (formattingLabels[job.stage] || job.stage) : ''}
       </div>
       {['queued', 'running'].includes(job.status) && (
@@ -70,6 +77,11 @@ export default function FormattingResult({
       )}
       {job.result && job.platform === 'xiaohongshu' && (
         <XiaohongshuFormatting job={job} onChange={onChange} />
+      )}
+      {job.result?.wechat && job.platform === 'wechat' && (
+        <Suspense fallback={<div role="status">正在加载…</div>}>
+          <WechatFormatting job={job} onChange={onChange} originalMarkdown={originalMarkdown} />
+        </Suspense>
       )}
       {job.result && job.platform === 'csdn' && (
         <>
@@ -91,6 +103,9 @@ export default function FormattingResult({
               {job.result.markdown}
             </ReactMarkdown>
           </div>
+          {originalMarkdown !== undefined && (
+            <FormattingDifferences original={originalMarkdown} candidate={job.result.markdown} />
+          )}
           {job.result.issues.map((issue, index) => (
             <div
               key={index}

@@ -33,6 +33,48 @@
     "height": "integer",
     "url": "string"
   },
+  "WechatBlock": {
+    "source_block_id": "string",
+    "html": "string"
+  },
+  "WechatImage": {
+    "id": "string",
+    "source_block_id": "string",
+    "source": "string",
+    "alt": "string"
+  },
+  "WechatResult": {
+    "blocks": "WechatBlock[]",
+    "issues": "FormattingIssue[]",
+    "images": "WechatImage[]~",
+    "candidate_markdown": "string~",
+    "attachments": "WechatAttachment[]~",
+    "suggestions": "WechatSuggestions~"
+  },
+  "WechatSuggestion": {
+    "source_block_id": "string",
+    "text": "string"
+  },
+  "WechatSuggestions": {
+    "title": "string",
+    "summary": "string",
+    "structure": "WechatSuggestion[]",
+    "issues": "WechatSuggestion[]"
+  },
+  "WechatAttachment": {
+    "image_id": "string",
+    "sha256": "string",
+    "media_type": "string",
+    "data": "string"
+  },
+  "FormattingBinding": {
+    "platform": "string",
+    "mode": "string",
+    "rules_version": "string",
+    "prompt_version": "string",
+    "model": "string",
+    "asset_fingerprint": "string"
+  },
   "FormattingOutput": {
     "title": "string",
     "summary": "string",
@@ -45,7 +87,9 @@
     "cards": "FormattingCard[]",
     "omissions": "string[]",
     "issues": "FormattingIssue[]",
-    "assets": "FormattingAsset[]"
+    "assets": "FormattingAsset[]",
+    "wechat": "WechatResult~",
+    "binding": "FormattingBinding~"
   },
   "FormattingSession": {
     "id": "string",
@@ -56,7 +100,8 @@
     "revision": "integer",
     "snapshot": "FormattingSnapshot",
     "platforms": "string[]",
-    "expires_at": "string"
+    "expires_at": "string",
+    "mode": "string~"
   },
   "FormattingJob": {
     "id": "string",
@@ -82,6 +127,7 @@
     "input_tokens": "integer",
     "output_tokens": "integer",
     "confirmed": "boolean",
-    "confirmation_fingerprint": "string"
+    "confirmation_fingerprint": "string",
+    "mode": "string~"
   }
 }

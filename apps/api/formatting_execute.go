@@ -13,6 +13,28 @@ func (h *handler) executeFormatting(ctx context.Context, c formattingClaim) (For
 	if c.Job.Operation == "render" {
 		usage = FormattingUsage{Input: c.Job.InputTokens, Output: c.Job.OutputTokens}
 	}
+	if c.Job.Platform == "wechat" {
+		if c.Job.RulesVersion != wechatRulesVersion || !integrationHas([]string{"generate", "wechat_edit"}, c.Job.Operation) {
+			return out, usage, formattingError("processing_interrupted")
+		}
+		mode := formattingMode(c.Job.Platform, c.Job.Mode)
+		requestAI := mode == formattingAI && c.Job.Operation == "generate"
+		if requestAI && (!h.formattingConfig.Enabled || c.Job.PromptVersion != wechatPromptVersion || c.Job.Model != h.formattingConfig.Model) {
+			return out, usage, formattingError("processing_interrupted")
+		}
+		out, usage, err := h.executeWechat(ctx, c, out)
+		if err != nil || !requestAI {
+			return out, usage, err
+		}
+		return h.suggestWechat(ctx, c, out)
+	}
+	// 不能用新版实现执行旧版排队任务并将结果标记为旧版。
+	if c.Job.RulesVersion != formattingRulesVersion || c.Job.Operation != "render" && c.Job.PromptVersion != formattingPromptVersion {
+		return out, usage, formattingError("processing_interrupted")
+	}
+	if c.Job.Operation != "render" && (!h.formattingConfig.Enabled || c.Job.Model != h.formattingConfig.Model) {
+		return out, usage, formattingError("processing_interrupted")
+	}
 	session, err := h.formattingCheckpoint(ctx, c, "analyzing")
 	if err != nil {
 		return out, usage, err
@@ -20,7 +42,7 @@ func (h *handler) executeFormatting(ctx context.Context, c formattingClaim) (For
 	var analyzed struct {
 		Blocks []FormattingBlock `json:"blocks"`
 	}
-	if err = h.formattingConfig.formatter(ctx, "/analyze", map[string]any{"markdown": session.Snapshot.Body}, &analyzed); err != nil {
+	if err = h.formattingConfig.formatter(ctx, "/analyze", map[string]any{"markdown": session.Snapshot.Body, "platform": c.Job.Platform}, &analyzed); err != nil {
 		return out, usage, err
 	}
 	if len(analyzed.Blocks) == 0 || len(analyzed.Blocks) > 2000 {
@@ -113,8 +135,31 @@ func (h *handler) executeFormatting(ctx context.Context, c formattingClaim) (For
 	return out, usage, nil
 }
 func formattingOutputFingerprint(job FormattingJob) string {
+	if job.Result.Binding != nil {
+		return integrationDigest([]any{"postbridge-formatting-v2", job.ID, job.Revision, job.Result})
+	}
 	// 确认绑定最终内容；提示词升级不会改变已确认修订。
+	if job.Platform == "wechat" {
+		return integrationDigest([]any{"postbridge-wechat-v1", job.ID, job.Revision, job.Platform, job.RulesVersion, job.Result})
+	}
 	return integrationDigest([]any{"postbridge-formatting-v1", job.ID, job.Revision, job.Platform, job.Result})
+}
+
+func bindFormattingOutput(job FormattingJob, output *FormattingOutput) {
+	digests := make([]string, 0, len(output.Assets))
+	for _, asset := range output.Assets {
+		digests = append(digests, asset.Sha256)
+	}
+	if output.Wechat != nil && output.Wechat.Attachments != nil {
+		for _, attachment := range *output.Wechat.Attachments {
+			digests = append(digests, attachment.ImageID, attachment.Sha256)
+		}
+	}
+	output.Binding = &FormattingBinding{
+		Platform: job.Platform, Mode: formattingMode(job.Platform, job.Mode),
+		RulesVersion: job.RulesVersion, PromptVersion: job.PromptVersion, Model: job.Model,
+		AssetFingerprint: integrationDigest(digests),
+	}
 }
 func formattingOutputCopy(out *FormattingOutput) *FormattingOutput {
 	if out == nil {

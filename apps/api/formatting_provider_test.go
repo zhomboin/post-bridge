@@ -3,13 +3,50 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestFormattingFormatterTimeoutAndCancellation(t *testing.T) {
+	for _, path := range []string{"/convert-wechat", "/validate-wechat"} {
+		t.Run(path, func(t *testing.T) {
+			finished := make(chan bool, 1)
+			release := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				select {
+				case <-r.Context().Done():
+					finished <- true
+				case <-release:
+					finished <- false
+				}
+			}))
+			defer server.Close()
+			defer close(release)
+			config := defaultFormattingConfig()
+			config.FormatterURL = server.URL
+			config.Timeout = 50 * time.Millisecond
+			var result map[string]any
+			if err := config.formatter(context.Background(), path, map[string]string{"markdown": "合成原文"}, &result); formattingErrorCode(err) != "renderer_unavailable" {
+				t.Fatal("超时没有明确返回服务不可用", err)
+			}
+			select {
+			case cancelled := <-finished:
+				if !cancelled {
+					t.Fatal("请求未被取消")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("超时后请求未被取消")
+			}
+		})
+	}
+}
 
 func TestDeepSeekResponseBoundaries(t *testing.T) {
 	tests := []struct {
@@ -62,6 +99,22 @@ func TestDeepSeekConfigurationIsolation(t *testing.T) {
 		if c.validate() == nil {
 			t.Fatal("unsafe renderer URL accepted")
 		}
+	}
+}
+
+func TestLocalFormattingConfigNeedsNoModelKey(t *testing.T) {
+	token := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(token, []byte(strings.Repeat("x", 32)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CONTENT_FORMATTING_ENABLED", "true")
+	t.Setenv("AI_FORMATTING_ENABLED", "false")
+	t.Setenv("FORMATTER_URL", "http://127.0.0.1:19001")
+	t.Setenv("FORMATTER_TOKEN_FILE", token)
+	t.Setenv("DEEPSEEK_API", "not-used")
+	c, err := loadFormattingConfig()
+	if err != nil || !c.LocalEnabled || c.Enabled || c.APIKey != "" {
+		t.Fatal("本地配置不应要求或读取模型密钥", err)
 	}
 }
 func TestDeepSeekRealCSDN(t *testing.T) {

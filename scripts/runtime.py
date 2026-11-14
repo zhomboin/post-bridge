@@ -177,9 +177,10 @@ def child_env(config, worker=False):
         env.update(
             {k: str(config[k]) for k in formatting_runtime.API_KEYS if k in config}
         )
-        for key in ("DEEPSEEK_API", "DEEPSEEK_API_KEY"):
-            if os.environ.get(key):
-                env[key] = os.environ[key]
+        if config.get("AI_FORMATTING_ENABLED") in (True, "true"):
+            for key in ("DEEPSEEK_API", "DEEPSEEK_API_KEY"):
+                if os.environ.get(key):
+                    env[key] = os.environ[key]
     return env
 
 

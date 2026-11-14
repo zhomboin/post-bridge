@@ -35,19 +35,63 @@ type FormattingAsset struct {
 	Height int64  `json:"height"`
 	URL    string `json:"url"`
 }
+type WechatBlock struct {
+	SourceBlockID string `json:"source_block_id"`
+	Html          string `json:"html"`
+}
+type WechatImage struct {
+	ID            string `json:"id"`
+	SourceBlockID string `json:"source_block_id"`
+	Source        string `json:"source"`
+	Alt           string `json:"alt"`
+}
+type WechatResult struct {
+	Blocks            []WechatBlock       `json:"blocks"`
+	Issues            []FormattingIssue   `json:"issues"`
+	Images            *[]WechatImage      `json:"images,omitempty"`
+	CandidateMarkdown *string             `json:"candidate_markdown,omitempty"`
+	Attachments       *[]WechatAttachment `json:"attachments,omitempty"`
+	Suggestions       *WechatSuggestions  `json:"suggestions,omitempty"`
+}
+type WechatSuggestion struct {
+	SourceBlockID string `json:"source_block_id"`
+	Text          string `json:"text"`
+}
+type WechatSuggestions struct {
+	Title     string             `json:"title"`
+	Summary   string             `json:"summary"`
+	Structure []WechatSuggestion `json:"structure"`
+	Issues    []WechatSuggestion `json:"issues"`
+}
+type WechatAttachment struct {
+	ImageID   string `json:"image_id"`
+	Sha256    string `json:"sha256"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+}
+type FormattingBinding struct {
+	Platform         string `json:"platform"`
+	Mode             string `json:"mode"`
+	RulesVersion     string `json:"rules_version"`
+	PromptVersion    string `json:"prompt_version"`
+	Model            string `json:"model"`
+	AssetFingerprint string `json:"asset_fingerprint"`
+}
 type FormattingOutput struct {
-	Title         string            `json:"title"`
-	Summary       string            `json:"summary"`
-	Markdown      string            `json:"markdown"`
-	Tags          []string          `json:"tags"`
-	Body          string            `json:"body"`
-	Topics        []string          `json:"topics"`
-	CoverTitle    string            `json:"cover_title"`
-	CoverSubtitle string            `json:"cover_subtitle"`
-	Cards         []FormattingCard  `json:"cards"`
-	Omissions     []string          `json:"omissions"`
-	Issues        []FormattingIssue `json:"issues"`
-	Assets        []FormattingAsset `json:"assets"`
+	Title         string             `json:"title"`
+	Summary       string             `json:"summary"`
+	Markdown      string             `json:"markdown"`
+	Tags          []string           `json:"tags"`
+	Body          string             `json:"body"`
+	Topics        []string           `json:"topics"`
+	CoverTitle    string             `json:"cover_title"`
+	CoverSubtitle string             `json:"cover_subtitle"`
+	Cards         []FormattingCard   `json:"cards"`
+	Omissions     []string           `json:"omissions"`
+	Issues        []FormattingIssue  `json:"issues"`
+	Assets        []FormattingAsset  `json:"assets"`
+	Wechat        *WechatResult      `json:"wechat,omitempty"`
+	Binding       *FormattingBinding `json:"binding,omitempty"`
 }
 type FormattingSession struct {
 	ID                 string             `json:"id"`
@@ -59,6 +103,7 @@ type FormattingSession struct {
 	Snapshot           FormattingSnapshot `json:"snapshot"`
 	Platforms          []string           `json:"platforms"`
 	ExpiresAt          string             `json:"expires_at"`
+	Mode               *string            `json:"mode,omitempty"`
 }
 type FormattingJob struct {
 	ID                      string            `json:"id"`
@@ -85,4 +130,5 @@ type FormattingJob struct {
 	OutputTokens            int64             `json:"output_tokens"`
 	Confirmed               bool              `json:"confirmed"`
 	ConfirmationFingerprint string            `json:"confirmation_fingerprint"`
+	Mode                    *string           `json:"mode,omitempty"`
 }

@@ -3,10 +3,18 @@ import { RouteLink, useResource, type Account } from './runtime';
 import FormattingPanel from './FormattingPanel';
 export default function FormattingNew() {
   const accounts = useResource<{ items: { account: Account }[] }>('/api/accounts');
+  const capabilities = useResource<{ enabled: boolean; local_enabled: boolean }>(
+    '/api/formatting-capabilities',
+  );
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [account, setAccount] = useState('');
-  const [platform, setPlatform] = useState('csdn');
+  const [selection, setPlatform] = useState('csdn');
+  const platforms = [
+    ...(capabilities.data?.enabled ? ['csdn', 'xiaohongshu'] : []),
+    ...(capabilities.data?.local_enabled ? ['wechat'] : []),
+  ];
+  const platform = platforms.includes(selection) ? selection : platforms[0] || '';
   return (
     <div className="page">
       <RouteLink href="/formatting" className="back-link">
@@ -20,9 +28,17 @@ export default function FormattingNew() {
           <div className="form-grid">
             <label>
               目标平台
-              <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
-                <option value="csdn">CSDN</option>
-                <option value="xiaohongshu">小红书</option>
+              <select
+                value={platform}
+                disabled={!platform}
+                onChange={(e) => setPlatform(e.target.value)}
+              >
+                {!platform && (
+                  <option value="">{capabilities.loading ? '正在读取' : '未启用'}</option>
+                )}
+                {platforms.includes('csdn') && <option value="csdn">CSDN</option>}
+                {platforms.includes('xiaohongshu') && <option value="xiaohongshu">小红书</option>}
+                {platforms.includes('wechat') && <option value="wechat">微信公众号</option>}
               </select>
             </label>
             <label>
@@ -55,14 +71,22 @@ export default function FormattingNew() {
               </label>
             )}
           </div>
-          <FormattingPanel
-            source={{
-              account_id: platform === 'csdn' ? account : '',
-              snapshot: { title, body, body_format: 'markdown', summary: '', tags: [] },
-            }}
-            disabled={!title.trim() || !body.trim() || (platform === 'csdn' && !account)}
-            platforms={[platform]}
-          />
+          {capabilities.error && (
+            <div className="notice error" role="alert">
+              {capabilities.error}
+            </div>
+          )}
+          {platform && (
+            <FormattingPanel
+              key={platform}
+              source={{
+                account_id: platform === 'csdn' ? account : '',
+                snapshot: { title, body, body_format: 'markdown', summary: '', tags: [] },
+              }}
+              disabled={!title.trim() || !body.trim() || (platform === 'csdn' && !account)}
+              platforms={[platform]}
+            />
+          )}
         </div>
       </section>
     </div>

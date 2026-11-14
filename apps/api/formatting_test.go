@@ -148,6 +148,48 @@ func TestFormattingCSDNLocalLifecycle(t *testing.T) {
 		t.Fatal("repeat draft duplicated side effect")
 	}
 }
+
+func TestFormattingJobReplayUsesOriginalVersions(t *testing.T) {
+	h, _, call := formattingFixture(t)
+	session := formattingLocalSession(t, call)
+	input := formattingJobInput{RequestID: "old-version-replay", Platform: "csdn"}
+	job := decodeFormatting[FormattingJob](t, call("POST", "/api/formatting-sessions/"+session.ID+"/jobs", input, true), 202)
+	job.PromptVersion = "old-prompt"
+	job.RulesVersion = "old-rules"
+	job.Model = "old-model"
+	record, err := json.Marshal(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := integrationDigest([]any{session.ID, input, session.ContentFingerprint, job.PromptVersion, job.RulesVersion, job.Model})
+	if _, err := h.store.pool.Exec(context.Background(), "UPDATE formatting_jobs SET fingerprint=$1,record=$2 WHERE id=$3", fingerprint, record, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	replayed := decodeFormatting[FormattingJob](t, call("POST", "/api/formatting-sessions/"+session.ID+"/jobs", input, true), 200)
+	if replayed.ID != job.ID || replayed.PromptVersion != job.PromptVersion {
+		t.Fatal("重试未复用原任务", replayed.ID)
+	}
+	changed := input
+	changed.Platform = "xiaohongshu"
+	changed.Template = "technical"
+	if response := call("POST", "/api/formatting-sessions/"+session.ID+"/jobs", changed, true); response.Code == 200 || response.Code == 202 {
+		t.Fatal("不同请求错误复用原任务", response.Code)
+	}
+}
+
+func TestFormattingOldQueuedVersionStopsBeforeExternalCalls(t *testing.T) {
+	h := &handler{}
+	for _, job := range []FormattingJob{
+		{Operation: "generate", PromptVersion: "old", RulesVersion: formattingRulesVersion},
+		{Operation: "generate", PromptVersion: formattingPromptVersion, RulesVersion: "old"},
+		{Operation: "render", RulesVersion: "old", InputTokens: 100, OutputTokens: 50},
+	} {
+		_, usage, err := h.executeFormatting(context.Background(), formattingClaim{Job: job})
+		if formattingErrorCode(err) != "processing_interrupted" || usage.Input != job.InputTokens || usage.Output != job.OutputTokens {
+			t.Fatal("旧版本排队任务未安全中断", err, usage)
+		}
+	}
+}
 func TestFormattingSourceAdoptionAndAuthorization(t *testing.T) {
 	h, c, call := formattingFixture(t)
 	snapshot := IntegrationSnapshot{Title: "来源平台格式化文章", Body: "# 技术说明\n\n完整正文。", BodyFormat: "markdown", Tags: []string{}}

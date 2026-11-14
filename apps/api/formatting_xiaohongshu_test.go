@@ -96,6 +96,48 @@ func TestFormattingXiaohongshuOmittedCodeIsExplicit(t *testing.T) {
 		t.Fatal("old omissions were not recomputed", next)
 	}
 }
+
+func TestFormattingXiaohongshuAcceptsProtectedHtmlAndImages(t *testing.T) {
+	h, _, call := formattingFixture(t)
+	snapshot := FormattingSnapshot{Title: "合成文章标题", Body: "<div>需要核对的内容</div>\n\n正文。\n\n![合成图片](https://example.test/image.png)", BodyFormat: "markdown", Tags: []string{}}
+	session := decodeFormatting[FormattingSession](t, call("POST", "/api/formatting-sessions", formattingSessionInput{RequestID: "xhs-html-session", Platforms: []string{"xiaohongshu"}, AllowAIProcessing: true, Snapshot: snapshot}, true), 201)
+	job := decodeFormatting[FormattingJob](t, call("POST", "/api/formatting-sessions/"+session.ID+"/jobs", formattingJobInput{RequestID: "xhs-html-job", Platform: "xiaohongshu", Template: "technical"}, true), 202)
+	runFormattingClaim(t, h)
+	job = decodeFormatting[FormattingJob](t, call("GET", "/api/formatting-jobs/"+job.ID, nil, true), 200)
+	if job.Status != "succeeded" || job.Result == nil || len(job.Result.Omissions) < 2 {
+		t.Fatal("原稿未继续处理或遗漏未提示", job.Status, job.ErrorCode)
+	}
+}
+
+func TestFormattingXiaohongshuLinkOmissionAndRecompute(t *testing.T) {
+	blocks := []FormattingBlock{{ID: "link", Kind: "paragraph", Locks: []string{"url:https://example.test/guide"}}}
+	out := FormattingOutput{Cards: []FormattingCard{{Title: "参考资料", Paragraphs: []string{"查看说明"}, SourceBlockIds: []string{"link"}}}, Omissions: []string{"附注：受保护内容未原样绘制，请核对原稿。"}}
+	out.Omissions = xiaohongshuOmissions(out, blocks)
+	if len(out.Omissions) != 2 || !strings.Contains(out.Omissions[1], "链接目标未在关联卡片中展示") {
+		t.Fatal("未保留附注或标记缺失链接", out.Omissions)
+	}
+	out.Cards[0].Paragraphs = []string{"https://example.test/guide"}
+	next := xiaohongshuOmissions(out, blocks)
+	if len(next) != 1 || !strings.HasPrefix(next[0], "附注") {
+		t.Fatal("链接展示后未正确更新清单", next)
+	}
+	blocks[0].Locks = []string{"reference:guide"}
+	if len(xiaohongshuOmissions(out, blocks)) != 2 {
+		t.Fatal("引用链接需要人工核对")
+	}
+}
+
+func TestFormattingXiaohongshuDuplicateCodeReferences(t *testing.T) {
+	blocks := []FormattingBlock{{ID: "code", Kind: "code"}}
+	out := FormattingOutput{Title: "合成标题", Body: "正文", CoverTitle: "封面", Cards: []FormattingCard{{Title: "代码", CodeRefs: []string{"code", "code"}, SourceBlockIds: []string{"code"}}}}
+	if validateXiaohongshu(out, blocks) == nil {
+		t.Fatal("重复代码引用应被拒绝")
+	}
+	out.Cards[0].CodeRefs = []string{"code"}
+	if validateXiaohongshu(out, blocks) != nil {
+		t.Fatal("单个有效代码引用应被接受")
+	}
+}
 func TestFormattingXiaohongshuReferencesAndLimits(t *testing.T) {
 	blocks := []FormattingBlock{{ID: "source", Kind: "paragraph", Markdown: "正文"}}
 	out := FormattingOutput{Title: "合成标题", Body: "正文", CoverTitle: "封面", Cards: []FormattingCard{{Title: "要点", Paragraphs: []string{"正文"}, SourceBlockIds: []string{"source"}}}}

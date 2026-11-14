@@ -76,6 +76,7 @@ def validate_config(value):
         "INTEGRATION_ENVIRONMENT",
         "INTEGRATION_SERVICE_ID",
         "AI_FORMATTING_ENABLED",
+        "CONTENT_FORMATTING_ENABLED",
         "AI_PROVIDER_CONFIG_FILE",
     }
     if (

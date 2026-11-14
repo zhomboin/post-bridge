@@ -13,12 +13,14 @@ type Node = {
 };
 export type ContentBlock = import('./formatting-contract.js').FormattingBlock;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-function textOf(node: Node): string {
-  if (node.type === 'html') throw Error('unsupported_content');
+function textOf(node: Node, allowHtml = false): string {
+  if (node.type === 'html' && !allowHtml) throw Error('unsupported_content');
   if (node.type === 'break') return ' ';
   if (node.type === 'image') return '';
   const separator = ['list', 'listItem'].includes(node.type) ? '\n' : '';
-  return node.value ?? (node.children ?? []).map(textOf).join(separator);
+  return (
+    node.value ?? (node.children ?? []).map((child) => textOf(child, allowHtml)).join(separator)
+  );
 }
 function locksOf(node: Node): string[] {
   const locks: string[] = [];
@@ -48,6 +50,12 @@ function protectedNode(node: Node): boolean {
   );
 }
 export function analyze(markdown: string): ContentBlock[] {
+  return analyzeBlocks(markdown, false);
+}
+export function analyzeWithProtectedHtml(markdown: string): ContentBlock[] {
+  return analyzeBlocks(markdown, true);
+}
+function analyzeBlocks(markdown: string, allowHtml: boolean): ContentBlock[] {
   if (!markdown.trim() || markdown.length > 800000 || markdown.includes('\0'))
     throw Error('unsupported_content');
   const tree = fromMarkdown(markdown, {
@@ -59,14 +67,13 @@ export function analyze(markdown: string): ContentBlock[] {
     const end = node.position?.end.offset;
     if (start === undefined || end === undefined) throw Error('unsupported_content');
     const raw = markdown.slice(start, end);
-    // 公式和未知扩展保留原文；HTML 不进入渲染器。
-    textOf(node);
+    const text = textOf(node, allowHtml);
     return {
       id: 'b' + index + '-' + digest(raw).slice(0, 12),
       kind: node.type,
       markdown: raw,
       protected: protectedNode(node) || /\$|\\\(|\\\[/.test(raw),
-      text: textOf(node),
+      text,
       locks: locksOf(node),
     };
   });

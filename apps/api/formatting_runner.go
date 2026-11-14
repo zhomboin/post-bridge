@@ -134,11 +134,18 @@ func (h *handler) runFormatting(parent context.Context, c formattingClaim) {
 	finish, cancelFinish := context.WithTimeout(scoped(context.Background(), tenantScope{UserID: c.Owner, CallerID: "formatting:" + c.Job.ID}), 5*time.Second)
 	defer cancelFinish()
 	_ = h.store.locked(finish, func(tx pgx.Tx, now time.Time) error {
+		if c.Job.Platform == "wechat" {
+			if _, e := tx.Exec(finish, "SELECT pg_advisory_xact_lock(hashtextextended($1,72341821))", c.Owner); e != nil {
+				return e
+			}
+			now = h.store.now()
+		}
 		var lease string
-		if e := tx.QueryRow(finish, "SELECT lease_token FROM formatting_jobs WHERE id=$1 FOR UPDATE", c.Job.ID).Scan(&lease); e != nil {
+		var until time.Time
+		if e := tx.QueryRow(finish, "SELECT lease_token,lease_expires_at FROM formatting_jobs WHERE id=$1 FOR UPDATE", c.Job.ID).Scan(&lease, &until); e != nil {
 			return e
 		}
-		if lease != c.Lease {
+		if lease != c.Lease || !until.After(now) {
 			return ErrConflict
 		}
 		job, e := readFormattingJob(finish, tx, c.Job.ID, false)
@@ -146,15 +153,32 @@ func (h *handler) runFormatting(parent context.Context, c formattingClaim) {
 			return e
 		}
 		if job.Status != "running" {
+			if job.Status == "cancelled" && job.Operation == "generate" && usage.Input+usage.Output > 0 {
+				job.InputTokens, job.OutputTokens = usage.Input, usage.Output
+				if e = saveFormattingJob(finish, tx, job); e != nil {
+					return e
+				}
+				_, e = tx.Exec(finish, "UPDATE formatting_jobs SET reservation=$2 WHERE id=$1", job.ID, usage.Input+usage.Output)
+				return e
+			}
 			return nil
 		}
+		releaseUnusedBudget := job.Operation == "generate" && job.Stage == "analyzing"
 		if _, guardErr := h.readFormattingSession(finish, tx, job.SessionID, false); guardErr != nil {
 			err = guardErr
 		}
-		job.InputTokens = usage.Input
-		job.OutputTokens = usage.Output
+		if job.Operation != "wechat_edit" {
+			job.InputTokens = usage.Input
+			job.OutputTokens = usage.Output
+		}
 		job.Status = "failed"
 		job.Stage = "finished"
+		if err == nil {
+			bindFormattingOutput(job, &output)
+			if job.Platform == "wechat" {
+				err = checkWechatResultStorage(finish, tx, job, output)
+			}
+		}
 		job.ErrorCode = formattingErrorCode(err)
 		if err == nil {
 			job.Status = "succeeded"
@@ -169,10 +193,12 @@ func (h *handler) runFormatting(parent context.Context, c formattingClaim) {
 		if e = saveFormattingJob(finish, tx, job); e != nil {
 			return e
 		}
-		if e = saveFormattingRevision(finish, tx, job); e != nil {
-			return e
+		if err == nil {
+			if e = saveFormattingRevision(finish, tx, job); e != nil {
+				return e
+			}
 		}
-		if usage.Input+usage.Output > 0 {
+		if usage.Input+usage.Output > 0 || releaseUnusedBudget {
 			_, e = tx.Exec(finish, "UPDATE formatting_jobs SET reservation=$2 WHERE id=$1", job.ID, usage.Input+usage.Output)
 		}
 		return e

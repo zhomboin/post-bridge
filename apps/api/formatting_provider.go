@@ -49,12 +49,19 @@ func strictJSON(raw []byte, out any) error {
 }
 func (c FormattingConfig) generate(ctx context.Context, platform string, snapshot FormattingSnapshot, blocks []FormattingBlock) (FormattingModelResult, FormattingUsage, error) {
 	var result FormattingModelResult
-	var usage FormattingUsage
 	prompt, err := formattingPrompt(platform)
 	if err != nil {
-		return result, usage, err
+		return result, FormattingUsage{}, err
 	}
-	input, _ := json.Marshal(map[string]any{"title": snapshot.Title, "summary": snapshot.Summary, "tags": snapshot.Tags, "blocks": blocks})
+	usage, err := c.requestFormattingModel(ctx, prompt, map[string]any{
+		"title": snapshot.Title, "summary": snapshot.Summary, "tags": snapshot.Tags, "blocks": blocks,
+	}, &result)
+	return result, usage, err
+}
+
+func (c FormattingConfig) requestFormattingModel(ctx context.Context, prompt string, data, result any) (FormattingUsage, error) {
+	var usage FormattingUsage
+	input, _ := json.Marshal(data)
 	body, _ := json.Marshal(map[string]any{
 		"model": c.Model, "stream": false, "thinking": map[string]string{"type": "disabled"},
 		"response_format": map[string]string{"type": "json_object"}, "max_tokens": c.MaxOutputTokens,
@@ -62,13 +69,13 @@ func (c FormattingConfig) generate(ctx context.Context, platform string, snapsho
 	})
 	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(c.BaseURL, "/")+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return result, usage, formattingError("provider_unavailable")
+		return usage, formattingError("provider_unavailable")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 	response, err := c.httpClient().Do(req)
 	if err != nil {
-		return result, usage, formattingError("provider_interrupted")
+		return usage, formattingError("provider_interrupted")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
@@ -79,11 +86,11 @@ func (c FormattingConfig) generate(ctx context.Context, platform string, snapsho
 		if response.StatusCode == 429 {
 			code = "provider_rate_limited"
 		}
-		return result, usage, formattingError(code)
+		return usage, formattingError(code)
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
 	if err != nil || len(raw) >= 2<<20 {
-		return result, usage, formattingError("provider_invalid_response")
+		return usage, formattingError("provider_invalid_response")
 	}
 	var envelope struct {
 		Choices []struct {
@@ -98,23 +105,33 @@ func (c FormattingConfig) generate(ctx context.Context, platform string, snapsho
 		} `json:"usage"`
 	}
 	if json.Unmarshal(raw, &envelope) != nil || len(envelope.Choices) != 1 {
-		return result, usage, formattingError("provider_invalid_response")
+		return usage, formattingError("provider_invalid_response")
 	}
 	usage = FormattingUsage{Input: envelope.Usage.PromptTokens, Output: envelope.Usage.CompletionTokens}
 	if usage.Input < 0 || usage.Output < 0 || usage.Input > 10000000 || usage.Output > 10000000 {
-		return result, FormattingUsage{}, formattingError("provider_invalid_response")
+		return FormattingUsage{}, formattingError("provider_invalid_response")
 	}
 	choice := envelope.Choices[0]
 	if choice.FinishReason != "stop" {
-		return result, usage, formattingError("provider_incomplete")
+		return usage, formattingError("provider_incomplete")
 	}
-	if strings.TrimSpace(choice.Message.Content) == "" || strictJSON([]byte(choice.Message.Content), &result) != nil {
-		return result, usage, formattingError("provider_invalid_json")
+	content := strings.TrimSpace(choice.Message.Content)
+	if !strings.HasPrefix(content, "{") || strictJSON([]byte(content), result) != nil {
+		return usage, formattingError("provider_invalid_json")
 	}
-	return result, usage, nil
+	return usage, nil
 }
 func (c FormattingConfig) formatter(ctx context.Context, path string, input, out any) error {
 	raw, _ := json.Marshal(input)
+	if path == "/validate-wechat" {
+		var encoded bytes.Buffer
+		encoder := json.NewEncoder(&encoded)
+		encoder.SetEscapeHTML(false)
+		if err := encoder.Encode(input); err != nil {
+			return ErrFormattingContent
+		}
+		raw = encoded.Bytes()
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(c.FormatterURL, "/")+path, bytes.NewReader(raw))
 	if err != nil {
 		return formattingError("renderer_unavailable")
