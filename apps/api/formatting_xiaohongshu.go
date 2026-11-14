@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"image/png"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -19,6 +20,34 @@ type formattingRenderedImage struct {
 	SHA256 string `json:"sha256"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
+}
+
+var unsupportedXiaohongshuReference = regexp.MustCompile(`(?:见|详见|查看|移步|请看)\s*(?:评论区|主页|置顶评论|私信)|私信\s*(?:获取|领取)`)
+
+func flagUnsupportedXiaohongshuReference(out *FormattingOutput, blocks []FormattingBlock) bool {
+	values := []string{out.Title, out.Body, out.CoverTitle, out.CoverSubtitle}
+	values = append(values, out.Topics...)
+	for _, card := range out.Cards {
+		values = append(values, card.Title)
+		values = append(values, card.Paragraphs...)
+	}
+	original := map[string]bool{}
+	for _, block := range blocks {
+		for _, match := range unsupportedXiaohongshuReference.FindAllString(block.Markdown, -1) {
+			original[match] = true
+		}
+	}
+	for _, value := range values {
+		for _, match := range unsupportedXiaohongshuReference.FindAllString(value, -1) {
+			if !original[match] {
+				out.Issues = append(out.Issues, FormattingIssue{
+					Code: "unsupported_reference", Field: "body", Message: "文案新增了指向评论区、主页或私信的内容，请核对原稿后编辑。", Blocking: true,
+				})
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateXiaohongshu(out FormattingOutput, blocks []FormattingBlock) error {
@@ -96,6 +125,9 @@ func (h *handler) xiaohongshuOutput(ctx context.Context, c formattingClaim, s Fo
 		return out, err
 	}
 	out.Omissions = xiaohongshuOmissions(out, blocks)
+	if flagUnsupportedXiaohongshuReference(&out, blocks) {
+		return out, nil
+	}
 	return h.renderXiaohongshu(ctx, c, s, out)
 }
 func xiaohongshuOmissions(out FormattingOutput, blocks []FormattingBlock) []string {

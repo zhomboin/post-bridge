@@ -82,6 +82,23 @@ func TestFormattingXiaohongshuRenderEditConfirm(t *testing.T) {
 		t.Fatal("render failure lost original model usage", failed.Status, failed.InputTokens, failed.OutputTokens)
 	}
 }
+func TestFormattingXiaohongshuNewExternalReferenceRequiresReview(t *testing.T) {
+	for _, output := range []FormattingOutput{
+		{Body: "完整代码详见评论区。"},
+		{CoverSubtitle: "步骤请看主页。"},
+		{Cards: []FormattingCard{{Paragraphs: []string{"私信获取模板。"}}}},
+	} {
+		if !flagUnsupportedXiaohongshuReference(&output, []FormattingBlock{{Markdown: "完整代码。"}}) ||
+			len(output.Issues) != 1 || !output.Issues[0].Blocking {
+			t.Fatal("原稿未提供的外部引用没有被标记")
+		}
+	}
+	out := FormattingOutput{Body: "规则见评论区。"}
+	if flagUnsupportedXiaohongshuReference(&out, []FormattingBlock{{Markdown: "规则见评论区。"}}) {
+		t.Fatal("原稿已有的内容被错误标记")
+	}
+}
+
 func TestFormattingXiaohongshuOmittedCodeIsExplicit(t *testing.T) {
 	blocks := []FormattingBlock{{ID: "code", Kind: "code", Protected: true}, {ID: "table", Kind: "table", Protected: true}}
 	out := FormattingOutput{Cards: []FormattingCard{{SourceBlockIds: []string{"code", "table"}}}}

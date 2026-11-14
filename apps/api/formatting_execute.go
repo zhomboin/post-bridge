@@ -57,6 +57,9 @@ func (h *handler) executeFormatting(ctx context.Context, c formattingClaim) (For
 			return out, usage, err
 		}
 		out.Omissions = xiaohongshuOmissions(out, analyzed.Blocks)
+		if flagUnsupportedXiaohongshuReference(&out, analyzed.Blocks) {
+			return out, usage, nil
+		}
 		out, err = h.renderXiaohongshu(ctx, c, session, out)
 		return out, usage, err
 	}

@@ -7,9 +7,10 @@ import (
 	"unicode"
 )
 
-const wechatPromptVersion = "wechat-ai-1"
+const wechatPromptVersion = "wechat-ai-2"
 const wechatSuggestionPrompt = formattingCommonPrompt + `你是微信公众号编辑。拟定标题、摘要，提出有原文依据的结构建议或指出需人工核对的问题。仅提出建议，不生成正文或修改内容。
 返回如下 JSON 对象：{"title":"","summary":"","structure":[{"source_block_id":"原文块ID","text":"建议"}],"issues":[{"source_block_id":"原文块ID","text":"需要人工核对的问题"}]}。
+protected=true 的块内容由本地保留，仅向你提供位置和类别。块的 text 为空表示未提供给你，不能据此声称原稿为空、缺失或应该删除。文中链接的地址同样由本地保留，未提供地址不表示原稿缺少链接。
 标题最多100字，摘要最多256字，每条建议或问题最多240字，每类最多10条。同一类中每个块最多引用一次。使用纯文本，不输出样式、链接、素材地址、代码或Markdown。无需建议时使用空字符串或空数组。`
 
 var wechatSuggestionURL = regexp.MustCompile(`(?i)(?:[a-z][a-z0-9+.-]*://|\b(?:www\.|data:|mailto:|javascript:)|//\S|\b[^\s/]+\.(?:png|jpe?g|gif|webp|svg|avif)(?:\b|$))`)
@@ -62,9 +63,10 @@ func (h *handler) suggestWechat(ctx context.Context, c formattingClaim, output F
 		return output, usage, ErrFormattingContent
 	}
 	type sourceBlock struct {
-		ID   string `json:"id"`
-		Kind string `json:"kind"`
-		Text string `json:"text"`
+		ID        string `json:"id"`
+		Kind      string `json:"kind"`
+		Text      string `json:"text"`
+		Protected bool   `json:"protected"`
 	}
 	blocks := make([]sourceBlock, len(analyzed.Blocks))
 	known := make(map[string]bool, len(analyzed.Blocks))
@@ -77,7 +79,7 @@ func (h *handler) suggestWechat(ctx context.Context, c formattingClaim, output F
 		if block.Protected {
 			text = ""
 		}
-		blocks[i] = sourceBlock{ID: block.ID, Kind: block.Kind, Text: text}
+		blocks[i] = sourceBlock{ID: block.ID, Kind: block.Kind, Text: text, Protected: block.Protected}
 	}
 	if _, err = h.formattingCheckpoint(ctx, c, "generating"); err != nil {
 		return output, usage, err
