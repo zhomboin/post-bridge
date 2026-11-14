@@ -23,7 +23,7 @@ except ModuleNotFoundError:
 
 REPO = Path(__file__).resolve().parents[1]
 TOOLS = Path.home() / ".local/share/post-bridge/tools"
-GO_VERSION = "1.26.10"
+GO_VERSION = "1.26.11"
 DEFAULT_STATE = Path.home() / ".local/share/post-bridge/runtime/csdn-task-pipeline"
 
 

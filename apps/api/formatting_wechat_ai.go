@@ -9,7 +9,7 @@ import (
 
 const wechatPromptVersion = "wechat-ai-1"
 const wechatSuggestionPrompt = formattingCommonPrompt + `你是微信公众号编辑。拟定标题、摘要，提出有原文依据的结构建议或指出需人工核对的问题。仅提出建议，不生成正文或修改内容。
-只输出 {"title":"","summary":"","structure":[{"source_block_id":"原文块ID","text":"建议"}],"issues":[{"source_block_id":"原文块ID","text":"需要人工核对的问题"}]}。
+返回如下 JSON 对象：{"title":"","summary":"","structure":[{"source_block_id":"原文块ID","text":"建议"}],"issues":[{"source_block_id":"原文块ID","text":"需要人工核对的问题"}]}。
 标题最多100字，摘要最多256字，每条建议或问题最多240字，每类最多10条。同一类中每个块最多引用一次。使用纯文本，不输出样式、链接、素材地址、代码或Markdown。无需建议时使用空字符串或空数组。`
 
 var wechatSuggestionURL = regexp.MustCompile(`(?i)(?:[a-z][a-z0-9+.-]*://|\b(?:www\.|data:|mailto:|javascript:)|//\S|\b[^\s/]+\.(?:png|jpe?g|gif|webp|svg|avif)(?:\b|$))`)

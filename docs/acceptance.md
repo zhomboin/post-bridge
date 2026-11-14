@@ -169,7 +169,7 @@ PostBridge 支持 CSDN Markdown 草稿及受控图片转存，并提供管理员
 
 ## 环境证据
 
-- 本地运行环境为 Ubuntu 24.04.4 WSL；Linux Node.js 22.22.1/npm 10.9.4 与项目私有 PostgreSQL 16.15 已用于真实运行；当前项目要求 Go 1.26.10，工具链兼容性与生产验收分开记录。
+- 本地运行环境为 Ubuntu 24.04.4 WSL；Linux Node.js 22.22.1/npm 10.9.4 与项目私有 PostgreSQL 16.15 已用于真实运行；当前项目要求 Go 1.26.11，工具链兼容性与生产验收分开记录。
 - Playwright 1.64.1，当前实测浏览器 Google Chrome for Testing 156.0.8078.4；安装 Noto CJK 后中文窗口由用户确认正常。首次平台登录、同目录关闭重开及会话读取已通过。
 - 项目数据库使用本地私有配置；无关数据库服务保持不动。Docker 与生产远程入口未验收，资源快照和未验项见[平台能力](platform-capabilities.md)。
 
@@ -177,7 +177,7 @@ PostBridge 支持 CSDN Markdown 草稿及受控图片转存，并提供管理员
 
 | 检查 | 结果与边界 |
 | --- | --- |
-| Go 工具链 | Go 1.26.10 官方 SHA-256 与实际版本确认通过；API、E2E 数据库辅助程序及 Linux arm64 构建通过，go vet、11 项 API race 定向回归与依赖完整性检查通过；未变更第三方依赖，生产 TLS 与数据库连接仍需目标环境验收 |
+| Go 工具链 | API、开发入口、部署安装器及 CI 固定同一 Go 补丁版本。新版本构建、race 和依赖安全结果以当前 CI 为准；生产 TLS 与数据库连接需在目标环境验收 |
 | Go API | Go testing、真实 PostgreSQL 随机 schema 与 race 检查通过；覆盖幂等、账号互斥、失租、防重复、状态转换、候选 ID、人工结束、权限及正文保留 |
 | 前端 | 干净 npm ci 安装后 Vitest/Testing Library 行为用例通过，覆盖会话/CSRF、稳定请求标识、核对、取消恢复、日志安全与轮询清理 |
 | 执行器 | 本地真实 Chromium 模拟编辑器用例通过；覆盖晚到 ID、取消竞态、跨重启身份、只读请求阻断、精确保存按钮、实测响应结构及非草稿状态拒绝 |

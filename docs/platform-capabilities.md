@@ -57,7 +57,7 @@ CSDN 证据日期：2026-11-04；小红书检查日期：2026-11-08（Asia/Shang
 | Windows 工具 | Git 2.45.1、Node.js 22.22.1、npm 11.11.0、Windows Go、Python 3.11.5；不能替代 Linux 工具验证 |
 | WSL 系统与资源 | Ubuntu 24.04.4 LTS，WSL2 内核 6.18.54.1；32 逻辑 CPU；内存总量 7937 MiB、可用 5972 MiB；交换空间 2048 MiB |
 | 磁盘 | WSL 显示总量 1007 G、可用 932 G，属于虚拟容量；虚拟盘所在宿主 D: 卷总量 839.5 GiB、采样可用 548.5 GiB；实际空间不能按 WSL 显示余量保证 |
-| WSL 工具 | Git 2.43.0、Python 3 可用；用户私有工具目录安装官方 Linux Node.js 22.22.1，使用绝对路径调用，未加入全局 PATH；项目构建要求 Linux Go 1.26.10，安装步骤见[本地开发](development.md)；私有 Linux npm 10.9.4 与 PostgreSQL 16.15 已用于本地运行，开发入口直接在 WSL Bash 中执行 |
+| WSL 工具 | Git 2.43.0、Python 3 可用；用户私有工具目录安装官方 Linux Node.js 22.22.1，使用绝对路径调用，未加入全局 PATH；项目构建要求 Linux Go 1.26.11，安装步骤见[本地开发](development.md)；私有 Linux npm 10.9.4 与 PostgreSQL 16.15 已用于本地运行，开发入口直接在 WSL Bash 中执行 |
 | 浏览器工具 | @playwright/cli 0.1.23，依赖 Playwright 1.65.0-alpha-2026-10-30；实际使用既有缓存 Chromium 1248，1248 为缓存标识 |
 | 浏览器依赖与版本 | libnspr4 2:4.35-1.1build1、libnss3 2:3.98-1ubuntu0.3、libasound2t64 1.2.11-1ubuntu0.3 已安装；版本查询为 Google Chrome for Testing 156.0.8078.4，退出码 0 |
 | 中文显示 | 中文乱码根因为缺少中文字体：诊断时中文字体列表为空并回退 DejaVu Sans；CSDN 响应、页面元信息及 DOM 均为 UTF-8。已安装 fonts-noto-cjk 1:20230817+repack1-3，中文字体匹配 Noto Sans CJK SC；本地无账号中文页截图检查正常，用户亦确认窗口中文正常，测试截图已删除 |

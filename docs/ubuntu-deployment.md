@@ -10,7 +10,7 @@
 
 命令逐条执行，失败后先排查，不继续后续步骤。“〈…〉”全部替换为目标环境值；真实账号、地址、目录、连接和密钥只保存在目标机器的私有配置中。安装、停止、启动、升级及 Nginx 重载会修改系统或影响服务，应由管理员确认目标、备份及操作时机后执行。
 
-管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.10，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg 或远程桌面；基础功能无需模型密钥，可选 DeepSeek 格式化单独配置。
+管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.11，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg 或远程桌面；基础功能无需模型密钥，可选 DeepSeek 格式化单独配置。
 
 小红书资料统计与正文图片只读不增加必填环境变量；API 启动时建立按账号保护的正文缓存表。仍须按本页步骤备份数据库、配置和全部账号会话后升级。升级后选择对应账号同步笔记，核对资料与统计；只有已有真实笔记才能验收正文读取，见[只读工作台](xiaohongshu-readonly.md)。
 
@@ -325,7 +325,7 @@ sudo ./scripts/ubuntu-deploy.sh upgrade --config '〈仓库外私有配置文件
 
 首次启用用户隔离时，必须沿用 ADMIN_USERNAME 和全部私有配置。API 初始化事务将已有账号、文章、任务和来源归入该管理员；保留标识、内容、请求去重和有效平台会话。迁移失败不得清库重试，按私有日志处理；成功后用管理员核对原有记录，再创建普通用户检验各自账号列表。新账号目录位于 worker 私有状态中的 managed 根目录，备份 var/lib/post-bridge 时一并保留。
 
-upgrade 会下载并校验 Go 1.26.10，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
+upgrade 会下载并校验 Go 1.26.11，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
 
 安装器不会覆盖已存在的 /etc/post-bridge/nginx.conf，也不会更新启用站点；仅当本次需要调整 Nginx 时，人工核对模板并编辑实际站点，再校验和重载：
 
@@ -365,7 +365,7 @@ sudo journalctl --unit nginx --lines 100 --no-pager
 | 位置 | 所有权与用途 |
 | --- | --- |
 | /opt/post-bridge/releases 与 current | root 管理的代码快照及当前指向；服务不能改写代码 |
-| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.10；下载校验后使用 |
+| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.11；下载校验后使用 |
 | /etc/post-bridge | root 私有配置目录，配置及服务环境文件 0600 |
 | /var/lib/post-bridge/api | 独立 API 用户的 0700 目录；后台密码与内部密钥 0600 |
 | /var/lib/post-bridge/worker/profile | 独立执行器用户的 0700 持久浏览器目录；升级保留，不与本地登录助手或其他项目共享 |

@@ -34,7 +34,7 @@ STATE = Path("/var/lib/post-bridge")
 BROWSERS = Path("/var/cache/post-bridge/ms-playwright")
 NODE = "22.22.1"
 NPM = "10.9.4"
-GO = "1.26.10"
+GO = "1.26.11"
 PLAYWRIGHT = "1.64.1"
 UNITS = ["post-bridge-api.service", "post-bridge-worker.service"]
 
