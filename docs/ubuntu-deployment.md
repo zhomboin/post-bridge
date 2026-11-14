@@ -10,14 +10,14 @@
 
 命令逐条执行，失败后先排查，不继续后续步骤。“〈…〉”全部替换为目标环境值；真实账号、地址、目录、连接和密钥只保存在目标机器的私有配置中。安装、停止、启动、升级及 Nginx 重载会修改系统或影响服务，应由管理员确认目标、备份及操作时机后执行。
 
-管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.10，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg 或远程桌面；基础功能无需模型密钥，可选 DeepSeek 格式化单独配置。
+管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.11，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg 或远程桌面；基础功能无需模型密钥，可选 DeepSeek 格式化单独配置。
 
 小红书资料统计与正文图片只读不增加必填环境变量；API 启动时建立按账号保护的正文缓存表。仍须按本页步骤备份数据库、配置和全部账号会话后升级。升级后选择对应账号同步笔记，核对资料与统计；只有已有真实笔记才能验收正文读取，见[只读工作台](xiaohongshu-readonly.md)。
 
 | 操作 | 命令 | 行为 |
 | --- | --- | --- |
 | 首次配置 | sudo ./scripts/ubuntu-deploy.sh configure | 生成 root 所有、0600 的私有配置，已有文件不覆盖 |
-| 首次安装 | sudo ./scripts/ubuntu-deploy.sh install | 构建独立代码快照并启动 API、worker，启用 AI 时增加 formatter 单元 |
+| 首次安装 | sudo ./scripts/ubuntu-deploy.sh install | 构建独立代码快照并启动 API、worker，启用格式化时增加 formatter 单元 |
 | 检查 | sudo ./scripts/ubuntu-deploy.sh check | 检查部署标记、API、执行器及登录控制接口 |
 | 停止 | sudo ./scripts/ubuntu-deploy.sh stop | 停止登记的可选排版、执行器和 API；保留数据库、配置与账号会话 |
 | 再次启动 | sudo systemctl start post-bridge-api.service post-bridge-worker.service | 启动已有部署，不重建代码 |
@@ -325,7 +325,7 @@ sudo ./scripts/ubuntu-deploy.sh upgrade --config '〈仓库外私有配置文件
 
 首次启用用户隔离时，必须沿用 ADMIN_USERNAME 和全部私有配置。API 初始化事务将已有账号、文章、任务和来源归入该管理员；保留标识、内容、请求去重和有效平台会话。迁移失败不得清库重试，按私有日志处理；成功后用管理员核对原有记录，再创建普通用户检验各自账号列表。新账号目录位于 worker 私有状态中的 managed 根目录，备份 var/lib/post-bridge 时一并保留。
 
-upgrade 会下载并校验 Go 1.26.10，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
+upgrade 会下载并校验 Go 1.26.11，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
 
 安装器不会覆盖已存在的 /etc/post-bridge/nginx.conf，也不会更新启用站点；仅当本次需要调整 Nginx 时，人工核对模板并编辑实际站点，再校验和重载：
 
@@ -365,7 +365,7 @@ sudo journalctl --unit nginx --lines 100 --no-pager
 | 位置 | 所有权与用途 |
 | --- | --- |
 | /opt/post-bridge/releases 与 current | root 管理的代码快照及当前指向；服务不能改写代码 |
-| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.10；下载校验后使用 |
+| /opt/post-bridge/tools | 固定 Node.js 22.22.1、npm 10.9.4、Go 1.26.11；下载校验后使用 |
 | /etc/post-bridge | root 私有配置目录，配置及服务环境文件 0600 |
 | /var/lib/post-bridge/api | 独立 API 用户的 0700 目录；后台密码与内部密钥 0600 |
 | /var/lib/post-bridge/worker/profile | 独立执行器用户的 0700 持久浏览器目录；升级保留，不与本地登录助手或其他项目共享 |
@@ -415,9 +415,39 @@ sudoedit /etc/post-bridge/install.json
 
 install.json 中 API_PLATFORM_ACCOUNTS_FILE 和 WORKER_PLATFORM_ACCOUNTS_FILE 分别填写上述文件位置。按第六节备份并执行 upgrade，再运行 check，登录对应用户检查账号及只读同步。不要仅启动旧部署以为新配置已生效；不要把包含真实身份与目录的文件提交到 Git。
 
+## 公众号本地转换
+
+以下命令在目标服务器 Bash 执行。先按本页备份数据库和私有配置，选择维护窗口；本地转换不需要模型密钥，也不会创建公众号远端草稿。
+
+1. 编辑私有部署配置，在现有 JSON 对象中增加布尔字段 `CONTENT_FORMATTING_ENABLED`，值为 `true`；不要改变账号和数据库配置。
+
+```bash
+sudoedit /etc/post-bridge/install.json
+```
+
+2. 已部署环境执行升级；首次安装按本页完整安装步骤执行 install。检查 API、worker 和 formatter 状态：
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh upgrade
+sudo ./scripts/ubuntu-deploy.sh check
+sudo systemctl status post-bridge-api.service post-bridge-worker.service post-bridge-formatter.service --no-pager
+```
+
+3. 在后台用合成原稿生成公众号本地稿，核对预览、问题和复制结果。检查不代表真实公众号或生产验收通过。
+
+4. 停止和重新启动已启用的服务：
+
+```bash
+sudo ./scripts/ubuntu-deploy.sh stop
+sudo systemctl start post-bridge-formatter.service post-bridge-api.service post-bridge-worker.service
+sudo ./scripts/ubuntu-deploy.sh check
+```
+
+关闭时将 `CONTENT_FORMATTING_ENABLED` 设为 `false` 并按本页升级；同时启用 AI 格式化时排版服务继续运行。升级前后仍按本页备份、核对权限和健康状态。
+
 ## DeepSeek 格式化
 
-可选服务不改变基础草稿与来源流程。以下命令在目标服务器 Bash 执行；启用会发送获授权的原稿到 DeepSeek。先按本页备份数据库与私有配置，再选择维护窗口。
+以下命令在目标服务器 Bash 执行。启用后，CSDN、小红书和公众号 AI 辅助使用 DeepSeek；公众号 AI 建议需逐篇授权，保真排版可独立启用。先按本页备份数据库与私有配置，再选择维护窗口。
 
 1. 准备 root 私有模型配置目录。从终端隐藏输入已有 DeepSeek 密钥，脚本生成私有配置；密钥不进入命令参数或仓库：
 

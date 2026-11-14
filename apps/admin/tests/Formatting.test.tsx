@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import FormattingPanel from '../src/FormattingPanel';
+import FormattingNew from '../src/FormattingNew';
+import WechatFormatting from '../src/WechatFormatting';
 import { FormattingDetail } from '../src/FormattingPages';
 import { WorkspaceContext, type Api } from '../src/runtime';
 import type { FormattingJob, FormattingOutput } from '../src/formatting-contract';
@@ -64,6 +66,205 @@ function workspace(child: React.ReactNode, handler: (path: string, init?: Reques
   return api;
 }
 afterEach(() => vi.useRealTimers());
+it('仅启用本地转换时默认选择公众号并隐藏未启用的 AI 平台', async () => {
+  workspace(<FormattingNew />, (path) =>
+    path === '/api/formatting-capabilities'
+      ? { enabled: false, local_enabled: true }
+      : { items: [] },
+  );
+  expect(await screen.findByRole('option', { name: '微信公众号' })).toBeTruthy();
+  expect(screen.queryByRole('option', { name: 'CSDN' })).toBeNull();
+  expect(await screen.findByRole('button', { name: '生成公众号本地稿' })).toBeTruthy();
+});
+it('公众号本地稿不要求 AI 授权，可查看并确认当前修订', async () => {
+  const wechat: FormattingJob = {
+    ...job,
+    platform: 'wechat',
+    result: {
+      ...output,
+      wechat: { blocks: [{ source_block_id: 'b0-demo', html: '<p>完整正文。</p>' }], issues: [] },
+    },
+  };
+  const api = workspace(
+    <FormattingPanel source={source} platforms={['wechat']} />,
+    (path, init) => {
+      if (path === '/api/formatting-capabilities')
+        return { enabled: false, local_enabled: true, platforms: [] };
+      if (path === '/api/formatting-sessions') return { id: 'session-one' };
+      if (path.endsWith('/confirm')) return { ...wechat, status: 'adopted', confirmed: true };
+      if (path.endsWith('/jobs') && init?.method === 'POST') return wechat;
+      return wechat;
+    },
+  );
+  fireEvent.click(await screen.findByRole('button', { name: '生成公众号本地稿' }));
+  expect((await screen.findByTitle('公众号本地稿预览')).getAttribute('sandbox')).toBe('');
+  const session = vi.mocked(api).mock.calls.find(([path]) => path === '/api/formatting-sessions');
+  expect(JSON.parse(String(session?.[1]?.body))).toMatchObject({
+    allow_ai_processing: false,
+    platforms: ['wechat'],
+  });
+  fireEvent.click(screen.getByRole('button', { name: '确认本地稿' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      '/api/formatting-jobs/format-one/confirm',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ revision: 1 }) }),
+    ),
+  );
+});
+it('公众号存在阻断问题时保留预览并不允许确认', async () => {
+  const wechat: FormattingJob = {
+    ...job,
+    platform: 'wechat',
+    status: 'needs_review',
+    result: {
+      ...output,
+      wechat: {
+        blocks: [{ source_block_id: 'b0-demo', html: '<p>部分正文</p>' }],
+        issues: [
+          { code: 'image_unavailable', field: 'b0-demo', message: '图片需要核对', blocking: true },
+        ],
+      },
+    },
+  };
+  workspace(<FormattingPanel source={source} platforms={['wechat']} />, (path, init) => {
+    if (path === '/api/formatting-capabilities')
+      return { enabled: false, local_enabled: true, platforms: [] };
+    if (path === '/api/formatting-sessions') return { id: 'session-one' };
+    if (path.endsWith('/jobs') && init?.method === 'POST') return wechat;
+    return wechat;
+  });
+  fireEvent.click(await screen.findByRole('button', { name: '生成公众号本地稿' }));
+  expect(await screen.findByText(/图片需要核对/)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: '确认本地稿' })).toBeNull();
+});
+it('编辑公众号候选并选择本地素材后提交新修订', async () => {
+  const wechat: FormattingJob = {
+    ...job,
+    platform: 'wechat',
+    status: 'needs_review',
+    result: {
+      ...output,
+      wechat: {
+        blocks: [{ source_block_id: 'b0-sample', html: '<p>正文</p>' }],
+        issues: [],
+        candidate_markdown: '原始正文',
+        images: [
+          {
+            id: 'b0-sample:0',
+            source_block_id: 'b0-sample',
+            source: 'https://example.test/a.png',
+            alt: '合成图',
+          },
+        ],
+      },
+    },
+  };
+  const api = workspace(
+    <FormattingPanel source={source} platforms={['wechat']} />,
+    (path, init) => {
+      if (path === '/api/formatting-capabilities') return { enabled: false, local_enabled: true };
+      if (path === '/api/formatting-sessions') return { id: 'session-one' };
+      if (path.endsWith('/wechat') && init?.method === 'PUT')
+        return { ...wechat, revision: 2, operation: 'wechat_edit', status: 'queued' };
+      return wechat;
+    },
+  );
+  fireEvent.click(await screen.findByRole('button', { name: '生成公众号本地稿' }));
+  fireEvent.click(await screen.findByRole('button', { name: '编辑候选稿' }));
+  fireEvent.change(screen.getByLabelText('候选稿 Markdown'), { target: { value: '修改后的正文' } });
+  fireEvent.change(screen.getByLabelText('选择第 1 张图片'), {
+    target: { files: [new File(['synthetic'], 'example.png', { type: 'image/png' })] },
+  });
+  await screen.findByRole('button', { name: '移除第 1 张素材' });
+  expect(screen.queryByRole('button', { name: '确认本地稿' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '保存并重新排版' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      '/api/formatting-jobs/format-one/wechat',
+      expect.objectContaining({ method: 'PUT' }),
+    ),
+  );
+  const request = vi.mocked(api).mock.calls.find(([path]) => path.endsWith('/wechat'));
+  expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+    revision: 1,
+    markdown: '修改后的正文',
+    attachments: [{ image_id: 'b0-sample:0', data: 'c3ludGhldGlj' }],
+  });
+});
+it('编辑公众号候选时不能确认尚未保存的内容', async () => {
+  const wechat: FormattingJob = {
+    ...job,
+    platform: 'wechat',
+    result: {
+      ...output,
+      wechat: {
+        blocks: [{ source_block_id: 'b0', html: '<p>原文</p>' }],
+        issues: [],
+        candidate_markdown: '原文',
+      },
+    },
+  };
+  workspace(<FormattingPanel source={source} platforms={['wechat']} />, (path) => {
+    if (path === '/api/formatting-capabilities') return { enabled: false, local_enabled: true };
+    if (path === '/api/formatting-sessions') return { id: 'session-one' };
+    return wechat;
+  });
+  fireEvent.click(await screen.findByRole('button', { name: '生成公众号本地稿' }));
+  fireEvent.click(await screen.findByRole('button', { name: '编辑候选稿' }));
+  expect(screen.queryByRole('button', { name: '确认本地稿' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '取消编辑' }));
+  expect(screen.getByRole('button', { name: '确认本地稿' })).toBeTruthy();
+});
+it('重新排版失败后隐藏旧预览并允许修订失败的候选稿', () => {
+  const wechat: FormattingJob = {
+    ...job,
+    platform: 'wechat',
+    revision: 2,
+    operation: 'wechat_edit',
+    status: 'failed',
+    error_code: 'wechat_image_changed',
+    result: {
+      ...output,
+      wechat: {
+        blocks: [{ source_block_id: 'b0', html: '<p>旧版预览</p>' }],
+        issues: [],
+        candidate_markdown: '待重排的正文',
+      },
+    },
+  };
+  workspace(<WechatFormatting job={wechat} onChange={vi.fn()} />, () => wechat);
+  expect(screen.queryByTitle('公众号本地稿预览')).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '复制排版内容' }).disabled).toBe(
+    true,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '编辑候选稿' }));
+  expect(screen.getByLabelText<HTMLTextAreaElement>('候选稿 Markdown').value).toBe('待重排的正文');
+});
+it('公众号原稿信息迟到时不覆盖正在编辑的候选稿', () => {
+  const wechat: FormattingJob = {
+    ...job,
+    platform: 'wechat',
+    result: {
+      ...output,
+      wechat: {
+        blocks: [{ source_block_id: 'b0', html: '<p>原文</p>' }],
+        issues: [],
+        candidate_markdown: '原文',
+      },
+    },
+  };
+  const api = vi.fn() as Api;
+  const view = (original: string) => (
+    <WorkspaceContext.Provider value={{ api, route: '/formatting/sample', navigate: vi.fn() }}>
+      <WechatFormatting job={wechat} onChange={vi.fn()} originalMarkdown={original} />
+    </WorkspaceContext.Provider>
+  );
+  const rendered = render(view(''));
+  fireEvent.click(screen.getByRole('button', { name: '编辑候选稿' }));
+  fireEvent.change(screen.getByLabelText('候选稿 Markdown'), { target: { value: '正在修改' } });
+  rendered.rerender(view('迟到的原稿'));
+  expect((screen.getByLabelText('候选稿 Markdown') as HTMLTextAreaElement).value).toBe('正在修改');
+});
 it('生成结果需明确采用，原稿不会在生成后自动替换', async () => {
   const adopted = vi.fn();
   const api = workspace(<FormattingPanel source={source} onAdopt={adopted} />, (path, init) => {

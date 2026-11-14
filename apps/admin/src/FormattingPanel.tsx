@@ -31,13 +31,24 @@ export default function FormattingPanel({
 }) {
   const { api } = useWorkspace();
   const action = useAction();
-  const [capabilities, setCapabilities] = useState<{ enabled: boolean; platforms: string[] }>();
+  const [capabilities, setCapabilities] = useState<{
+    enabled: boolean;
+    local_enabled?: boolean;
+    platforms: string[];
+    modes?: Record<string, string[]>;
+  }>();
   const [jobID, setJobID] = useState<string>();
   const [sessionID, setSessionID] = useState<string>();
   const [platform, setPlatform] = useState(platforms[0] || 'csdn');
   const [template, setTemplate] = useState('technical');
+  const [wechatAI, setWechatAI] = useState(false);
+  const [consent, setConsent] = useState(false);
   const available = platforms.includes(platform) ? platform : platforms[0] || 'csdn';
-  const sourceKey = JSON.stringify([source, available]);
+  const wechat = available === 'wechat';
+  const offersWechatAI = wechat && capabilities?.modes?.wechat?.includes('ai_assisted');
+  const assisted = !!offersWechatAI && wechatAI;
+  const mode = assisted ? 'ai_assisted' : 'fidelity';
+  const sourceKey = JSON.stringify([source, available, wechat ? mode : null, assisted && consent]);
   const activeSource = useRef(sourceKey);
   activeSource.current = sourceKey;
   const started = useRef(false);
@@ -49,7 +60,7 @@ export default function FormattingPanel({
   const resource = useFormattingJob(jobID);
   useEffect(() => {
     const controller = new AbortController();
-    void api<{ enabled: boolean; platforms: string[] }>('/api/formatting-capabilities', {
+    void api<NonNullable<typeof capabilities>>('/api/formatting-capabilities', {
       signal: controller.signal,
     })
       .then((result) => {
@@ -64,6 +75,9 @@ export default function FormattingPanel({
     started.current = false;
     request.current = { source: sourceKey, session: crypto.randomUUID(), job: crypto.randomUUID() };
   }, [sourceKey]);
+  useEffect(() => {
+    setConsent(false);
+  }, [source.snapshot?.title, source.snapshot?.body]);
   useEffect(() => {
     if (!source.preparation_id) return;
     const controller = new AbortController();
@@ -88,8 +102,8 @@ export default function FormattingPanel({
   }, [api, source.preparation_id, sourceKey, available]);
   async function generate() {
     const expected = sourceKey;
+    if (disabled || !authorized || (assisted && !consent)) return;
     started.current = true;
-    if (disabled || !authorized) return;
     if (resource.job && !['queued', 'running'].includes(resource.job.status))
       request.current.job = crypto.randomUUID();
     let id = sessionID;
@@ -101,7 +115,8 @@ export default function FormattingPanel({
             ...source,
             request_id: request.current.session,
             platforms: [available],
-            allow_ai_processing: true,
+            allow_ai_processing: !wechat || assisted,
+            ...(wechat && { mode }),
           }),
           signal,
         }),
@@ -117,6 +132,7 @@ export default function FormattingPanel({
           request_id: request.current.job,
           platform: available,
           template: available === 'xiaohongshu' ? template : '',
+          ...(wechat && { mode }),
         }),
         signal,
       }),
@@ -126,12 +142,15 @@ export default function FormattingPanel({
       resource.setJob(job);
     }
   }
-  if (!capabilities?.enabled) return null;
+  if (!(available === 'wechat' ? capabilities?.local_enabled : capabilities?.enabled)) return null;
   const running = resource.job && ['queued', 'running'].includes(resource.job.status);
   return (
-    <section className="formatting-panel" aria-label="AI 格式化">
+    <section
+      className="formatting-panel"
+      aria-label={available === 'wechat' ? '公众号排版' : 'AI 格式化'}
+    >
       <div className="surface-header">
-        <h3>AI 格式化</h3>
+        <h3>{available === 'wechat' ? '公众号排版' : 'AI 格式化'}</h3>
         <div className="heading-actions">
           {platforms.length > 1 && (
             <label>
@@ -143,9 +162,25 @@ export default function FormattingPanel({
               >
                 {platforms.map((value) => (
                   <option key={value} value={value}>
-                    {value === 'csdn' ? 'CSDN' : '小红书'}
+                    {value === 'csdn' ? 'CSDN' : value === 'wechat' ? '微信公众号' : '小红书'}
                   </option>
                 ))}
+              </select>
+            </label>
+          )}
+          {offersWechatAI && (
+            <label>
+              处理模式
+              <select
+                value={mode}
+                disabled={!!running || action.pending}
+                onChange={(event) => {
+                  setWechatAI(event.target.value === 'ai_assisted');
+                  setConsent(false);
+                }}
+              >
+                <option value="fidelity">保真排版</option>
+                <option value="ai_assisted">AI 辅助建议</option>
               </select>
             </label>
           )}
@@ -164,24 +199,44 @@ export default function FormattingPanel({
           )}
           <button
             type="button"
-            disabled={disabled || !authorized || action.pending || !!running}
+            disabled={
+              disabled || !authorized || action.pending || !!running || (assisted && !consent)
+            }
             onClick={() => void generate()}
           >
             {action.pending
               ? '正在创建…'
               : jobID
                 ? '重新生成'
-                : available === 'csdn'
-                  ? '生成CSDN平台稿'
-                  : '生成小红书图文'}
+                : available === 'wechat'
+                  ? '生成公众号本地稿'
+                  : available === 'csdn'
+                    ? '生成CSDN平台稿'
+                    : '生成小红书图文'}
           </button>
         </div>
       </div>
+      {assisted && (
+        <label className="formatting-consent">
+          <input
+            type="checkbox"
+            checked={consent}
+            disabled={!!running || action.pending}
+            onChange={(event) => setConsent(event.target.checked)}
+          />
+          允许 DeepSeek 处理本篇原稿
+        </label>
+      )}
       {!authorized && <div className="notice">来源尚未授权 AI 处理。</div>}
       {(action.error || resource.error) && (
         <div className="notice error" role="alert">
           {action.error || resource.error}
         </div>
+      )}
+      {resource.error && jobID && (
+        <button type="button" onClick={resource.reload}>
+          重试读取
+        </button>
       )}
       {resource.job && (
         <FormattingResult
@@ -189,6 +244,7 @@ export default function FormattingPanel({
           onChange={resource.setJob}
           onAdopt={onAdopt}
           sourcePreparation={!!source.preparation_id}
+          originalMarkdown={source.snapshot?.body}
         />
       )}
     </section>

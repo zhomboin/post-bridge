@@ -33,6 +33,48 @@ export interface FormattingAsset {
   height: number;
   url: string;
 }
+export interface WechatBlock {
+  source_block_id: string;
+  html: string;
+}
+export interface WechatImage {
+  id: string;
+  source_block_id: string;
+  source: string;
+  alt: string;
+}
+export interface WechatResult {
+  blocks: WechatBlock[];
+  issues: FormattingIssue[];
+  images?: WechatImage[] | null;
+  candidate_markdown?: string | null;
+  attachments?: WechatAttachment[] | null;
+  suggestions?: WechatSuggestions | null;
+}
+export interface WechatSuggestion {
+  source_block_id: string;
+  text: string;
+}
+export interface WechatSuggestions {
+  title: string;
+  summary: string;
+  structure: WechatSuggestion[];
+  issues: WechatSuggestion[];
+}
+export interface WechatAttachment {
+  image_id: string;
+  sha256: string;
+  media_type: string;
+  data: string;
+}
+export interface FormattingBinding {
+  platform: string;
+  mode: string;
+  rules_version: string;
+  prompt_version: string;
+  model: string;
+  asset_fingerprint: string;
+}
 export interface FormattingOutput {
   title: string;
   summary: string;
@@ -46,6 +88,8 @@ export interface FormattingOutput {
   omissions: string[];
   issues: FormattingIssue[];
   assets: FormattingAsset[];
+  wechat?: WechatResult | null;
+  binding?: FormattingBinding | null;
 }
 export interface FormattingSession {
   id: string;
@@ -57,6 +101,7 @@ export interface FormattingSession {
   snapshot: FormattingSnapshot;
   platforms: string[];
   expires_at: string;
+  mode?: string | null;
 }
 export interface FormattingJob {
   id: string;
@@ -83,4 +128,5 @@ export interface FormattingJob {
   output_tokens: number;
   confirmed: boolean;
   confirmation_fingerprint: string;
+  mode?: string | null;
 }

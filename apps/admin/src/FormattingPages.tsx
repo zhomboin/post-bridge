@@ -31,8 +31,12 @@ export function FormattingList() {
               <span>
                 <strong>{job.title}</strong>
                 <br />
-                {job.platform === 'csdn' ? 'CSDN' : '小红书'} ·{' '}
-                {formattingLabels[job.status] || job.status}
+                {job.platform === 'csdn'
+                  ? 'CSDN'
+                  : job.platform === 'wechat'
+                    ? '微信公众号'
+                    : '小红书'}{' '}
+                · {formattingLabels[job.status] || job.status}
               </span>
               <span>{time(job.created_at)}</span>
             </RouteLink>
@@ -60,12 +64,16 @@ export function FormattingList() {
 export function FormattingDetail({ id }: { id: string }) {
   const { api } = useWorkspace();
   const resource = useFormattingJob(id);
+  const sessionID = resource.job?.session_id;
   const [session, setSession] = useState<FormattingSession>();
   const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
-    if (!resource.job) return;
+    setSession(undefined);
+    setError('');
+    if (!sessionID) return;
     const controller = new AbortController();
-    void api<FormattingSession>('/api/formatting-sessions/' + resource.job.session_id, {
+    void api<FormattingSession>('/api/formatting-sessions/' + encodeURIComponent(sessionID), {
       signal: controller.signal,
     })
       .then((result) => {
@@ -75,31 +83,41 @@ export function FormattingDetail({ id }: { id: string }) {
         if (!controller.signal.aborted) setError(errorText(e));
       });
     return () => controller.abort();
-  }, [api, resource.job?.session_id]);
+  }, [api, sessionID, refresh]);
+  const snapshot = session?.id === sessionID ? session?.snapshot : undefined;
   return (
     <div className="page">
       <RouteLink href="/formatting" className="back-link">
         返回格式化稿
       </RouteLink>
       <div className="page-heading">
-        <h1>{session?.snapshot.title || '格式化稿'}</h1>
+        <h1>{snapshot?.title || '格式化稿'}</h1>
       </div>
       {(error || resource.error) && (
         <div className="notice error" role="alert">
-          {error || resource.error}
+          {resource.error || error}
+          <button
+            type="button"
+            onClick={() => {
+              if (resource.error) resource.reload();
+              else setRefresh((value) => value + 1);
+            }}
+          >
+            重试读取
+          </button>
         </div>
       )}
       {!resource.job ? (
         <Empty loading={!resource.error}>暂时无法读取</Empty>
       ) : (
         <div className="formatting-columns">
-          {session && (
+          {snapshot && (
             <section className="surface">
               <div className="surface-header">
                 <h2>原稿</h2>
               </div>
               <div className="surface-body">
-                <pre className="formatting-original">{session.snapshot.body}</pre>
+                <pre className="formatting-original">{snapshot.body}</pre>
               </div>
             </section>
           )}
@@ -111,7 +129,8 @@ export function FormattingDetail({ id }: { id: string }) {
               <FormattingResult
                 job={resource.job}
                 onChange={resource.setJob}
-                sourcePreparation={!!session?.preparation_id}
+                sourcePreparation={!!session?.preparation_id || !snapshot}
+                originalMarkdown={snapshot?.body}
               />
               {session?.preparation_id && (
                 <RouteLink href={'/integration-preparations/' + session.preparation_id}>

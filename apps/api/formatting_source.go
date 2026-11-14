@@ -24,10 +24,40 @@ type formattingSessionInput struct {
 	Snapshot          FormattingSnapshot `json:"snapshot"`
 	Platforms         []string           `json:"platforms"`
 	AllowAIProcessing bool               `json:"allow_ai_processing"`
+	Mode              string             `json:"mode,omitempty"`
+}
+
+const (
+	formattingFidelity = "fidelity"
+	formattingAI       = "ai_assisted"
+)
+
+func formattingMode(platform string, mode *string) string {
+	if mode != nil {
+		return *mode
+	}
+	if platform == "wechat" {
+		return formattingFidelity
+	}
+	return formattingAI
+}
+
+func (c FormattingConfig) supportsMode(mode string) bool {
+	switch mode {
+	case formattingAI:
+		return c.Enabled
+	case formattingFidelity:
+		return c.LocalEnabled || c.Enabled
+	default:
+		return false
+	}
 }
 
 func formattingPlatformsValid(platforms []string) bool {
 	return len(platforms) > 0 && len(platforms) <= 2 && integrationSubset(platforms, []string{"csdn", "xiaohongshu"})
+}
+func formattingLocalPlatformsValid(platforms []string) bool {
+	return formattingPlatformsValid(platforms) || len(platforms) == 1 && platforms[0] == "wechat"
 }
 func formattingAuthorizationValid(c IntegrationClient, a *FormattingAuthorization) bool {
 	return a != nil && a.AllowAIProcessing && c.AIProcessingAllowed && formattingPlatformsValid(a.Platforms) && integrationSubset(a.Platforms, c.FormattingPlatforms)
@@ -81,8 +111,32 @@ func (h *handler) formattingSourceGuard(ctx context.Context, tx pgx.Tx, s Format
 }
 func (h *handler) createFormattingSession(ctx context.Context, in formattingSessionInput) (FormattingSession, error) {
 	var out FormattingSession
-	if !in.AllowAIProcessing || !validKey(in.RequestID) || !formattingPlatformsValid(in.Platforms) || scopeOf(ctx).UserID == "" {
+	wechat := len(in.Platforms) == 1 && in.Platforms[0] == "wechat"
+	mode := in.Mode
+	if mode == "" {
+		mode = formattingAI
+		if wechat {
+			mode = formattingFidelity
+		}
+	}
+	if !validKey(in.RequestID) || !formattingLocalPlatformsValid(in.Platforms) || scopeOf(ctx).UserID == "" ||
+		(mode != formattingAI && mode != formattingFidelity) || (!wechat && mode != formattingAI) ||
+		(wechat && in.PreparationID != "") {
 		return out, ErrInvalid
+	}
+	if mode == formattingAI && !in.AllowAIProcessing {
+		if !wechat {
+			return out, ErrInvalid
+		}
+		return out, ErrIntegrationPermission
+	}
+	if !h.formattingConfig.supportsMode(mode) {
+		return out, ErrIntegrationPermission
+	}
+	// 显式选择与旧默认相同时沿用原请求指纹。
+	in.Mode = ""
+	if wechat && mode == formattingAI {
+		in.Mode = mode
 	}
 	err := h.store.locked(ctx, func(tx pgx.Tx, now time.Time) error {
 		var raw []byte
@@ -139,7 +193,11 @@ func (h *handler) createFormattingSession(ctx context.Context, in formattingSess
 			if !validFormattingText(snapshot.Title, 100) || snapshot.Title == "" {
 				return ErrInvalid
 			}
-			if e := ValidateCreate(CreateInput{RequestID: "formatting", Platform: "csdn", Kind: "save_draft", Title: "格式化原稿校验", Markdown: snapshot.Body}); e != nil {
+			if wechat || len(in.Platforms) == 1 && in.Platforms[0] == "xiaohongshu" {
+				if strings.TrimSpace(snapshot.Body) == "" || !validFormattingText(snapshot.Body, 100000) {
+					return ErrInvalid
+				}
+			} else if e := ValidateCreate(CreateInput{RequestID: "formatting", Platform: "csdn", Kind: "save_draft", Title: "格式化原稿校验", Markdown: snapshot.Body}); e != nil {
 				return e
 			}
 			for _, tag := range snapshot.Tags {
@@ -162,7 +220,7 @@ func (h *handler) createFormattingSession(ctx context.Context, in formattingSess
 		if count >= 100 {
 			return formattingError("formatting_quota")
 		}
-		out = FormattingSession{ID: randomToken(), PreparationID: in.PreparationID, AccountID: in.AccountID, ContentFingerprint: fp, BaseRevision: in.BaseRevision, Revision: 1, Snapshot: snapshot, Platforms: in.Platforms, ExpiresAt: expiry.Format(time.RFC3339Nano)}
+		out = FormattingSession{ID: randomToken(), PreparationID: in.PreparationID, AccountID: in.AccountID, ContentFingerprint: fp, BaseRevision: in.BaseRevision, Revision: 1, Snapshot: snapshot, Platforms: in.Platforms, ExpiresAt: expiry.Format(time.RFC3339Nano), Mode: &mode}
 		if e = h.formattingSourceGuard(ctx, tx, out); e != nil {
 			return e
 		}

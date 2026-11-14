@@ -6,6 +6,7 @@
 - [账号归属与认证存储](account-ownership.md)：用户隔离、平台会话、连接撤销及已有数据迁移。
 - [内容平台接入](content-platforms.md)：公共内容服务、平台注册、共享契约、同步规则及合成平台验证。
 - [AI 平台稿格式化](ai-formatting.md)：DeepSeek、CSDN 采用保存、小红书图文素材、授权与配额。
+- [多平台内容转换方案](platform-formatting-design.md)及[实施计划](plans/platform-formatting.md)：CSDN 效果对照、公众号本地稿和小红书图文改进；完成并确认后清理专项文档。
 - [平台账号管理](platform-accounts.md)：CSDN 与小红书账号切换、私有会话配置、登录检查及笔记只读同步。
 - [总体进度](progress.md)：代码、本地、真实平台与生产状态。
 - [验收记录](acceptance.md)：实际运行证据及未验边界。

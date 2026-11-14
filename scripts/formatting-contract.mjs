@@ -8,6 +8,8 @@ const name = (field) =>
     .map((part) => ({ id: 'ID', url: 'URL' })[part] || part[0].toUpperCase() + part.slice(1))
     .join('');
 function type(value, go = false) {
+  if (value.endsWith('~'))
+    return go ? '*' + type(value.slice(0, -1), true) : type(value.slice(0, -1)) + ' | null';
   if (value.endsWith('?'))
     return go ? '*' + type(value.slice(0, -1), true) : type(value.slice(0, -1)) + ' | null';
   if (value.endsWith('[]'))
@@ -24,8 +26,15 @@ for (const [model, fields] of Object.entries(definitions)) {
   go += 'type ' + model + ' struct {\n';
   ts += 'export interface ' + model + ' {\n';
   for (const [field, value] of Object.entries(fields)) {
-    go += name(field) + ' ' + type(value, true) + ' `json:"' + field + '"`\n';
-    ts += field + ': ' + type(value) + ';\n';
+    go +=
+      name(field) +
+      ' ' +
+      type(value, true) +
+      ' `json:"' +
+      field +
+      (value.endsWith('~') ? ',omitempty' : '') +
+      '"`\n';
+    ts += field + (value.endsWith('~') ? '?: ' : ': ') + type(value) + ';\n';
   }
   go += '}\n';
   ts += '}\n';

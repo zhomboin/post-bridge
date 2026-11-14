@@ -69,23 +69,8 @@ func TestIntegrationRuntimeStartsAndStopsWithoutWorker(t *testing.T) {
 	_ = probe.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	schemaName := store.pool.Config().ConnConfig.RuntimeParams["search_path"]
-	if !strings.HasPrefix(schemaName, "test_") || !validKey(schemaName) {
-		t.Fatal("运行验证必须显式绑定隔离schema")
-	}
-	connectionURL, err := url.Parse(store.pool.Config().ConnConfig.ConnString())
-	if err != nil {
-		t.Fatal("隔离运行库连接无法解析")
-	}
-	params := connectionURL.Query()
-	params.Set("search_path", schemaName)
-	connectionURL.RawQuery = params.Encode()
-	parsed, err := pgxpool.ParseConfig(connectionURL.String())
-	if err != nil || parsed.ConnConfig.RuntimeParams["search_path"] != schemaName {
-		t.Fatal("隔离schema未随连接串传递")
-	}
 	cfg := RuntimeConfig{
-		DatabaseURL:            connectionURL.String(),
+		DatabaseURL:            isolatedRuntimeDatabaseURL(t, store.pool.Config()),
 		Address:                address,
 		Origin:                 "https://bridge.example.test",
 		Username:               "admin",
@@ -138,4 +123,24 @@ func TestIntegrationRuntimeStartsAndStopsWithoutWorker(t *testing.T) {
 	if response.StatusCode != http.StatusUnauthorized {
 		t.Fatal("管理接入接口未受保护", response.StatusCode)
 	}
+}
+
+func isolatedRuntimeDatabaseURL(t *testing.T, config *pgxpool.Config) string {
+	t.Helper()
+	schemaName := config.ConnConfig.RuntimeParams["search_path"]
+	if !strings.HasPrefix(schemaName, "test_") || !validKey(schemaName) {
+		t.Fatal("运行验证必须显式绑定隔离 schema")
+	}
+	connectionURL, err := url.Parse(config.ConnConfig.ConnString())
+	if err != nil {
+		t.Fatal("隔离运行库连接无法解析")
+	}
+	params := connectionURL.Query()
+	params.Set("search_path", schemaName)
+	connectionURL.RawQuery = params.Encode()
+	parsed, err := pgxpool.ParseConfig(connectionURL.String())
+	if err != nil || parsed.ConnConfig.RuntimeParams["search_path"] != schemaName {
+		t.Fatal("隔离 schema 未随连接串传递")
+	}
+	return connectionURL.String()
 }

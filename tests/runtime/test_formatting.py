@@ -20,6 +20,32 @@ def load(name, path):
 
 
 class FormattingRuntimeTests(unittest.TestCase):
+    def test_local_conversion_without_model_credentials(self):
+        runtime = load("formatting_local_only", "scripts/runtime.py")
+        deploy = load("formatting_local_deploy", "scripts/ubuntu_deploy.py")
+        with tempfile.TemporaryDirectory() as temp:
+            config = runtime.formatting_runtime.prepare(
+                Path(temp),
+                {"CONTENT_FORMATTING_ENABLED": True, "AI_FORMATTING_ENABLED": False},
+                runtime.private_write,
+            )
+            with (
+                patch.object(runtime, "base_env", return_value={}),
+                patch.dict(os.environ, {"DEEPSEEK_API": "synthetic"}),
+            ):
+                api = runtime.child_env(config)
+            self.assertEqual(api["CONTENT_FORMATTING_ENABLED"], "true")
+            self.assertEqual(api["AI_FORMATTING_ENABLED"], "false")
+            self.assertNotIn("DEEPSEEK_API", api)
+            self.assertNotIn("AI_PROVIDER_CONFIG_FILE", api)
+        env = deploy.formatting_deploy.api_environment(
+            SimpleNamespace(STATE=Path("/private")),
+            {"CONTENT_FORMATTING_ENABLED": True},
+        )
+        self.assertEqual(env["CONTENT_FORMATTING_ENABLED"], "true")
+        self.assertNotIn("AI_PROVIDER_CONFIG_FILE", env)
+        self.assertNotIn("AI_FORMATTING_ENABLED", env)
+
     def test_local_key_is_api_only(self):
         runtime = load("formatting_local_runtime", "scripts/runtime.py")
         config = {

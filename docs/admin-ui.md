@@ -190,6 +190,12 @@
 | 缺少独立生成记录 | [格式化稿列表与详情](../apps/admin/src/FormattingPages.tsx)展示标题、状态、原稿与候选稿，支持分页 | 关闭页面后可恢复 |
 | 小红书缺少内容准备 | [图文编辑](../apps/admin/src/XiaohongshuFormatting.tsx)提供正文、封面、排序、拆分、重排和修订确认 | 文案与图片分别核对 |
 | 素材无法检查 | [卡片预览](../apps/admin/src/Formatting.css)在窄屏单列，提供下载 | 便于阅读，避免页面溢出 |
+| 没有公众号本地稿 | [公众号预览与确认](../apps/admin/src/WechatFormatting.tsx)，显示需核对的问题 | 在本地核对内容并复制，不推断远端状态 |
+| 图片只能显示占位 | [候选稿编辑与图片选择](../apps/admin/src/WechatFormatting.tsx)按原文位置关联用户选择的本地素材 | 修改后形成新修订并重新核对 |
+| 公众号只提供保真排版入口 | [处理模式与单篇授权](../apps/admin/src/FormattingPanel.tsx)按已启用能力提供可选 AI 辅助；修改原稿后需重新勾选 | 明确原稿的处理范围 |
+| 原稿和候选稿需要人工逐段比对 | [正文差异](../apps/admin/src/FormattingDifferences.tsx)按需展开并标出变化，[建议](../apps/admin/src/WechatSuggestionsView.tsx)按原稿段落定位 | 在核对区找到正文变化及建议 |
+| 读取失败后需要离开页面 | [任务详情](../apps/admin/src/FormattingPages.tsx)可就地重试；[编辑器](../apps/admin/src/WechatFormatting.tsx)进入编辑时聚焦候选稿，取消后返回编辑按钮 | 支持键盘连续操作 |
+| 重新排版失败后仍可预览和复制上一版正文 | [公众号编辑器](../apps/admin/src/WechatFormatting.tsx)等待当前修订排版成功或完成待核对结果，失败时可继续编辑 | 避免把上一版内容当作当前修订 |
 
 [浏览器用例](../tests/e2e/formatting.spec.ts)使用合成原稿及本项目渲染的图片，检查三种屏宽、键盘确认、Escape、减少动态效果与无隐式写入。合成截图：
 
@@ -197,3 +203,6 @@
 | --- | --- | --- | --- |
 | CSDN | [截图](assets/ai-formatting-csdn-1440.png) | [截图](assets/ai-formatting-csdn-390.png) | [截图](assets/ai-formatting-csdn-320.png) |
 | 小红书 | [截图](assets/ai-formatting-xiaohongshu-1440.png) | [截图](assets/ai-formatting-xiaohongshu-390.png) | [截图](assets/ai-formatting-xiaohongshu-320.png) |
+| 微信公众号 | [截图](assets/wechat-formatting-1440.png) | [截图](assets/wechat-formatting-390.png) | [截图](assets/wechat-formatting-320.png) |
+| 公众号编辑 | [截图](assets/wechat-edit-1440.png) | [截图](assets/wechat-edit-390.png) | [截图](assets/wechat-edit-320.png) |
+| 公众号差异与建议 | [截图](assets/wechat-review-1440.png) | [截图](assets/wechat-review-390.png) | [截图](assets/wechat-review-320.png) |

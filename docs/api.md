@@ -216,27 +216,30 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 
 发布操作复用原 CSDN 草稿标识。执行器提交前再次核对目标账号、文章和冻结设置。只有读回已发布状态才显示发布成功。平台已受理与结果未知分别记录，均按原任务只读核对。发布至少需要一个标签。转载或翻译需要单篇填写 HTTPS 原文链接并确认授权。自动选封面、定时发布、多平台发布与 GitCode 备份不属于此操作。
 
-## AI 格式化接口
+## 格式化接口
 
 全部属于登录用户管理接口，写入要求既有同源和 CSRF 校验，签名来源应用不能调用。任务及图片按用户隔离；新建与编辑要求可选功能已启用。
 
 | 接口 | 请求与结果 |
 | --- | --- |
-| GET /api/formatting-capabilities | 返回 enabled、目标平台、模板和原稿上限 |
-| POST /api/formatting-sessions | request_id、platforms、allow_ai_processing；本地提供 snapshot 和 CSDN account_id，来源提供 preparation_id、base_revision，服务端读取原稿 |
+| GET /api/formatting-capabilities | enabled 表示 AI 可用，local_enabled 表示公众号本地转换可用；modes 按平台列出可用模式，另返回 AI 目标平台、模板和原稿上限 |
+| POST /api/formatting-sessions | request_id、platforms、allow_ai_processing、可选 mode。本地提供 snapshot 和可选 CSDN account_id，来源提供 preparation_id、base_revision。公众号仅支持本地原稿，platforms 仅含 wechat；默认 fidelity，显式选择 ai_assisted 时要求 allow_ai_processing 为 true |
 | GET /api/formatting-sessions/{id} | 获取授权仍有效的原稿快照 |
 | GET /api/formatting-sessions/{id}/jobs | 当前会话任务摘要 |
-| POST /api/formatting-sessions/{id}/jobs | request_id、platform、template；返回 202，新请求排队，相同请求返回 200，内容不同返回 409 |
+| POST /api/formatting-sessions/{id}/jobs | request_id、platform、template、可选 mode；指定模式须与会话一致。公众号 platform 为 wechat、template 为空，fidelity 不预留模型额度。新请求返回 202，相同请求返回 200，内容不同返回 409 |
+| PUT /api/formatting-jobs/{id}/wechat | revision、request_id、markdown、attachments；关联用户明确选择的本地图片并生成新修订，重复请求按内容去重，不改写原稿 |
 | GET /api/formatting-jobs | page、page_size 分页；可按 preparation_id、platform 筛选，只返回摘要，不返回正文 |
 | GET /api/formatting-jobs/{id} | 状态、阶段、用量、版本及完整结果 |
 | POST /api/formatting-jobs/{id}/cancel | 取消活动任务，不重复请求未知模型结果 |
 | POST /api/formatting-jobs/{id}/adopt | revision；CSDN 明确采用，来源稿新建修订并清除旧确认 |
 | POST /api/formatting-jobs/{id}/csdn-draft | revision；仅本地 CSDN，冻结结果创建幂等 save_draft 任务 |
 | PUT /api/formatting-jobs/{id} | revision、request_id、template、output；只编辑小红书并排队重绘，不调用模型 |
-| POST /api/formatting-jobs/{id}/confirm | revision；确认当前小红书文字、图片摘要和顺序，不创建平台任务 |
+| POST /api/formatting-jobs/{id}/confirm | revision；确认当前小红书文字、图片摘要和顺序，或公众号本地稿、问题及规则版本，不创建平台任务 |
 | GET /api/formatting-assets/{id} | 私有 PNG；download=1 下载，授权失效或到期拒绝 |
 
-字段类型由 [格式化契约](../contracts/formatting-model.json)生成。状态为 queued、running、succeeded、needs_review、failed、cancelled、adopted；needs_review 表示容量等阻塞问题，需要调整。修订不匹配返回 409，用量或队列限制返回 429，未启用返回 503，内容校验失败返回 422。响应不包含模型密钥、原始异常或平台会话。详情与采用会重新核对来源授权；列表只有摘要。
+字段类型由 [格式化契约](../contracts/formatting-model.json)生成。公众号结果的 wechat 包含按原稿排序的内容块、图片映射、候选稿及问题；本地素材包含摘要和受保护的内容，缺少新字段的既有结果仍可读取。图片只接受 PNG 或 JPEG，最多 20 张、合计 4 MiB，并校验尺寸和文件内容；不访问来源地址。状态为 queued、running、succeeded、needs_review、failed、cancelled、adopted；needs_review 表示容量等阻塞问题，需要调整。修订不匹配返回 409，用量或队列限制返回 429，未启用返回 503，内容校验失败返回 422。响应不包含模型密钥、原始异常或平台会话。详情与采用会重新核对来源授权；列表只有摘要。
+
+CSDN、小红书的处理模式为 ai_assisted。公众号 AI 结果的 wechat.suggestions 仅含 title、summary、structure、issues；后两项包含 source_block_id 及 text。新结果的 binding 记录平台、模式、版本、模型与素材摘要。未配置的模式或未授权 AI 处理返回 403，未知模式或模式与会话不一致返回 400。重启后的失租任务以 processing_interrupted 结束，排队任务可继续执行。
 
 原稿、图片、额度和服务配置见 [AI 格式化](ai-formatting.md)。XHS 上传和发布没有对应接口。
 

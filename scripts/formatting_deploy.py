@@ -16,7 +16,10 @@ def enabled(config):
         raise ValueError("部署 AI_FORMATTING_ENABLED 需要布尔值")
     if value and not isinstance(config.get("AI_PROVIDER_CONFIG_FILE"), str):
         raise ValueError("启用格式化需要私有模型配置文件")
-    return value
+    local = config.get("CONTENT_FORMATTING_ENABLED", False)
+    if not isinstance(local, bool):
+        raise ValueError("部署 CONTENT_FORMATTING_ENABLED 需要布尔值")
+    return value or local
 
 
 def valid_manifest(value, units):
@@ -71,11 +74,12 @@ def prepare(deploy, config, api_user):
         if not path.exists():
             deploy.write_private(path, token)
         os.chown(path, owner.pw_uid, owner.pw_gid)
-    private_json(config["AI_PROVIDER_CONFIG_FILE"])
+    if config.get("AI_FORMATTING_ENABLED", False):
+        private_json(config["AI_PROVIDER_CONFIG_FILE"])
 
 
 def copy_provider(deploy, config):
-    if not enabled(config):
+    if not config.get("AI_FORMATTING_ENABLED", False):
         return
     provider = private_json(config["AI_PROVIDER_CONFIG_FILE"])
     key_path = Path(provider.get("api_key_file", ""))
@@ -102,12 +106,17 @@ def copy_provider(deploy, config):
 def api_environment(deploy, config):
     if not enabled(config):
         return {}
-    return {
-        "AI_FORMATTING_ENABLED": "true",
-        "AI_PROVIDER_CONFIG_FILE": str(deploy.STATE / "api/deepseek-config.json"),
+    result = {
+        "CONTENT_FORMATTING_ENABLED": "true",
         "FORMATTER_URL": "http://127.0.0.1:18082",
         "FORMATTER_TOKEN_FILE": str(deploy.STATE / "api/formatter-token"),
     }
+    if config.get("AI_FORMATTING_ENABLED", False):
+        result["AI_FORMATTING_ENABLED"] = "true"
+        result["AI_PROVIDER_CONFIG_FILE"] = str(
+            deploy.STATE / "api/deepseek-config.json"
+        )
+    return result
 
 
 def environment(deploy):

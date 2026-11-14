@@ -9,6 +9,7 @@ import time
 
 API_KEYS = (
     "AI_FORMATTING_ENABLED",
+    "CONTENT_FORMATTING_ENABLED",
     "AI_PROVIDER_CONFIG_FILE",
     "FORMATTER_URL",
     "FORMATTER_TOKEN_FILE",
@@ -23,15 +24,19 @@ FORMATTER_KEYS = (
 
 
 def enabled(config):
-    value = config.get("AI_FORMATTING_ENABLED", False)
-    if not isinstance(value, (bool, str)) or value not in (
-        True,
-        False,
-        "true",
-        "false",
-    ):
-        raise ValueError("AI_FORMATTING_ENABLED 只能为布尔值")
-    return value in (True, "true")
+    for key in ("AI_FORMATTING_ENABLED", "CONTENT_FORMATTING_ENABLED"):
+        value = config.get(key, False)
+        if not isinstance(value, (bool, str)) or value not in (
+            True,
+            False,
+            "true",
+            "false",
+        ):
+            raise ValueError(f"{key} 只能为布尔值")
+    return any(
+        config.get(key, False) in (True, "true")
+        for key in ("AI_FORMATTING_ENABLED", "CONTENT_FORMATTING_ENABLED")
+    )
 
 
 def prepare(state, config, private_write):
@@ -47,7 +52,9 @@ def prepare(state, config, private_write):
         private_write(token, secrets.token_urlsafe(32))
     if not token.is_file() or token.stat().st_mode & 0o077:
         raise ValueError("渲染凭据必须为私有普通文件")
-    value["AI_FORMATTING_ENABLED"] = "true"
+    for key in ("AI_FORMATTING_ENABLED", "CONTENT_FORMATTING_ENABLED"):
+        if key in value:
+            value[key] = "true" if value[key] in (True, "true") else "false"
     value["FORMATTER_TOKEN_FILE"] = str(token)
     value.setdefault("FORMATTER_ADDR", "127.0.0.1:18082")
     value.setdefault("FORMATTER_URL", "http://" + value["FORMATTER_ADDR"])

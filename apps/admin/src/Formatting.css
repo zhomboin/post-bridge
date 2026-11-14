@@ -15,6 +15,47 @@
   margin-block: 12px;
   font-size: 14px;
 }
+.formatting-consent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block: 12px;
+}
+.formatting-review {
+  border-block-start: 1px solid var(--border, #d8dee8);
+  margin-block: 16px;
+}
+.formatting-review summary {
+  min-height: 44px;
+  padding-block: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.formatting-review :is(dd, li, p) {
+  overflow-wrap: anywhere;
+}
+.formatting-review dd {
+  margin: 0 0 10px;
+}
+.formatting-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.formatting-diff > div {
+  padding: 12px;
+  border: 1px solid var(--border, #d8dee8);
+  border-radius: 6px;
+}
+.formatting-diff h4 {
+  margin: 0 0 8px;
+}
+.formatting-wechat-preview {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+  border: 1px solid var(--border, #d8dee8);
+}
 .formatting-summary {
   line-height: 1.7;
   white-space: pre-wrap;
@@ -112,12 +153,16 @@
   overflow-wrap: anywhere;
 }
 @media (max-width: 480px) {
+  .formatting-wechat-preview {
+    min-height: 280px;
+  }
   .formatting-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 760px) {
-  .formatting-columns {
+  .formatting-columns,
+  .formatting-diff {
     grid-template-columns: minmax(0, 1fr);
   }
   .formatting-list > a {

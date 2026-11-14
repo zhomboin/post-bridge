@@ -13,6 +13,7 @@ import (
 
 type FormattingConfig struct {
 	Enabled            bool
+	LocalEnabled       bool
 	APIKey             string
 	Model              string
 	BaseURL            string
@@ -31,21 +32,27 @@ func defaultFormattingConfig() FormattingConfig {
 }
 func loadFormattingConfig() (FormattingConfig, error) {
 	c := defaultFormattingConfig()
+	local := os.Getenv("CONTENT_FORMATTING_ENABLED")
+	if local != "" && local != "true" && local != "false" {
+		return c, fmt.Errorf("本地格式化开关无效")
+	}
+	c.LocalEnabled = local == "true"
 	raw := os.Getenv("AI_FORMATTING_ENABLED")
-	if raw == "" || raw == "false" {
+	if (raw == "" || raw == "false") && !c.LocalEnabled {
 		return c, nil
 	}
-	if raw != "true" {
+	if raw != "" && raw != "false" && raw != "true" {
 		return c, fmt.Errorf("AI 格式化开关无效")
 	}
-	c.Enabled = true
+	c.Enabled = raw == "true"
+	c.LocalEnabled = true
 	c.FormatterURL = os.Getenv("FORMATTER_URL")
 	var err error
 	c.FormatterToken, err = privateSecret(os.Getenv("FORMATTER_TOKEN_FILE"))
 	if err != nil || len(c.FormatterToken) < 32 {
 		return c, fmt.Errorf("缺少有效的格式化服务凭据")
 	}
-	if file := os.Getenv("AI_PROVIDER_CONFIG_FILE"); file != "" {
+	if file := os.Getenv("AI_PROVIDER_CONFIG_FILE"); c.Enabled && file != "" {
 		raw, e := privateSecret(file)
 		if e != nil {
 			return c, fmt.Errorf("模型配置文件必须为私有普通文件")
@@ -87,10 +94,10 @@ func loadFormattingConfig() (FormattingConfig, error) {
 			c.Timeout = time.Duration(v.TimeoutSeconds) * time.Second
 		}
 	}
-	if c.APIKey == "" {
+	if c.Enabled && c.APIKey == "" {
 		c.APIKey = os.Getenv("DEEPSEEK_API")
 	}
-	if c.APIKey == "" {
+	if c.Enabled && c.APIKey == "" {
 		c.APIKey = os.Getenv("DEEPSEEK_API_KEY")
 	}
 	if err = c.validate(); err != nil {
@@ -107,7 +114,7 @@ func (c FormattingConfig) validate() error {
 	if e != nil || port < 1 || port > 65535 || net.ParseIP(u.Hostname()) == nil {
 		return fmt.Errorf("格式化服务端口无效")
 	}
-	if strings.TrimSpace(c.APIKey) == "" || strings.ContainsAny(c.APIKey, "\r\n\x00") || len(c.APIKey) > 4096 || strings.TrimSpace(c.Model) == "" || len(c.Model) > 100 ||
+	if c.Enabled && (strings.TrimSpace(c.APIKey) == "" || strings.ContainsAny(c.APIKey, "\r\n\x00") || len(c.APIKey) > 4096 || strings.TrimSpace(c.Model) == "" || len(c.Model) > 100) ||
 		c.MaxInputCharacters < 100 || c.MaxInputCharacters > 100000 || c.MaxOutputTokens < 256 || c.MaxOutputTokens > 32768 ||
 		c.DailyTokens < int64(c.MaxOutputTokens) || c.DailyTokens > 10000000 || c.MaxInFlight < 1 || c.MaxInFlight > 4 || c.Timeout < time.Second || c.Timeout > 5*time.Minute {
 		return fmt.Errorf("DeepSeek 格式化配置无效")

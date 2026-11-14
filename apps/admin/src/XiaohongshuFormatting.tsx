@@ -36,7 +36,7 @@ export default function XiaohongshuFormatting({
     const body = {
       revision: job.revision,
       template,
-      output: { ...output, assets: [], issues: [] },
+      output: { ...output, binding: undefined, assets: [], issues: [] },
     };
     const fingerprint = JSON.stringify(body);
     if (request.current.fingerprint !== fingerprint)

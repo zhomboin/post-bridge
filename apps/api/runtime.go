@@ -142,7 +142,7 @@ func Run(ctx context.Context, c RuntimeConfig) error {
 	remoteHandler := h.(*handler)
 	formattingCtx, stopFormatting := context.WithCancel(ctx)
 	formattingDone := make(chan struct{})
-	if c.Formatting.Enabled {
+	if c.Formatting.Enabled || c.Formatting.LocalEnabled {
 		go func() {
 			defer close(formattingDone)
 			remoteHandler.runFormattingScheduler(formattingCtx)
