@@ -1,10 +1,10 @@
 # 后台与内部接口
 
-## 本轮交付边界
+## 当前范围
 
 实现多用户独立登录、CSDN 草稿与受控发布、账号文章快照与正文、持久队列、任务详情和日志，以及 CSDN 与小红书账号切换、小红书登录检查及笔记只读快照。每个用户可绑定同平台多个独占账号；小红书内容写入不开放。PostBridge 侧来源接入已实现，真实调用方连接及生产验收仍待。基础运行使用 Go、PostgreSQL 和 Node.js/Playwright；可选 DeepSeek 格式化使用独立队列和 formatter 服务，平台执行不启动 Agent。
 
-API 管理数据库，执行器通过受限内部接口领取和上报，不直接访问数据库。管理界面只操作管理接口。本文为三单元共享契约，字段变化需同时更新实现与用例。
+API 管理数据库，执行器通过受限内部接口领取和上报，不直接访问数据库。管理界面只操作管理接口。本文记录后台、平台执行器及可选排版服务的接口。字段变化需同步实现、契约与用例。
 
 PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活、逐请求签名、平台稿修订确认、分发查询及来源守卫。准确外部协议统一见[外部接入手册](external-integration.md)和[OpenAPI](../contracts/cms.openapi.yaml)，双方职责见[总体方案](cms-integration.md)；不在本文复制第二套协议。跨网络业务读写只对已注册且有效授权的应用开放；注册入口也须持有效邀请。外部调用方统一使用固定协议，无需反向服务；本文管理接口不能作为外部接口复用，执行器密钥不授予调用方。
 
@@ -14,7 +14,7 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 - 内部接口使用单独的 Bearer 执行器密钥，不接受管理员 Cookie 替代。管理登录不能调用内部领取接口。
 - 错误响应含 code、message；不得返回密钥、Cookie、完整页面、原始网络响应或文章正文作为错误详情。
 - 分页列表含 items、total、page、page_size，默认每页 50、最大 100；来源应用、邀请、申请和审计仅返回最近 100 条 items。日志默认最近 24 小时，单次最多 31 天。时间字段为带时区的 ISO 8601，界面按本地时区显示。
-- 创建任务请求上限 1 MiB；标题 5—100 个字符，Markdown 非空且最多 200000 个字符。当前拒绝图片、MDX 和可执行 HTML，代码围栏中的代码样例正常保留。界面预览不执行 HTML。
+- 直接创建草稿的请求上限 1 MiB，标题 5—100 个字符，Markdown 非空且最多 200000 个字符。该入口仅接受文字 Markdown，代码围栏中的样例可以保留。外部来源正文图片规则见[接入手册](external-integration.md#csdn-正文图片)。
 
 ## 管理接口
 
@@ -37,7 +37,7 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 | POST /api/jobs/{id}/cancel | 会话及 CSRF | 排队任务可取消；执行中设置 cancel_requested，待执行器确认停止后转换状态 |
 | POST /api/jobs/{id}/retry | 会话及 CSRF | 仅失败、尚无外站副作用且未达安全重试上限时允许，返回任务 |
 | POST /api/jobs/{id}/resume | 会话及 CSRF | 仅处理平台登录等待；来源暂停必须经父分发重新确认，普通恢复被拒绝；已开始外站操作只核对 |
-| POST /api/jobs/{id}/reconcile | 可选 remote_id | 仅核对既有草稿；管理员输入仅作候选，匹配后才绑定；无 ID 时自动查询草稿列表；数字 ID 为可选候选，不创建或改写草稿 |
+| POST /api/jobs/{id}/reconcile | 可选 remote_id | 只读核对现有草稿或发布结果。草稿任务没有 ID 时自动查询草稿列表；后台输入的数字 ID 只作候选，匹配后才绑定。发布任务核对原稿 |
 | POST /api/jobs/{id}/resolve | confirmed_browser_stopped、note | 明确保留已有或可能存在的草稿并结束任务；无有效领取且执行器近期确认浏览器空闲后才允许，不删除或改写草稿，不再自动重试，记录管理员决定 |
 | GET /api/processes | q、status、platform、kind、job_id、level、from、to、page、page_size | 按任务分页的对象处理记录，含平台、对象、账号、步骤、结果和事件统计，不含正文 |
 | GET /api/jobs/{id}/history | page、page_size | 本次处理全部保留日志，按时间正序分页；transitions 单独返回完整压缩状态流转，不受当前页或列表时间范围限制 |
@@ -51,15 +51,15 @@ PostBridge 已实现调用平台受邀注册、审批、一次性密钥、激活
 
 ## 用户管理
 
-仅 admin 角色可调用 GET /api/users、POST /api/users 和 PATCH /api/users/{user}。创建输入 username、password，密码为 12—72 字节；创建普通用户。修改接受 enabled 或 password，提升认证版本并撤销该用户全部本站会话。禁止停用自己、修改其他用户、由客户端提升角色；普通用户返回 403。用户列表不返回密码哈希。后台提供创建和启停，密码重置通过受保护的 PATCH 接口执行。
+仅 admin 角色可调用 GET /api/users、POST /api/users 和 PATCH /api/users/{user}。创建输入 username、password，密码为 12—72 字节；创建普通用户。修改接受 enabled 或 password，提升认证版本并撤销该用户全部本站会话。管理员可修改普通用户和自己的密码，允许启停普通用户。禁止停用自己、修改其他管理员或由客户端提升角色。普通用户访问返回 403。用户列表不返回密码哈希。后台提供创建和启停，密码重置通过受保护的 PATCH 接口执行。
 
 ## 任务字段与状态
 
 任务对象另含 owner_user_id、connection_version、created_by，以及可选 integration_distribution_id，用于定位外部来源父分发。任务对象：id、request_id、platform、account_id、account_username、kind、article_id、title、markdown（仅详情和执行器）、status、outcome、stage、attempts、retry_count、max_retries、reconcile_count、auto_reconcile_started、absence_checks、last_absence_at、run_mode、external_started、remote_id、reconcile_candidate_id、manual_resolved、remote_url、cancel_requested、error_code、error_message、retry_allowed、created_at、updated_at、started_at、finished_at、available_at。
 
-- kind 为 save_draft、check_account、sync_articles 或 read_article；读取任务由文章专用接口创建，使用 account_username 绑定账号，正文读取另含 article_id。读取任务不设置 external_started 和 remote_id，成功仍为 not_submitted，不表示外站保存或发布。
+- kind 包括 save_draft、publish、check_account、sync_articles、read_article、sync_notes、read_note，以及通用内容的 sync_contents、read_content。内容读取由各自入口创建并绑定账号，正文读取包含目标条目标识。读取任务成功时 outcome 为 not_submitted。
 - status 为 queued、running、waiting_user、reconciling、succeeded、failed、cancelled。waiting_user 表示等待处理；有 integration_distribution_id 且 error_code 为 source_guard_failed 或 source_changed 时显示“来源待处理”，进入原父分发处理来源授权，不引导平台登录或普通恢复。
-- outcome 为 not_submitted、draft_saved 或 unknown；任务成功不表示文章已公开。
+- outcome 为 not_submitted、draft_saved、submitted、published 或 unknown。submitted 表示平台已受理，published 需读回已发布状态和对应内容。
 - run_mode 为 execute 或 reconcile；核对只读，不调用填稿或新建。
 - stage 使用 queued、checking_login、opening_editor、draft_acquired、filling、saving、verifying、finished 等稳定英文标识，界面显示中文。
 - remote_id 仅接受数字；remote_url 由服务端根据固定 CSDN 域名与 ID 生成，不接受任意网址。
@@ -180,8 +180,9 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 | ADMIN_DIST_DIR | 可选后台构建产物目录，由 API 提供同站点访问 |
 | INTEGRATION_MASTER_KEY_FILE | 可选 API 私有存储密钥文件，32 字节十六进制，不是调用方 secret |
 | INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID | 来源接入环境和接收服务标识，启用时分别配置，PUBLIC_ORIGIN 必须为 HTTPS |
+| CSDN_IMAGE_HOSTS | 可选 API 配置，逗号分隔的专用公开图片域名，用于来源 CSDN 正文图片转存 |
 
-本轮提供独立本地数据库、初始化、启动、测试和停止入口。运行数据、密钥、登录状态和诊断文件不写入 Git。数据库日志保留和任务内容清理遵循有限期限，不清理正在执行或待核对任务所需的内容。
+本地开发提供独立数据库及初始化、启动、测试和停止入口。运行数据、密钥、登录状态和诊断文件不写入 Git。数据库日志保留和任务内容清理遵循有限期限，不清理正在执行或待核对任务所需的内容。
 
 ## 后台远程登录
 
@@ -207,14 +208,16 @@ observation 含 phase、title、markdown、status 及可选 remote_id，表示�
 
 ## CSDN 正式发布
 
-已核对的 CSDN 集成草稿可以由管理员在 PostBridge 单独确认发布。外部接入接口的授权范围仍为保存草稿。草稿必须关联同一账号、已确认的平台稿和有效的来源授权。
+已核对的 CSDN 集成草稿可由所属用户在 PostBridge 后台单独确认发布。两条接口均校验本站会话和任务归属，提交还校验同源及 CSRF。外部接入接口的授权范围仍为保存草稿。草稿必须关联同一账号、已确认的平台稿和有效的来源授权。
 
 | 管理接口 | 用途 |
 | --- | --- |
+| GET /api/account/csdn-publish-preset | 使用 account_id 选择当前用户所属的 CSDN 账号，读取默认预设、修订和专栏选项。 |
+| PUT /api/account/csdn-publish-preset | 传入 revision 和 options 保存当前账号的默认预设。平台稿的单篇设置在该稿件中单独保存。 |
 | GET /api/jobs/{id}/publish | 使用草稿任务标识，读取待确认的文章、目标账号、冻结选项及确认令牌。已有发布任务时返回该任务。 |
 | POST /api/jobs/{id}/publish | 使用草稿任务标识和确认令牌提交发布任务，返回 202。同一稿件确认重复提交时返回已有任务。 |
 
-发布操作复用原 CSDN 草稿标识。执行器提交前再次核对目标账号、文章和冻结设置。只有读回已发布状态才显示发布成功。平台已受理与结果未知分别记录，均按原任务只读核对。发布至少需要一个标签。转载或翻译需要单篇填写 HTTPS 原文链接并确认授权。自动选封面、定时发布、多平台发布与 GitCode 备份不属于此操作。
+发布操作复用原 CSDN 草稿标识。执行器提交前再次核对目标账号、文章和冻结设置。只有读回已发布状态才显示发布成功。平台已受理与结果未知分别记录，均按原任务只读核对。发布需要 1 至 7 个标签。转载或翻译需要单篇填写 HTTPS 原文链接并确认授权。自动选封面、定时发布、多平台发布与 GitCode 备份不属于此操作。
 
 ## 格式化接口
 

@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-提供多用户独立登录、同平台多账号的 CSDN 与小红书账号工作台，以及 CSDN 草稿后台：登录、总览、草稿创建与预览、队列、任务详情、账号检查、账号文章只读列表与正文及对象处理记录，以及小红书资料统计、笔记正文图片只读、来源应用、平台稿确认与分发工作台。Go API 管理 PostgreSQL，独立 Node.js/Playwright 执行器操作官方编辑器。关闭网页后任务仍继续；平台执行无需 AI Agent；可选 DeepSeek 内容格式化使用独立配置，见[格式化说明](ai-formatting.md)。
+提供多用户独立登录、同平台多账号的 CSDN 与小红书账号工作台，以及 CSDN 草稿后台：登录、总览、草稿创建与预览、队列、任务详情、账号检查、账号文章只读列表与正文及对象处理记录，以及小红书资料统计、笔记正文图片只读、来源应用、平台稿确认与分发工作台。Go API 管理 PostgreSQL，独立 Node.js/Playwright 执行器操作官方编辑器。关闭网页后任务仍继续；平台执行无需 AI Agent；可选 formatter 支持公众号本地转换，DeepSeek 用于 CSDN、小红书和公众号 AI 辅助。见[格式化说明](ai-formatting.md)。
 
 后台直接建稿支持文字 Markdown。启用图源白名单后，外部来源稿还可通过 CSDN 转存受控正文图片。标题为 5—100 字，正文不超过 200000 字。支持围栏代码、表格和公式，拒绝 MDX 和可执行 HTML。管理员可对已核对的 CSDN 来源草稿确认正式发布。验证状态见[总体进度](progress.md)。
 
@@ -10,7 +10,7 @@
 
 ## 使用约定与脚本
 
-本页所有命令都在 **WSL Ubuntu 的 Bash 终端**执行；服务器部署使用[Ubuntu 部署说明](ubuntu-deployment.md)。命令逐条执行，某条失败后先处理错误，再执行下一条。安装系统依赖会修改 WSL 系统；初始化和启动会开启项目进程；停止会中断项目服务，执行前确认没有需要保留的进行中操作。
+除明确标注的 Windows 凭据转交命令外，本页命令在 **WSL Ubuntu 的 Bash 终端**执行。服务器使用[Ubuntu 部署说明](ubuntu-deployment.md)。命令逐条执行，某条失败后先处理错误，再执行下一条。安装系统依赖会修改 WSL 系统；初始化和启动会开启项目进程；停止会中断项目服务，执行前确认没有需要保留的进行中操作。
 
 命令中的“〈…〉”需要替换为本机值。真实账号、连接信息和运行目录只填写在本机输入或仓库外私有配置中，不写入 Git。Shell 入口复用 [runtime.py](../scripts/runtime.py)，仍需要 Python 3；基础功能不需要 PowerShell 或模型密钥；AI 格式化按本页独立步骤启用。
 
@@ -18,7 +18,7 @@
 | --- | --- |
 | [setup.sh](../scripts/setup.sh) | 生成私有配置与凭据，初始化并启动独立数据库 |
 | [dev.sh](../scripts/dev.sh) | 启动数据库，构建并启动 API 与执行器；后台页面由 API 提供 |
-| [status.sh](../scripts/status.sh) | 查看登记的 API、执行器和数据库进程 |
+| [status.sh](../scripts/status.sh) | 查看登记的 API、执行器、数据库和已启用的 formatter |
 | [stop.sh](../scripts/stop.sh) | 按顺序停止登录助手、执行器、API 和独立数据库，保留数据 |
 | [login-csdn.sh](../scripts/login-csdn.sh) | 停止执行器，在 WSLg 图形窗口人工登录指定账号 |
 | [test.sh](../scripts/test.sh) | 运行 Go API 与 Node 工作区测试；不包含 E2E 和 Python 运行安全测试 |
@@ -258,7 +258,7 @@ test -d "$PB_EXTRA_PROFILE"
 tar --create --gzip --file "$PB_BACKUP_DIR/accounts-$(date -u +%s).tar.gz" --directory "$(dirname -- "$PB_EXTRA_PROFILE")" "$(basename -- "$PB_EXTRA_PROFILE")"
 ```
 
-上述 runtime.tar.gz 包含已停止的数据库物理文件，只用于同 PostgreSQL 主版本和兼容环境的受控恢复。若 runtime.json 引用额外的外部接入密钥文件，也需单独受限备份。不要在数据库运行时直接复制 pgdata。
+上述 runtime.tar.gz 包含已停止的数据库物理文件，只用于同 PostgreSQL 主版本和兼容环境的受控恢复。runtime.json 若引用状态目录外的来源密钥、模型配置、私有账号配置或执行凭据，也须单独纳入受限备份。不要在数据库运行时直接复制 pgdata。
 
 备份后逐个检查归档可读并记录校验值，在独立私有目录和独立端口恢复副本，确认原账号、任务和文章完整后再升级。副本中的多用户验证使用合成身份，不启动连接真实平台的执行器；演练结束关闭其数据库、API 和浏览器，保留备份。校验命令在 WSL/Ubuntu Bash 中执行：
 
@@ -435,7 +435,7 @@ unset TEST_DATABASE_URL
 
 ## 可选外部来源配置
 
-日常本地草稿开发仍沿用现有启动方式，不必启用来源接入。需要联调时，在仓库外私有 runtime.json 配置 INTEGRATION_MASTER_KEY_FILE、INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID，并设置 HTTPS PUBLIC_ORIGIN；值在本地私有配置填写，不提交真实地址、身份或目录。密钥文件保存 32 字节的十六进制文本并限制为 0600，状态目录为 0700；密钥只用于 API 的受控加密存储，不使用 worker 密钥代替。
+日常本地草稿开发仍沿用现有启动方式，不必启用来源接入。需要联调时，在仓库外私有 runtime.json 配置 INTEGRATION_MASTER_KEY_FILE、INTEGRATION_ENVIRONMENT、INTEGRATION_SERVICE_ID，并设置 HTTPS PUBLIC_ORIGIN。若联调包含图文草稿，在同一配置中设置 CSDN_IMAGE_HOSTS，值为逗号分隔的已批准专用图源域名。密钥文件保存 32 字节的十六进制文本并限制为 0600，状态目录为 0700；密钥只用于 API 的受控加密存储，不使用 worker 密钥代替。
 
 [runtime.py](../scripts/runtime.py)仅向 API 传递接入配置，worker 不接收 master key。直接启动 API 时使用同名环境配置，并遵循[API 配置](../apps/api/runtime.go)校验。未启用时外部内容接口明确拒绝，不影响原有本地草稿流程。
 

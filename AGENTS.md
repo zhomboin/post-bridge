@@ -2,14 +2,14 @@
 
 ## 项目结构与范围
 
-本项目提供多用户独立登录、同平台多账号独占绑定的内容分发后台，当前实现 CSDN Markdown 图文草稿与管理员确认发布流程、按对象组织的处理记录，以及统一平台账号工作台中的文章只读列表、统计、账号设置和独立正文查看。PostBridge 侧外部来源注册、签名、平台稿确认、分发查询与来源守卫已实现并本地验证。完整范围见 [需求](docs/requirements.md)，交付状态见 [进度](docs/progress.md)；正式发布的真实平台验收、MDX、其他平台、真实调用方联调与生产验收仍待。
+本项目提供多用户独立登录、同平台多账号独占绑定、CSDN Markdown 图文草稿与管理员确认发布、对象处理记录，以及 CSDN 与小红书账号只读工作台。PostBridge 侧外部来源接入已实现并本地验证。可选格式化支持 CSDN 平台稿、小红书本地图文和微信公众号本地保真排版及 AI 辅助建议。完整范围见[需求](docs/requirements.md)，交付与各层验收状态见[进度](docs/progress.md)。
 
-- apps/api：平铺 Go 管理接口、PostgreSQL 队列与初始化；integration_*.go 分担来源认证、注册、签名、内容修订、主动来源事件和本地授权守卫。
+- apps/api：Go 管理接口、PostgreSQL 队列与初始化、来源接入、公共内容服务及可选格式化任务。
 - apps/admin/src：React/TypeScript 后台、页面和样式。
-- apps/formatter/src：可选 Markdown 内容保护与固定模板卡片渲染，不访问模型、数据库或平台会话；模型调用和持久化由 API 管理。
+- apps/formatter/src：可选 Markdown 内容保护、公众号保真转换与独立校验、固定模板卡片渲染。模型调用、平台会话和数据存储均由相应服务管理。
 - apps/worker/src：Node.js/Playwright 固定平台执行器；CSDN 草稿与发布，小红书登录、资料统计及笔记正文图片只读。
 - tests/e2e、tests/runtime：跨服务与启动安全测试；单元测试随应用组织。
-- contracts/cms.openapi.yaml：外部接入机器契约；tests/fixtures/integration-contract.json：共享合成签名与指纹向量。
+- contracts：外部 OpenAPI、公共内容及格式化模型契约。tests/fixtures/integration-contract.json 提供合成签名与指纹向量。
 - scripts：WSL 本地开发和 Ubuntu 部署的 Shell 入口；.github/workflows：CI。
 
 来源接入开放 CSDN Markdown save_draft，图源域名配置启用后支持转存批准的正文图片，管理员可从绑定账号和有效来源的已核对草稿发起独立发布，外部接入仍只开放保存草稿。接口以 [外部手册](docs/external-integration.md) 和机器契约为准。调用方按固定接口和签名协议接入，无需反向服务；调用方数据库及可靠发送由其自行实现，CMS 事务发件箱仅是建议。可选接入配置与存储密钥仅传给 API，worker 不接收；运行数据与凭据置于仓库外私有配置。
