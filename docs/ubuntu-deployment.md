@@ -10,7 +10,7 @@
 
 命令逐条执行，失败后先排查，不继续后续步骤。“〈…〉”全部替换为目标环境值；真实账号、地址、目录、连接和密钥只保存在目标机器的私有配置中。安装、停止、启动、升级及 Nginx 重载会修改系统或影响服务，应由管理员确认目标、备份及操作时机后执行。
 
-管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.11，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg 或远程桌面；基础功能无需模型密钥，可选 DeepSeek 格式化单独配置。
+管理入口为 [scripts/ubuntu-deploy.sh](../scripts/ubuntu-deploy.sh)，内部调用 Python 3 的 [ubuntu_deploy.py](../scripts/ubuntu_deploy.py)。安装器固定下载 Node.js 22.22.1、npm 10.9.4、Go 1.26.11，并安装 Playwright 1.64.1 对应 Chromium。服务器不需要桌面、WSLg 或远程桌面；基础功能无需模型密钥。公众号保真转换可独立启用，DeepSeek 格式化单独配置。
 
 小红书资料统计与正文图片只读不增加必填环境变量；API 启动时建立按账号保护的正文缓存表。仍须按本页步骤备份数据库、配置和全部账号会话后升级。升级后选择对应账号同步笔记，核对资料与统计；只有已有真实笔记才能验收正文读取，见[只读工作台](xiaohongshu-readonly.md)。
 
@@ -249,7 +249,7 @@ sudo ./scripts/ubuntu-deploy.sh check
 sudo ./scripts/ubuntu-deploy.sh stop
 ```
 
-停止不关闭数据库，后续仍能执行 pg_dump。不要在账号浏览器仍运行时直接打包其目录。
+停止会关闭已登记的 API、worker 和可选 formatter，数据库仍可执行 pg_dump。不要在账号浏览器仍运行时直接打包其目录。
 
 ### 2. 创建私有备份目录并记录代码
 
@@ -281,13 +281,26 @@ pg_restore --list "$PB_BACKUP_DIR/database.dump" > /dev/null
 
 ### 4. 备份私有配置、账号状态及项目单元
 
-该命令只打包本项目的配置与状态。浏览器状态已在停止后保存；外部来源存储密钥与初始化标记一并包含。Nginx 项目站点使用本页布局时，再执行第二个归档命令；其他布局需换为管理员实际维护的项目配置路径。
+以下归档包含本项目的私有配置、状态和基础服务单元。配置引用本目录之外的账号、凭据或其他文件时，另行受限备份。
 
 ```bash
 sudo tar --create --gzip --file "$PB_BACKUP_DIR/private-state.tar.gz" --directory / etc/post-bridge var/lib/post-bridge opt/post-bridge/installation.json etc/systemd/system/post-bridge-api.service etc/systemd/system/post-bridge-worker.service
-sudo tar --create --gzip --file "$PB_BACKUP_DIR/nginx-site.tar.gz" --directory / etc/nginx/sites-available/post-bridge.conf etc/nginx/sites-enabled/post-bridge.conf
-sudo chmod 600 "$PB_BACKUP_DIR/private-state.tar.gz" "$PB_BACKUP_DIR/nginx-site.tar.gz"
+sudo chmod 600 "$PB_BACKUP_DIR/private-state.tar.gz"
 sudo tar --list --gzip --file "$PB_BACKUP_DIR/private-state.tar.gz" > /dev/null
+```
+
+已启用 formatter 时，另行备份排版服务单元：
+
+```bash
+sudo install -m 600 /etc/systemd/system/post-bridge-formatter.service "$PB_BACKUP_DIR/post-bridge-formatter.service"
+```
+
+采用本页的 Nginx 站点布局时备份站点。其他布局替换为实际站点配置路径：
+
+```bash
+sudo tar --create --gzip --file "$PB_BACKUP_DIR/nginx-site.tar.gz" --directory / etc/nginx/sites-available/post-bridge.conf etc/nginx/sites-enabled/post-bridge.conf
+sudo chmod 600 "$PB_BACKUP_DIR/nginx-site.tar.gz"
+sudo tar --list --gzip --file "$PB_BACKUP_DIR/nginx-site.tar.gz" > /dev/null
 ```
 
 证书私钥由现有证书管理与备份流程保管；不得把备份放入源码目录或上传到公开附件。升级不会清理旧发布目录，保留其代码供受控恢复。
@@ -325,7 +338,7 @@ sudo ./scripts/ubuntu-deploy.sh upgrade --config '〈仓库外私有配置文件
 
 首次启用用户隔离时，必须沿用 ADMIN_USERNAME 和全部私有配置。API 初始化事务将已有账号、文章、任务和来源归入该管理员；保留标识、内容、请求去重和有效平台会话。迁移失败不得清库重试，按私有日志处理；成功后用管理员核对原有记录，再创建普通用户检验各自账号列表。新账号目录位于 worker 私有状态中的 managed 根目录，备份 var/lib/post-bridge 时一并保留。
 
-upgrade 会下载并校验 Go 1.26.11，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台和执行器及 API，并启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
+upgrade 会下载并校验 Go 1.26.11，复用已匹配的工具；不需要管理员先替换系统 Go。它自动安装锁定的依赖、构建后台、执行器、API 和已启用的 formatter，再启动新部署，无需在服务器源码目录单独执行 npm ci 或 dev.sh。确认后台能登录、账号状态正常，再恢复已授权的业务操作。
 
 安装器不会覆盖已存在的 /etc/post-bridge/nginx.conf，也不会更新启用站点；仅当本次需要调整 Nginx 时，人工核对模板并编辑实际站点，再校验和重载：
 
@@ -358,7 +371,7 @@ sudo journalctl --unit nginx --lines 100 --no-pager
 
 升级复用原存储密钥，不能用重新生成替代受控恢复。首次启用同时保存私有初始化标记，升级和临时禁用均保留；密钥与标记一同受控备份恢复，不删除标记来绕过缺钥检查。已启用接入后缺少原密钥应停止启用或升级并报错；禁用再启用同样需要保留原密钥。该密钥不等于签发给调用方的 secret，需独立受限备份。具体守卫与测试见[安装器](../scripts/ubuntu_deploy.py)及[部署用例](../tests/runtime/test_ubuntu.py)。
 
-完成配置后由管理员在“内容来源”创建邀请、审批并配置调用权限，准确步骤见[外部手册](external-integration.md)。配置代码和本地用例不代表目标服务器、真实调用方 或跨网络生产已验收。数据库恢复后的应用停用与撤销核对按[运维流程](operations.md)实施，系统尚未自动完成该处置。
+完成配置后由管理员在“内容来源”创建邀请、审批并配置调用权限，准确步骤见[外部手册](external-integration.md)。目标服务器、真实调用方及跨网络生产验收见[总体进度](progress.md)。数据库恢复后的应用停用与撤销核对按[运维流程](operations.md)实施，系统尚未自动完成该处置。
 
 ## 代码与私有状态
 
@@ -392,7 +405,7 @@ API 用户为 post-bridge-api，执行器用户为 post-bridge-worker，均禁�
 
 [部署安全测试](../tests/runtime/test_ubuntu.py)覆盖安装快照的文档资源、来源配置、凭据隔离、升级保留、符号链接拒绝、代码切换和代理保护。[CI](../.github/workflows/ci.yml)使用安装器生成独立快照，再从该快照安装依赖、构建后台、执行器和 API。[独立 systemd 检查](../scripts/ubuntu_systemd_smoke.py)使用随机单位名、随机端口和合成服务验证无桌面启动、崩溃重启、API 重启、子进程清理及无关进程保留；结束时删除临时单位与进程。
 
-本地使用用户级 systemd 完成独立合成验证；用户级环境关闭需要系统权限的挂载隔离。CI 以系统级临时单位复验生产单元同源的进程和文件隔离规则。当前没有目标服务器，实际 root 安装、HTTPS 证书、真实账号远程登录及生产验收需在目标环境分别完成；不将本地合成验证记为生产已部署。
+本地使用用户级 systemd 完成独立合成验证；用户级环境关闭需要系统权限的挂载隔离。CI 以系统级临时单元验证进程和文件隔离规则。当前没有目标服务器，实际 root 安装、HTTPS 证书、真实账号远程登录及生产验收需在目标环境分别完成；不将本地合成验证记为生产已部署。
 
 ## 可选导入已有账号会话
 

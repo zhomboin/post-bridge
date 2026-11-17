@@ -78,7 +78,7 @@ API 异常退出后，已排队的格式化任务保存在数据库中。执行�
 
 模型配置还可设置 max_input_characters、max_output_tokens、daily_tokens、max_in_flight、timeout_seconds；范围由 [配置校验](../apps/api/formatting_config.go)限定。默认模型 deepseek-flash，可在私有配置调整。
 
-API 管理模型调用、任务和数据库。formatter 仅分析 Markdown 与渲染卡片，临时 Chromium 不使用平台登录目录；平台 worker 不接收模型和渲染凭据。部署停止会回收各自进程。
+API 管理模型调用、任务和数据库。formatter 分析 Markdown，独立转换和校验公众号正文，并渲染卡片。临时 Chromium 不使用平台登录目录，平台 worker 不接收模型和渲染凭据。部署停止会回收各自进程。
 
 完整启用步骤见[本地开发](development.md#deepseek-格式化)和[Ubuntu 部署](ubuntu-deployment.md#deepseek-格式化)。备份数据库、私有模型配置和密钥，恢复后检查账号、格式化稿和素材权限；不备份临时浏览器目录。
 
@@ -88,4 +88,4 @@ API 管理模型调用、任务和数据库。formatter 仅分析 Markdown 与�
 
 自动生成使用持久化待办，接收原稿后异步创建任务；失败和配额限制不会升级平台操作。接口见 [API](api.md)、[外部手册](external-integration.md)与[格式化模型契约](../contracts/formatting-model.json)。
 
-代码和隔离数据库用例覆盖正常、幂等、取消、超时、来源授权、内容保护、兼容与图片读取。公众号 AI 辅助通过合成模型响应和实际 formatter 回归；真实 DeepSeek 已用合成 CSDN 与小红书样稿验证。多样稿模型效果、真实公众号草稿与目标部署的证据见[验收记录](acceptance.md#ai-格式化)。
+代码和隔离数据库用例覆盖正常、幂等、取消、超时、来源授权、内容保护、兼容与图片读取。公众号 AI 辅助通过合成模型响应和实际 formatter 回归。真实 DeepSeek 已使用合成 CSDN、小红书和公众号原稿验证。样稿结果、真实公众号草稿及部署待验项见[验收记录](acceptance.md#ai-格式化)。

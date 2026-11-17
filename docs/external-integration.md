@@ -107,7 +107,7 @@ scope、accounts、operations 共同生效。targets 只返回当前账号与操
 
 调用方只允许发送明确授权的内容快照。准备请求携带 request_id、source_id、article_id、source_version、state_seq、authorization_id、authorization_expires_at、content_fingerprint、snapshot 和 targets。source_id 必须与调用身份绑定的来源一致。source_version、state_seq 和授权由调用方声明并在 PostBridge 本地保存，不要求先发送来源事件；调用方负责这些声明的真实性。
 
-snapshot 保存 title、summary、body、body_format、tags、cover_image_url、assets 和可选 original_url。当前 body_format 必须为 markdown，cover_image_url 为空、assets 为空数组。正文不接受图片、HTML、MDX、代码围栏之外的花括号或 import/export；代码围栏中的代码样例可以保留。摘要最多 2000 字符，标签最多 20 个，每个标签非空且最多 64 字符。详情不得被当作公开内容接口，服务端过期或保留期清理后正文可以为空。
+snapshot 保存 title、summary、body、body_format、tags、cover_image_url、assets 和可选 original_url。当前 body_format 必须为 markdown，cover_image_url 为空、assets 为空数组。正文接受文字 Markdown。目标返回 `images: true` 时可按本手册“CSDN 正文图片”章节加入受控内联图片。HTML、MDX、围栏外花括号及 import/export 仍受校验，围栏内代码样例可以保留。摘要最多 2000 字符，标签最多 20 个，每个标签非空且最多 64 字符。详情不得被当作公开内容接口，服务端过期或保留期清理后正文可以为空。
 
 准备稿有效期不超过创建后 24 小时，也不会晚于来源授权到期时间。调用方打开返回的 preview_url，由管理员登录 PostBridge 核对来源原稿、平台稿和目标账号。预览页不是外部签名调用的确认接口。
 
